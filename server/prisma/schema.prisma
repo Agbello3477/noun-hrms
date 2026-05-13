@@ -1,0 +1,615 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  
+  // Phase 3 Roles
+  role      Role     @default(STAFF)
+  
+  isActive  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  staffProfile StaffProfile?
+
+  attendance   Attendance[]
+  payroll      Payroll[]
+  
+  actionTrails DocumentTrail[]
+  auditLogs    AuditLog[]
+  
+  // Relations for Workflow
+  leavesRecommended LeaveRequest[] @relation("LeaveRecommender")
+  leavesApproved    LeaveRequest[] @relation("LeaveApprover")
+  
+  transferredStaff   TransferLog[] @relation("StaffTransfers")
+  transfersInitiated TransferLog[] @relation("TransferInitiator")
+  
+  // Phase 7 Relations
+  requestedFiles     FileRequest[] @relation("RequestedFiles")
+  issuedQueries      StaffQuery[]  @relation("IssuedQueries")
+  
+  // Phase 12
+  filesCreated       StaffProfile[] @relation("FileCreator")
+  
+  // Phase 13
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, SUCCESS, WARNING, ERROR
+  link      String?
+  isRead    Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+enum Role {
+  SUPER_USER    // System Owner
+  HR_ADMIN      // Registry HQ (Global Oversight)
+  UNIT_HEAD     // Director / Dean / HOD (Approver)
+  UNIT_ADMIN    // Unit Admin (Recommender)
+  BURSARY       // Finance
+  AUDIT         // Audit
+  STUDY_CENTER_MANAGER // Center Director (Special Unit Head)
+  STAFF         // Regular Staff
+  ADMIN         // Legacy System Admin (keep for safety)
+}
+
+enum Cadre {
+  ACADEMIC
+  ADMINISTRATIVE
+  TECHNICAL
+  JUNIOR
+}
+
+enum UnitType {
+  DIRECTORATE
+  FACULTY
+  DEPARTMENT
+  STUDY_CENTER
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String
+  type      UnitType
+  code      String?  @unique // e.g., "REG-HR"
+  
+  headId    String?
+  // We could link head to User or StaffProfile. User is safer for Auth checks.
+  
+  staff     StaffProfile[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("units")
+}
+
+model StudyCenter {
+  // Legacy model, keeping for backward compatibility but linked to Unit logic potentially
+  // Or we eventually migrate StudyCenters to Units. For now, we keep both.
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  address   String?
+  users     StaffProfile[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("study_centers")
+}
+
+model StaffProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  
+  // Phase 3 Bio-data
+  surname     String?
+  otherNames  String?
+  title       String?  // e.g. Mr, Mrs, Dr, Prof
+  staffId     String?  @unique // Indexed specifically
+  
+  level       String?  // e.g. "CONTISS 13"
+  step        String?  // e.g. "2"
+  cadre       Cadre?
+  
+  gender      String?
+  phone       String?
+  emailPersonal String? // Official email is in User model
+  
+  stateOfOrigin String?
+  lga           String?
+  address       String?
+  
+  passportUrl   String?
+  
+  // Organization
+  department  Department? // Legacy Enum (keep for now)
+  
+  // Enhanced Organization
+  unitId      String?
+  unit        Unit?    @relation(fields: [unitId], references: [id])
+  
+  centerId    String?
+  studyCenter StudyCenter? @relation(fields: [centerId], references: [id])
+  
+  // Workflow
+  leaves      LeaveRequest[]
+  
+  documents   Document[]   @relation("OwnerDocs")
+  uploadedDocs Document[]  @relation("UploaderDocs")
+  
+  // Phase 7
+  fileRequests FileRequest[] @relation("FileRequests")
+  queries      StaffQuery[]  @relation("ReceivedQueries")
+  
+  // Phase 8
+  publications Publication[]
+  teaching     TeachingAllocation[]
+  ippisNumber  String?  @unique // For Payroll Integration
+
+  // Phase 9: Academic & Facilitator
+  programmeId     String?
+  programme       AcademicProgramme? @relation(fields: [programmeId], references: [id])
+  
+  // Facilitator Details (Stored as JSON for flexibility: { isFacilitator: boolean, courses: [], ... })
+  facilitatorInfo Json?
+
+  // Phase 12: File Metadata
+  createdById     String? // ID of HR/Admin who created this file
+  createdBy       User?   @relation("FileCreator", fields: [createdById], references: [id])
+
+  // Phase 13b: APER
+  aperForms       AperForm[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("staff_profiles")
+}
+
+model AcademicProgramme {
+  id        String   @id @default(uuid())
+  title     String   // e.g. B.Sc. Computer Science
+  code      String?  // e.g. 2201
+  faculty   String   // e.g. Faculty of Sciences
+
+  staff     StaffProfile[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("academic_programmes")
+}
+
+model Publication {
+  id          String   @id @default(uuid())
+  staffId     String
+  staff       StaffProfile @relation(fields: [staffId], references: [id])
+  
+  title       String
+  citation    String?  // Full APA/MLA citation
+  year        Int
+  link        String?  // URL to DOI or PDF
+  type        String   @default("ARTICLE") // ARTICLE, BOOK, CONFERENCE
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("publications")
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g., NOUN101
+  title       String
+  unit        Int
+  semester    String   // FIRST, SECOND
+
+  allocations TeachingAllocation[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("courses")
+}
+
+model TeachingAllocation {
+  id          String   @id @default(uuid())
+  
+  staffId     String
+  staff       StaffProfile @relation(fields: [staffId], references: [id])
+  
+  courseId    String
+  course      Course       @relation(fields: [courseId], references: [id])
+  
+  session     String       // e.g., "2024/2025"
+  students    Int          @default(0) // Number of students supervised/taught
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("teaching_allocations")
+}
+
+// ... Document Models (Keep existing) ...
+enum Department {
+  REGISTRY_MAIN
+  REGISTRY_HR
+  REGISTRY_ACADEMIC
+  REGISTRY_COUNCIL
+  REGISTRY_TRAINING
+  BURSARY_MAIN
+  BURSARY_PAYROLL
+  BURSARY_AUDIT
+  BURSARY_ACCOUNTS
+  BURSARY_NHF
+  BURSARY_EXPENDITURE
+  STUDY_CENTER
+  ACADEMIC_SCIENCES
+  ACADEMIC_ARTS
+}
+
+enum DocumentType {
+  APPOINTMENT_LETTER
+  CREDENTIAL
+  PROMOTION_LETTER
+  PAYSLIP
+  QUERY
+  OTHER
+}
+
+enum AccessLevel {
+  CONFIDENTIAL
+  RESTRICTED
+  PUBLIC
+}
+
+model Document {
+  id              String        @id @default(uuid())
+  ownerId         String
+  owner           StaffProfile  @relation("OwnerDocs", fields: [ownerId], references: [id])
+  
+  type            DocumentType
+  url             String
+  title           String
+  
+  uploadedById    String
+  uploadedBy      StaffProfile  @relation("UploaderDocs", fields: [uploadedById], references: [id])
+  
+  currentLocation Department   @default(REGISTRY_MAIN)
+  accessLevel     AccessLevel  @default(CONFIDENTIAL)
+  
+  trail           DocumentTrail[]
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@map("documents")
+}
+
+model DocumentTrail {
+  id          String      @id @default(uuid())
+  documentId  String
+  document    Document    @relation(fields: [documentId], references: [id])
+  
+  fromDept    Department
+  toDept      Department
+  
+  actionById  String
+  actionBy    User        @relation(fields: [actionById], references: [id])
+  
+  note        String?
+  createdAt   DateTime    @default(now())
+
+  @@map("document_trails")
+}
+
+// ... Audit & Logs ...
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  action      String   // LOGIN, LOGOUT, TRANSFER, CREATE_STAFF
+  resource    String   // USER, DOCUMENT, PAYROLL
+  details     String?  // JSON string
+  ipAddress   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model TransferLog {
+  // Renamed from PostingHistory
+  id            String    @id @default(uuid())
+  
+  staffId       String
+  staff         User      @relation("StaffTransfers", fields: [staffId], references: [id])
+  
+  oldCenterId   String?
+  newCenterId   String?
+  
+  initiatedById String
+  initiatedBy   User      @relation("TransferInitiator", fields: [initiatedById], references: [id])
+  
+  reason        String?
+  effectiveDate DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@map("transfer_logs")
+  @@index([createdAt])
+  @@index([staffId])
+}
+
+// ... HR Modules ...
+
+enum LeaveStatus {
+  PENDING
+  RECOMMENDED
+  APPROVED
+  REJECTED
+}
+
+enum LeaveType {
+  ANNUAL
+  CASUAL
+  SICK
+  MATERNITY
+  STUDY
+  PATERNITY
+  SABBATICAL
+  WITHOUT_PAY
+}
+
+model LeaveRequest {
+  id          String      @id @default(uuid())
+  
+  staffId     String
+  staff       StaffProfile @relation(fields: [staffId], references: [id])
+  
+  type        LeaveType
+  startDate   DateTime
+  endDate     DateTime
+  durationDays Int
+  
+  reason      String
+  
+  status      LeaveStatus @default(PENDING)
+  
+  recommendedById String?
+  recommendedBy   User?   @relation("LeaveRecommender", fields: [recommendedById], references: [id])
+  
+  approvedById    String?
+  approvedBy      User?   @relation("LeaveApprover", fields: [approvedById], references: [id])
+  
+  rejectionReason String?
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("leave_requests")
+}
+
+model Attendance {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  clockIn   DateTime  @default(now())
+  clockOut  DateTime?
+  latitude  Float?
+  longitude Float?
+  status    String    @default("PRESENT")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("attendance_logs")
+}
+
+model SalaryScale {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. CONTISS, CONUASS
+  description String?
+  
+  levels      SalaryLevel[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("salary_scales")
+}
+
+model SalaryLevel {
+  id            String      @id @default(uuid())
+  scaleId       String
+  scale         SalaryScale @relation(fields: [scaleId], references: [id])
+  
+  level         String      // e.g. "07"
+  step          String      // e.g. "01"
+  
+  basicSalary   Float
+  rent          Float       @default(0)
+  transport     Float       @default(0)
+  meal          Float       @default(0)
+  utility       Float       @default(0)
+  entertainment Float       @default(0)
+
+  consolidated  Float       // Total Annual/Monthly Gross
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([scaleId, level, step])
+  @@map("salary_levels")
+}
+
+model Payroll {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  
+  month             String
+  year              Int
+  
+  // Earnings
+  basicSalary       Float
+  totalAllowances   Float
+  grossPay          Float
+  
+  // Deductions
+  tax               Float
+  pension           Float
+  otherDeductions   Float
+  totalDeductions   Float
+  
+  netPay            Float
+  
+  status            String   @default("PENDING") // PENDING, APPROVED, PAID
+  paymentDate       DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("payroll_records")
+  @@unique([userId, month, year])
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model FileRequest {
+  id          String        @id @default(uuid())
+  requesterId String
+  requester   User          @relation("RequestedFiles", fields: [requesterId], references: [id])
+  
+  staffId     String
+  staff       StaffProfile  @relation("FileRequests", fields: [staffId], references: [id])
+  
+  reason      String?
+  status      RequestStatus @default(PENDING)
+  
+  accessLink  String?       // Function generated secure link
+  expiresAt   DateTime?
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("file_requests")
+}
+
+enum QueryStatus {
+  OPEN
+  RESPONDED
+  CLOSED
+}
+
+model StaffQuery {
+  id          String      @id @default(uuid())
+  
+  staffId     String
+  staff       StaffProfile @relation("ReceivedQueries", fields: [staffId], references: [id])
+  
+  issuedById  String
+  issuedBy    User         @relation("IssuedQueries", fields: [issuedById], references: [id])
+  
+  title       String
+  content     String      @db.Text
+  
+  response    String?     @db.Text
+  responseAttachmentUrl String?
+  
+  status      QueryStatus @default(OPEN)
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("staff_queries")
+}
+
+model SystemSequence {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g., "STAFF_ID"
+  current   Int      @default(0)
+  
+  updatedAt DateTime @updatedAt
+
+  @@map("system_sequences")
+}
+
+// Phase 13b: APER
+model AperSession {
+  id        String   @id @default(uuid())
+  title     String   // e.g. "2025 Annual Appraisal"
+  year      Int
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  
+  forms     AperForm[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("aper_sessions")
+}
+
+enum AperStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  COMPLETED
+}
+
+model AperForm {
+  id          String      @id @default(uuid())
+  
+  staffId     String
+  staff       StaffProfile @relation(fields: [staffId], references: [id])
+  
+  sessionId   String
+  session     AperSession @relation(fields: [sessionId], references: [id])
+  
+  scores      Json?       // Structure: { kpi: { q1: 5, q2: 4... }, ethics: {...} }
+  comments    Json?       // Comments from staff/supervisor
+  
+  status      AperStatus  @default(DRAFT)
+  
+  supervisorId String?
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([staffId, sessionId]) // One form per session per staff
+  @@map("aper_forms")
+}

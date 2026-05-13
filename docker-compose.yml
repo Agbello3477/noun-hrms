@@ -1,0 +1,68 @@
+
+version: '3.8'
+
+services:
+  # 1. Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: noun_hrms_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-noun_hrms}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - noun_net
+
+  # 2. Backend API
+  server:
+    build: ./server
+    container_name: noun_hrms_api
+    restart: always
+    ports:
+      - "5055:5055"
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-noun_hrms}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-supersecretkey}
+      PORT: 5055
+      CLIENT_URL: http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./server/uploads:/app/uploads
+    networks:
+      - noun_net
+
+  redis:
+    image: redis:alpine
+    container_name: noun_hrms_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - noun_net
+
+  # 3. Frontend Client
+  client:
+    build: ./client
+    container_name: noun_hrms_client
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5055
+    depends_on:
+      - server
+    networks:
+      - noun_net
+
+volumes:
+  postgres_data:
+
+networks:
+  noun_net:
+    driver: bridge
