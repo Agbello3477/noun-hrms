@@ -20,6 +20,8 @@ import queryRoutes from './routes/query.routes';
 import academicRoutes from './routes/academic.routes';
 import notificationRoutes from './routes/notification.routes';
 import aperRoutes from './routes/aper.routes';
+import memoRoutes from './routes/memo.routes';
+import systemRoutes from './routes/system.routes';
 
 dotenv.config();
 
@@ -56,6 +58,8 @@ app.use('/api/queries', queryRoutes);
 app.use('/api/academic', academicRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/aper', aperRoutes);
+app.use('/api/memos', memoRoutes);
+app.use('/api/system', systemRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });

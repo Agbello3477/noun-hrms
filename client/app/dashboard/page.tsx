@@ -1,59 +1,669 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import api from '../../lib/api';
+import { 
+    FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
+    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock
+} from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardHome() {
     const { user } = useAuth();
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [loadingNotifications, setLoadingNotifications] = useState(true);
+    const [leaves, setLeaves] = useState<any[]>([]);
+    const [loadingLeaves, setLoadingLeaves] = useState(true);
+
+    // Registry Dashboard States
+    const [activities, setActivities] = useState<any[]>([]);
+    const [loadingActivities, setLoadingActivities] = useState(true);
+    const [pendingActionsCount, setPendingActionsCount] = useState(0);
+    const [analytics, setAnalytics] = useState<any>({
+        totalWorkforce: 0,
+        activeLeaves: { annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0 }
+    });
+
+    // Manager Dashboard States
+    const [managerStats, setManagerStats] = useState<any>({
+        totalStaff: 0,
+        activeLeaves: 0,
+        pendingLeaves: 0,
+        pendingAper: 0,
+        activeQueries: 0
+    });
+    const [loadingManagerStats, setLoadingManagerStats] = useState(true);
+
+    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN';
+    const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
+
+    useEffect(() => {
+        const fetchNotifications = async (silent = false) => {
+            if (isRegistry || !user) return;
+            try {
+                if (!silent) setLoadingNotifications(true);
+                const { data } = await api.get('/api/notifications');
+                setNotifications(data.notifications || []);
+            } catch (error) {
+                console.error('Failed to load notifications', error);
+            } finally {
+                if (!silent) setLoadingNotifications(false);
+            }
+        };
+
+        fetchNotifications(false);
+        const interval = setInterval(() => {
+            fetchNotifications(true);
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [user, isRegistry]);
+
+    useEffect(() => {
+        const fetchLeaves = async () => {
+            if (!user) return;
+            try {
+                const { data } = await api.get('/api/leaves/me');
+                setLeaves(data || []);
+            } catch (error) {
+                console.error('Failed to load leaves history', error);
+            } finally {
+                setLoadingLeaves(false);
+            }
+        };
+        fetchLeaves();
+    }, [user]);
+
+    useEffect(() => {
+        const fetchRegistryDashboardData = async () => {
+            if (!isRegistry || !user) return;
+            try {
+                // Fetch recent memos, transfers, queries, and analytics
+                const [memosRes, transfersRes, queriesRes, analyticsRes] = await Promise.all([
+                    api.get('/api/memos').catch(() => ({ data: [] })),
+                    api.get('/api/registry/transfers').catch(() => ({ data: [] })),
+                    api.get('/api/queries').catch(() => ({ data: [] })),
+                    api.get('/api/analytics/dashboard').catch(() => ({ data: null }))
+                ]);
+
+                const fetchedMemos = (memosRes.data || []).map((m: any) => {
+                    const isDirect = !!m.recipient;
+                    return {
+                        id: `memo-${m.id}`,
+                        type: 'MEMO',
+                        title: isDirect ? `Direct Memo Sent to ${m.recipient.name}` : 'Memo Broadcast Sent',
+                        description: isDirect 
+                            ? `Direct memo: "${m.title}" sent to ${m.recipient.name} (${m.recipient.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
+                            : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
+                        createdAt: m.createdAt,
+                        color: isDirect 
+                            ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
+                            : 'border-nounGreen bg-green-50/40 text-green-700'
+                    };
+                });
+
+                const fetchedTransfers = (transfersRes.data || []).map((t: any) => ({
+                    id: `transfer-${t.id}`,
+                    type: 'TRANSFER',
+                    title: 'Staff Transfer Approved',
+                    description: `${t.staff?.name || 'Staff member'} transferred to ${t.newCenterId || 'Headquarters'}`,
+                    createdAt: t.createdAt,
+                    color: 'border-orange-500 bg-orange-50/40 text-orange-700'
+                }));
+
+                const fetchedQueries = (queriesRes.data || []).map((q: any) => ({
+                    id: `query-${q.id}`,
+                    type: 'QUERY',
+                    title: 'Disciplinary Query Issued',
+                    description: `Query "${q.title}" issued to ${q.staff?.user?.name || 'Staff member'}`,
+                    createdAt: q.createdAt,
+                    color: 'border-blue-500 bg-blue-50/40 text-blue-700'
+                }));
+
+                // Combine and sort by date desc, then take top 5
+                const combined = [...fetchedMemos, ...fetchedTransfers, ...fetchedQueries]
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 5);
+
+                setActivities(combined);
+
+                const pendingActions = (transfersRes.data || []).length + (queriesRes.data || []).filter((q: any) => q.status === 'PENDING').length;
+                setPendingActionsCount(pendingActions);
+
+                if (analyticsRes && analyticsRes.data) {
+                    setAnalytics(analyticsRes.data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch registry activity data', error);
+            } finally {
+                setLoadingActivities(false);
+            }
+        };
+
+        fetchRegistryDashboardData();
+        const interval = setInterval(() => {
+            fetchRegistryDashboardData();
+        }, 15000); // Poll every 15s to capture updates immediately
+
+        return () => clearInterval(interval);
+    }, [user, isRegistry]);
+
+    useEffect(() => {
+        const fetchManagerStats = async () => {
+            if (!isUnitManager || !user) return;
+            try {
+                setLoadingManagerStats(true);
+                const { data } = await api.get('/api/analytics/manager');
+                setManagerStats(data);
+            } catch (error) {
+                console.error('Failed to fetch manager dashboard stats', error);
+            } finally {
+                setLoadingManagerStats(false);
+            }
+        };
+
+        fetchManagerStats();
+        const interval = setInterval(() => {
+            fetchManagerStats();
+        }, 30000); // Poll manager stats every 30s
+        return () => clearInterval(interval);
+    }, [user, isUnitManager]);
+
+    // Calculate leave status and details for current user
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const parseUTCDateToLocal = (dateInput: any) => {
+        if (!dateInput) return new Date(0);
+        const isoString = typeof dateInput === 'string' ? dateInput : new Date(dateInput).toISOString();
+        const parts = isoString.split('T')[0].split('-');
+        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    };
+
+    const activeLeave = leaves.find(l => {
+        if (l.status !== 'APPROVED') return false;
+        const start = parseUTCDateToLocal(l.startDate);
+        const end = parseUTCDateToLocal(l.endDate);
+        return today >= start && today <= end;
+    });
+
+    const isOnLeave = !!activeLeave;
+    const dutyStatus = isOnLeave ? 'ON LEAVE' : 'ACTIVE';
+    
+    // Days applied for (duration of the active leave, or most recent request if not active)
+    const latestLeave = leaves[0];
+    const appliedDays = activeLeave ? (activeLeave.durationDays || 0) : (latestLeave ? (latestLeave.durationDays || 0) : 0);
+
+    // Resumption Date
+    let resumptionDateStr = 'N/A';
+    if (activeLeave) {
+        const resDate = new Date(activeLeave.endDate);
+        resDate.setDate(resDate.getDate() + 1);
+        resumptionDateStr = resDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+    // Remaining Annual Leave Days (30 - used annual leave days this year)
+    const currentYear = today.getFullYear();
+    const approvedAnnualThisYear = leaves.filter(l => {
+        return l.status === 'APPROVED' && 
+               l.type === 'ANNUAL' && 
+               new Date(l.startDate).getFullYear() === currentYear;
+    });
+    const usedDays = approvedAnnualThisYear.reduce((sum, l) => sum + (l.durationDays || 0), 0);
+    const remainingDays = Math.max(0, 30 - usedDays);
+
+    // Premium Manager Dashboard View
+    if (!isRegistry && isUnitManager) {
+        return (
+            <div className="space-y-6">
+                {/* Welcome Header */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-900 p-8 text-white shadow-xl animate-in fade-in slide-in-from-top duration-500">
+                    <div className="relative z-10">
+                        <span className="bg-white/20 text-white border border-white/20 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
+                            Manager Portal
+                        </span>
+                        <h1 className="text-3xl font-bold tracking-tight mb-2">
+                            Welcome back, {user?.name?.split(' ')[0]}!
+                        </h1>
+                        <p className="text-blue-100 max-w-lg text-sm opacity-90 leading-relaxed">
+                            Overview for <span className="font-bold underline">{user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Your Managed Unit'}</span>. Track active staff, recommendation pipelines, and appraise performance.
+                        </p>
+                    </div>
+                    {/* Decorative Background Elements */}
+                    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
+                    <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
+                </div>
+
+                {/* Manager Stats Grid */}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Staff</h3>
+                                <p className="mt-2 text-2xl font-black text-gray-905">
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.totalStaff}
+                                </p>
+                            </div>
+                            <span className="p-2 bg-blue-50 text-blue-605 rounded-lg"><FileText size={18} /></span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Active unit personnel</p>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">On Active Leave</h3>
+                                <p className="mt-2 text-2xl font-black text-gray-905">
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.activeLeaves}
+                                </p>
+                            </div>
+                            <span className="p-2 bg-green-50 text-green-605 rounded-lg"><MapPin size={18} /></span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Currently away from duty</p>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Leaves</h3>
+                                <p className={`mt-2 text-2xl font-black ${managerStats.pendingLeaves > 0 ? 'text-orange-600' : 'text-gray-905'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.pendingLeaves}
+                                </p>
+                            </div>
+                            <span className={`p-2 rounded-lg ${managerStats.pendingLeaves > 0 ? 'bg-orange-50 text-orange-605' : 'bg-gray-50 text-gray-400'}`}><Clock size={18} /></span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Awaiting review</p>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Appraisals</h3>
+                                <p className={`mt-2 text-2xl font-black ${managerStats.pendingAper > 0 ? 'text-indigo-600' : 'text-gray-905'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.pendingAper}
+                                </p>
+                            </div>
+                            <span className={`p-2 rounded-lg ${managerStats.pendingAper > 0 ? 'bg-indigo-50 text-indigo-605' : 'bg-gray-50 text-gray-400'}`}><ClipboardCheck size={18} /></span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Pending APER review</p>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Open Queries</h3>
+                                <p className={`mt-2 text-2xl font-black ${managerStats.activeQueries > 0 ? 'text-red-650' : 'text-gray-905'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.activeQueries}
+                                </p>
+                            </div>
+                            <span className={`p-2 rounded-lg ${managerStats.activeQueries > 0 ? 'bg-red-50 text-red-605' : 'bg-gray-50 text-gray-400'}`}><AlertTriangle size={18} /></span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Disciplinary actions open</p>
+                    </div>
+                </div>
+
+                {/* Manager Quick Actions Grid */}
+                <div className="bg-white rounded-2xl border border-gray-150 p-6 shadow-sm">
+                    <h2 className="text-sm font-extrabold text-gray-800 uppercase tracking-wider mb-4">Management Command Center</h2>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <Link href="/dashboard/unit/staff" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group">
+                            <span className="p-2.5 bg-blue-50 text-blue-700 rounded-lg group-hover:scale-110 transition-transform"><FileText size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-850">Unit Staff</h4>
+                                <p className="text-[11px] text-gray-500">Manage bio-data & files</p>
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/unit/leaves" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50/20 transition-all group">
+                            <span className="p-2.5 bg-orange-50 text-orange-700 rounded-lg group-hover:scale-110 transition-transform"><Clock size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-855">Leave Approvals</h4>
+                                <p className="text-[11px] text-gray-500">Recommend & approve</p>
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/unit/aper" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/20 transition-all group">
+                            <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-lg group-hover:scale-110 transition-transform"><ClipboardCheck size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-855">Appraisal Review</h4>
+                                <p className="text-[11px] text-gray-500">Conduct APER reviews</p>
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/registry/queries" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-red-200 hover:bg-red-50/20 transition-all group">
+                            <span className="p-2.5 bg-red-50 text-red-700 rounded-lg group-hover:scale-110 transition-transform"><AlertTriangle size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-855">Staff Queries</h4>
+                                <p className="text-[11px] text-gray-500">Disciplinary oversight</p>
+                            </div>
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Notifications & Self Status */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <Bell size={18} className="text-blue-600" /> Action Notifications
+                            </h2>
+                        </div>
+                        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                            {loadingNotifications ? (
+                                <div className="flex justify-center items-center py-8">
+                                    <Loader2 className="animate-spin text-blue-600" size={24} />
+                                </div>
+                            ) : notifications.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 text-sm">
+                                    No notifications found.
+                                </div>
+                            ) : (
+                                notifications.slice(0, 5).map((note) => (
+                                    <div
+                                        key={note.id}
+                                        className={`relative rounded-lg border border-gray-100 p-4 hover:bg-gray-50 transition-all ${
+                                            !note.isRead ? 'bg-blue-50/20 border-l-4 border-l-blue-500' : ''
+                                        }`}
+                                    >
+                                        <div className="flex items-start gap-2.5">
+                                            <div className="mt-0.5">
+                                                {note.type === 'SUCCESS' && <CheckCircle size={15} className="text-green-500" />}
+                                                {note.type === 'WARNING' && <AlertTriangle size={15} className="text-yellow-500" />}
+                                                {note.type === 'ERROR' && <AlertOctagon size={15} className="text-red-500" />}
+                                                {note.type !== 'SUCCESS' && note.type !== 'WARNING' && note.type !== 'ERROR' && (
+                                                    <Info size={15} className="text-blue-500" />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className={`text-sm ${!note.isRead ? 'font-semibold text-gray-900' : 'text-gray-750'}`}>
+                                                    {note.title}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                                    {note.message}
+                                                </p>
+                                                <div className="flex items-center justify-between mt-2.5">
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {new Date(note.createdAt).toLocaleString()}
+                                                    </span>
+                                                    {note.link && (
+                                                        <Link
+                                                            href={note.link}
+                                                            className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                                                        >
+                                                            View Details <ArrowRight size={10} />
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800 mb-4">My Center/Unit Status</h2>
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span className="text-sm text-gray-600 font-medium">Placement Role</span>
+                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full uppercase">
+                                        {user?.role?.replace(/_/g, ' ')}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span className="text-sm text-gray-600 font-medium">Assigned Scope</span>
+                                    <span className="text-sm font-bold text-gray-950 truncate max-w-[200px]">
+                                        {user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Registry / Headquarters'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span className="text-sm text-gray-600 font-medium">Duty Status</span>
+                                    <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
+                                        isOnLeave ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-750'
+                                    }`}>
+                                        {dutyStatus}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <Link href="/dashboard/profile" className="mt-6 flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50/40 transition-all">
+                            View My Staff Profile <ArrowRight size={16} />
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Premium Staff Dashboard View
+    if (!isRegistry) {
+        return (
+            <div className="space-y-6">
+                {/* Welcome Header */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-nounGreen to-green-800 p-8 text-white shadow-xl">
+                    <div className="relative z-10">
+                        <h1 className="text-3xl font-bold tracking-tight mb-2">
+                            Welcome back, {user?.name?.split(' ')[0]}!
+                        </h1>
+                        <p className="text-green-100 max-w-lg">
+                            Access your digital dossier, download payslips, apply for leave, and manage your academic profile all in one secure location.
+                        </p>
+                    </div>
+                    {/* Decorative Background Elements */}
+                    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
+                    <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
+                </div>
+
+                {/* Quick Actions Grid */}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                    <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                        <div className="mb-4 rounded-full bg-blue-50 p-4 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <FileText size={28} />
+                        </div>
+                        <h3 className="font-semibold text-gray-800">My Dossier</h3>
+                        <p className="text-xs text-gray-500 mt-1">View personal file</p>
+                    </Link>
+
+                    <Link href="/dashboard/payslips" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                        <div className="mb-4 rounded-full bg-green-50 p-4 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                            <DollarSign size={28} />
+                        </div>
+                        <h3 className="font-semibold text-gray-800">Payslips</h3>
+                        <p className="text-xs text-gray-500 mt-1">Download monthly</p>
+                    </Link>
+
+                    <Link href="/dashboard/leaves/apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                        <div className="mb-4 rounded-full bg-purple-50 p-4 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                            <MapPin size={28} />
+                        </div>
+                        <h3 className="font-semibold text-gray-800">Leave Request</h3>
+                        <p className="text-xs text-gray-500 mt-1">Apply for time off</p>
+                    </Link>
+
+                    <Link href="/dashboard/staff/aper" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                        <div className="mb-4 rounded-full bg-orange-50 p-4 text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                            <ClipboardCheck size={28} />
+                        </div>
+                        <h3 className="font-semibold text-gray-800">Appraisal</h3>
+                        <p className="text-xs text-gray-500 mt-1">Submit APER form</p>
+                    </Link>
+                </div>
+
+                {/* Notifications & Status */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <Bell size={18} className="text-nounGreen" /> Recent Notifications
+                            </h2>
+                        </div>
+                        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                            {loadingNotifications ? (
+                                <div className="flex justify-center items-center py-8">
+                                    <Loader2 className="animate-spin text-nounGreen" size={24} />
+                                </div>
+                            ) : notifications.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 text-sm">
+                                    No notifications found.
+                                </div>
+                            ) : (
+                                notifications.slice(0, 5).map((note) => (
+                                    <div
+                                        key={note.id}
+                                        className={`relative rounded-lg border border-gray-100 p-4 hover:bg-gray-50 transition-all ${
+                                            !note.isRead ? 'bg-blue-50/20 border-l-4 border-l-blue-500' : ''
+                                        }`}
+                                    >
+                                        <div className="flex items-start gap-2.5">
+                                            <div className="mt-0.5">
+                                                {note.type === 'SUCCESS' && <CheckCircle size={15} className="text-green-500" />}
+                                                {note.type === 'WARNING' && <AlertTriangle size={15} className="text-yellow-500" />}
+                                                {note.type === 'ERROR' && <AlertOctagon size={15} className="text-red-500" />}
+                                                {note.type !== 'SUCCESS' && note.type !== 'WARNING' && note.type !== 'ERROR' && (
+                                                    <Info size={15} className="text-blue-500" />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className={`text-sm ${!note.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                                                    {note.title}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                                    {note.message}
+                                                </p>
+                                                <div className="flex items-center justify-between mt-2.5">
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {new Date(note.createdAt).toLocaleString()}
+                                                    </span>
+                                                    {note.link && (
+                                                        <Link
+                                                            href={note.link}
+                                                            className="text-xs font-bold text-nounGreen hover:underline inline-flex items-center gap-0.5"
+                                                        >
+                                                            View Details <ArrowRight size={10} />
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                        <h2 className="text-lg font-bold text-gray-800 mb-4">Current Status</h2>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Duty Status</span>
+                                <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
+                                    isOnLeave ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
+                                }`}>
+                                    {dutyStatus}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Days Applied For</span>
+                                <span className="text-sm font-bold text-gray-900">{appliedDays} Days</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Remaining Leave Days</span>
+                                <span className="text-sm font-bold text-gray-900">{remainingDays} Days</span>
+                            </div>
+                            {isOnLeave && (
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span className="text-sm text-gray-600 font-medium">Resuming Duty</span>
+                                    <span className="text-sm font-bold text-blue-600">{resumptionDateStr}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Next Appraisal</span>
+                                <span className="text-sm font-bold text-gray-900">December 2025</span>
+                            </div>
+                        </div>
+                        <Link href="/dashboard/profile" className="mt-6 flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-nounGreen border border-nounGreen/30 rounded-lg hover:bg-nounGreen/5 transition-colors">
+                            View Full Profile <ArrowRight size={16} />
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // HR / Registry Global Dashboard
+    const activeLeavesCount = Object.values(analytics.activeLeaves || {}).reduce((acc: number, val: any) => acc + (typeof val === 'number' ? val : 0), 0);
+    const activeDutyCount = Math.max(0, analytics.totalWorkforce - activeLeavesCount);
 
     return (
         <div>
             <h1 className="mb-6 text-3xl font-bold text-gray-800">
-                Welcome back, {user?.name?.split(' ')[0]}!
+                HQ Registry Overview
             </h1>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {/* Stat Card 1 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm">
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
                     <h3 className="text-sm font-medium text-gray-500">Total Staff</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">42</p>
-                    <span className="text-sm text-green-600">+2 from last month</span>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">
+                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : analytics.totalWorkforce}
+                    </p>
+                    <span className="text-sm text-green-600 font-medium">Registered system profiles</span>
                 </div>
 
                 {/* Stat Card 2 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm">
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
                     <h3 className="text-sm font-medium text-gray-500">Active Duty</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">38</p>
-                    <span className="text-sm text-gray-500">90% attendance today</span>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">
+                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : activeDutyCount}
+                    </p>
+                    <span className="text-sm text-gray-500">Currently available</span>
                 </div>
 
                 {/* Stat Card 3 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm">
-                    <h3 className="text-sm font-medium text-gray-500">Leave Requests</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">3</p>
-                    <span className="text-sm text-yellow-600">Pending approval</span>
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-medium text-gray-500">Staff on Leave</h3>
+                    <p className="mt-2 text-3xl font-bold text-gray-900">
+                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : activeLeavesCount}
+                    </p>
+                    <span className="text-sm text-blue-600 font-medium">Approved requests</span>
                 </div>
 
                 {/* Stat Card 4 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm">
-                    <h3 className="text-sm font-medium text-gray-500">Next Payroll</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">Jan 25</p>
-                    <span className="text-sm text-blue-600">8 days remaining</span>
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-medium text-gray-500">Pending Actions</h3>
+                    <p className="mt-2 text-3xl font-bold text-red-600">
+                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : pendingActionsCount}
+                    </p>
+                    <span className="text-sm text-red-600 font-medium">Transfers & Queries</span>
                 </div>
             </div>
 
-            <div className="mt-8 rounded-xl bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-semibold text-gray-800">Recent Activity</h2>
+            <div className="mt-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                <h2 className="mb-4 text-lg font-semibold text-gray-800">Recent Registry Activity</h2>
                 <div className="space-y-4">
-                    <div className="border-l-4 border-blue-500 bg-blue-50 p-4">
-                        <p className="text-sm font-medium text-gray-900">New Staff Registration</p>
-                        <p className="text-xs text-gray-600">John Doe was added to the Academic Staff list.</p>
-                        <p className="mt-1 text-xs text-gray-400">2 hours ago</p>
-                    </div>
-                    <div className="border-l-4 border-green-500 bg-green-50 p-4">
-                        <p className="text-sm font-medium text-gray-900">Payroll Processed</p>
-                        <p className="text-xs text-gray-600">December payroll has been finalized and approved.</p>
-                        <p className="mt-1 text-xs text-gray-400">Yesterday</p>
-                    </div>
+                    {loadingActivities ? (
+                        <div className="flex justify-center items-center py-8">
+                            <Loader2 className="animate-spin text-nounGreen" size={24} />
+                        </div>
+                    ) : activities.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 text-sm bg-gray-50 rounded-lg">
+                            No recent activity found.
+                        </div>
+                    ) : (
+                        activities.map((act) => (
+                            <div key={act.id} className={`border-l-4 ${act.color.split(' ')[0]} ${act.color.split(' ').slice(1).join(' ')} p-4 rounded-r-lg shadow-sm transition-all hover:bg-opacity-80`}>
+                                <p className="text-sm font-bold text-gray-900">{act.title}</p>
+                                <p className="text-sm text-gray-600 mt-1">{act.description}</p>
+                                <p className="mt-2 text-xs font-medium text-gray-400">
+                                    {new Date(act.createdAt).toLocaleString()}
+                                </p>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>

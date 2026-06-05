@@ -6,10 +6,10 @@ import { upload } from '../middleware/upload.middleware';
 
 const router = Router();
 
-// Issue Query (HR Only)
+// Issue Query (HR & Unit Managers)
 router.post('/issue',
     verifyToken,
-    requireRole([Role.HR_ADMIN, Role.SUPER_USER]),
+    requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN]),
     issueQuery
 );
 
@@ -26,7 +26,7 @@ router.get('/', verifyToken, getQueries);
 // Resolve Query
 router.put('/:id/resolve',
     verifyToken,
-    requireRole([Role.HR_ADMIN, Role.SUPER_USER]),
+    requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN]),
     resolveQuery
 );
 

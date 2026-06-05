@@ -1,8 +1,7 @@
 
 import { Request, Response } from 'express';
-import { PrismaClient, AperStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { AperStatus } from '@prisma/client';
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };
@@ -192,8 +191,7 @@ export const reviewForm = async (req: AuthRequest, res: Response) => {
                 supervisorId,
                 scores: supervisorScores, // Store merged or separate scores? Schema says Json
                 comments: supervisorComments, // Schema says Json
-                status: status || AperStatus.REVIEWED,
-                reviewedAt: new Date()
+                status: status || AperStatus.REVIEWED
             }
         });
 

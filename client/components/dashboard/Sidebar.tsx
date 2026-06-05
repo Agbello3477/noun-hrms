@@ -20,11 +20,12 @@ import {
     History,
     BookOpen,
     FolderOpen,
-    ClipboardCheck
+    ClipboardCheck,
+    Mail
 } from 'lucide-react';
 
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIsOpen?: (val: boolean) => void }) {
     const pathname = usePathname();
     const { user, logout } = useAuth();
 
@@ -33,6 +34,7 @@ export default function Sidebar() {
     const LinkItem = ({ href, icon: Icon, label }: any) => (
         <Link
             href={href}
+            onClick={() => setIsOpen && setIsOpen(false)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive(href)
                 ? 'bg-blue-50 text-blue-700'
                 : 'text-gray-700 hover:bg-gray-100'
@@ -60,11 +62,14 @@ export default function Sidebar() {
     const isAudit = role === 'AUDIT' || isAdmin;
 
     // Unit Heads (Directors/Deans) & Managers
-    const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || isAdmin;
+    const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isAdmin;
     const isManager = role === 'STUDY_CENTER_MANAGER';
 
+    // Academic check
+    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isSuperUser || isAdmin;
+
     return (
-        <aside className="h-screen w-60 shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+        <aside className="h-screen w-52 flex-none border-r border-gray-200 bg-white overflow-y-auto">
             <div className="flex h-16 items-center border-b px-6 gap-3">
                 <img src="/noun_logo.png" alt="NOUN" className="h-8 w-8 object-contain" />
                 <div className="text-xl font-bold text-nounGreen">NOUN HRMS</div>
@@ -85,6 +90,7 @@ export default function Sidebar() {
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
                         <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
+                        <LinkItem href="/dashboard/registry/memos" icon={Mail} label="Registry Memos" />
                     </>
                 )}
 
@@ -97,6 +103,8 @@ export default function Sidebar() {
                         <LinkItem href="/dashboard/unit/staff" icon={Briefcase} label="Unit Staff" />
                         <LinkItem href="/dashboard/unit/leaves" icon={FileText} label="Leave Approvals" />
                         <LinkItem href="/dashboard/unit/aper" icon={ClipboardCheck} label="Appraisal Review" />
+                        <LinkItem href="/dashboard/unit/transferred-staff" icon={ArrowLeftRight} label="Transferred Staff" />
+                        <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
                     </>
                 )}
 
@@ -123,18 +131,28 @@ export default function Sidebar() {
                 <LinkItem href="/dashboard/profile" icon={Users} label="My Profile" />
                 <LinkItem href="/dashboard/documents" icon={FileText} label="My Dossier" />
                 <LinkItem href="/dashboard/payslips" icon={DollarSign} label="My Payslips" />
-                <LinkItem href="/dashboard/services/file-requests" icon={Briefcase} label="File Requests" />
+                {role !== 'STAFF' && (
+                    <>
+                        <LinkItem href="/dashboard/services/file-requests" icon={Briefcase} label="File Requests" />
+                        <LinkItem href="/dashboard/received-files" icon={FolderOpen} label="Received Files" />
+                    </>
+                )}
                 <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
+                <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
                 <LinkItem href="/dashboard/leaves/apply" icon={FileText} label="Apply for Leave" />
 
                 {/* Academic Services */}
-                <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Academic
-                </div>
-                <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Research" />
-                <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
-                <LinkItem href="/dashboard/leaves/sabbatical" icon={MapPin} label="Apply Sabbatical" />
+                {isAcademic && (
+                    <>
+                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Academic
+                        </div>
+                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Research" />
+                        <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
+                        <LinkItem href="/dashboard/leaves/sabbatical" icon={MapPin} label="Apply Sabbatical" />
+                    </>
+                )}
 
                 {/* System */}
                 {isAdmin && (
@@ -143,6 +161,7 @@ export default function Sidebar() {
                             System
                         </div>
                         <LinkItem href="/dashboard/settings" icon={Settings} label="Settings" />
+                        <LinkItem href="/dashboard/system/logs" icon={History} label="Activity Logs" />
                     </>
                 )}
             </nav>
@@ -155,6 +174,11 @@ export default function Sidebar() {
                     <LogOut size={20} />
                     Sign Out
                 </button>
+                <div className="mt-6 text-center opacity-60">
+                    <p className="text-[5px] text-gray-400">
+                        Powered by: <span className="font-bold text-nounGreen">MaSha Secure Tech</span>
+                    </p>
+                </div>
             </div>
         </aside >
     );

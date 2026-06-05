@@ -1,9 +1,9 @@
 
 import { Request, Response } from 'express';
-import { PrismaClient, Role, User, Cadre, Department } from '@prisma/client';
+import { Role, User, Cadre, Department } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
+import { sendAccountCreatedNotification } from '../services/email.service';
 
 // Helper to generate next Staff ID
 const generateStaffId = async (): Promise<string> => {
@@ -39,10 +39,30 @@ export const createStaffFile = async (req: Request, res: Response) => {
         } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) return res.status(400).json({ message: 'Email already exists' });
+        if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
+
+        if (phone) {
+            const existingPhone = await prisma.staffProfile.findFirst({ where: { phone } });
+            if (existingPhone) {
+                return res.status(400).json({ message: 'Staff file with this phone number already exists. To recreate it, the existing file must first be deleted by HR.' });
+            }
+        }
+
+        if (surname && otherNames) {
+            const existingName = await prisma.staffProfile.findFirst({
+                where: {
+                    surname: { equals: surname.trim(), mode: 'insensitive' },
+                    otherNames: { equals: otherNames.trim(), mode: 'insensitive' }
+                }
+            });
+            if (existingName) {
+                return res.status(400).json({ message: 'Staff file with this name already exists. To recreate it, the existing file must first be deleted by HR.' });
+            }
+        }
 
         const staffId = await generateStaffId();
-        const hashedPassword = await bcrypt.hash(password || 'password123', 10);
+        const defaultPassword = password || '123456789';
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
         const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
         const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
 
@@ -56,6 +76,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
                     password: hashedPassword,
                     name,
                     role: resolvedRole,
+                    mustChangePassword: true,
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
@@ -83,6 +104,11 @@ export const createStaffFile = async (req: Request, res: Response) => {
             });
         });
 
+        // Send Notification asynchronously
+        sendAccountCreatedNotification(email, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
+            console.error('Failed to send account creation notification:', err);
+        });
+
         res.status(201).json({ message: 'Staff file created successfully', staffId });
     } catch (error) {
         console.error('Create Staff File Error', error);
@@ -103,17 +129,37 @@ export const addExistingFile = async (req: Request, res: Response) => {
         } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) return res.status(400).json({ message: 'Email already exists' });
+        if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
 
         let staffId = manualStaffId;
         if (!staffId) {
             staffId = await generateStaffId();
         } else {
             const checkId = await prisma.staffProfile.findUnique({ where: { staffId } });
-            if (checkId) return res.status(400).json({ message: 'Staff ID already exists' });
+            if (checkId) return res.status(400).json({ message: 'Staff file with this Staff ID already exists. To recreate it, the existing file must first be deleted by HR.' });
         }
 
-        const hashedPassword = await bcrypt.hash(password || 'password123', 10);
+        if (phone) {
+            const existingPhone = await prisma.staffProfile.findFirst({ where: { phone } });
+            if (existingPhone) {
+                return res.status(400).json({ message: 'Staff file with this phone number already exists. To recreate it, the existing file must first be deleted by HR.' });
+            }
+        }
+
+        if (surname && otherNames) {
+            const existingName = await prisma.staffProfile.findFirst({
+                where: {
+                    surname: { equals: surname.trim(), mode: 'insensitive' },
+                    otherNames: { equals: otherNames.trim(), mode: 'insensitive' }
+                }
+            });
+            if (existingName) {
+                return res.status(400).json({ message: 'Staff file with this name already exists. To recreate it, the existing file must first be deleted by HR.' });
+            }
+        }
+
+        const defaultPassword = password || '123456789';
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
         const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
         const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
         // @ts-ignore
@@ -126,6 +172,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
                     password: hashedPassword,
                     name,
                     role: resolvedRole,
+                    mustChangePassword: true,
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
@@ -151,6 +198,11 @@ export const addExistingFile = async (req: Request, res: Response) => {
                     ipAddress: req.ip
                 }
             });
+        });
+
+        // Send Notification asynchronously
+        sendAccountCreatedNotification(email, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
+            console.error('Failed to send account creation notification:', err);
         });
 
         res.status(201).json({ message: 'Existing staff file added', staffId });
@@ -179,7 +231,16 @@ export const getJobFiles = async (req: Request, res: Response) => {
                     include: {
                         createdBy: { select: { name: true, email: true } }, // Fetch Creator Name
                         unit: true,
-                        studyCenter: true
+                        studyCenter: true,
+                        queries: {
+                            where: { status: 'OPEN' }
+                        },
+                        fileRequests: {
+                            where: { status: 'APPROVED' }
+                        },
+                        leaves: {
+                            where: { status: 'APPROVED' }
+                        }
                     }
                 }
             },
@@ -231,6 +292,15 @@ export const getStaffFile = async (req: Request, res: Response) => {
             name: profile.user.name,
             email: profile.user.email,
             staffId: profile.staffId,
+            title: profile.title,
+            phone: profile.phone,
+            gender: profile.gender,
+            stateOfOrigin: profile.stateOfOrigin,
+            lga: profile.lga,
+            address: profile.address,
+            cadre: profile.cadre,
+            level: profile.level,
+            step: profile.step,
             role: profile.user.role,
             unit: profile.unit,
             studyCenter: profile.studyCenter,
@@ -241,5 +311,85 @@ export const getStaffFile = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Get Staff File Error', error);
         res.status(500).json({ message: 'Error fetching staff file' });
+    }
+};
+
+// Delete Staff File
+export const deleteStaffFile = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params; // Staff Profile ID or Staff ID
+
+        let profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id },
+                    { staffId: id }
+                ]
+            }
+        });
+
+        if (!profile) return res.status(404).json({ message: 'Staff file not found' });
+
+        await prisma.$transaction(async (tx) => {
+            // Delete related documents
+            await tx.document.deleteMany({ where: { ownerId: profile!.id } });
+
+            // Delete related file requests
+            await tx.fileRequest.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete related queries
+            await tx.staffQuery.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete related teaching allocations
+            await tx.teachingAllocation.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete related publications
+            await tx.publication.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete related leave requests
+            await tx.leaveRequest.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete related aper forms
+            await tx.aperForm.deleteMany({ where: { staffId: profile!.id } });
+
+            // Delete attendance
+            await tx.attendance.deleteMany({ where: { userId: profile!.userId } });
+
+            // Delete payroll records
+            await tx.payroll.deleteMany({ where: { userId: profile!.userId } });
+
+            // Delete audit logs
+            await tx.auditLog.deleteMany({ where: { userId: profile!.userId } });
+
+            // Delete notifications
+            await tx.notification.deleteMany({ where: { userId: profile!.userId } });
+
+            // Delete memo responses
+            await tx.memoResponse.deleteMany({ where: { staffId: profile!.userId } });
+
+            // Delete memos (sent or received)
+            await tx.memo.deleteMany({
+                where: {
+                    OR: [
+                        { senderId: profile!.userId },
+                        { recipientId: profile!.userId }
+                    ]
+                }
+            });
+
+            // Delete document trails
+            await tx.documentTrail.deleteMany({ where: { actionById: profile!.userId } });
+
+            // Delete the staff profile
+            await tx.staffProfile.delete({ where: { id: profile!.id } });
+
+            // Delete the user account
+            await tx.user.delete({ where: { id: profile!.userId } });
+        });
+
+        res.json({ message: 'Staff file deleted successfully' });
+    } catch (error) {
+        console.error('Delete Staff File Error', error);
+        res.status(500).json({ message: 'Error deleting staff file' });
     }
 };

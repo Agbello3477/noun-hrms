@@ -5,6 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, User, Building, MapPin, Calendar, Shield } from 'lucide-react';
 import api from '../../../../../lib/api';
 import DigitalDossier from '../../../../../components/dashboard/DigitalDossier';
+import BioDataTab from '../../../../../components/hr/dossier/BioDataTab';
+import LeaveHistoryTab from '../../../../../components/hr/dossier/LeaveHistoryTab';
+import TransferHistoryTab from '../../../../../components/hr/dossier/TransferHistoryTab';
+import QueryHistoryTab from '../../../../../components/hr/dossier/QueryHistoryTab';
+import AperHistoryTab from '../../../../../components/hr/dossier/AperHistoryTab';
 
 export default function StaffDossierPage() {
     const { id } = useParams();
@@ -12,6 +17,21 @@ export default function StaffDossierPage() {
     const [staff, setStaff] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState('Overview');
+
+    const handleDeleteFile = async () => {
+        if (!confirm(`Are you sure you want to permanently delete the staff file for ${staff?.name || 'this staff'}? This will delete all their documents, queries, leaves, APER records, and user account. This action CANNOT be undone.`)) {
+            return;
+        }
+
+        try {
+            await api.delete(`/api/registry/files/${staff.id}`);
+            alert('Staff file deleted successfully.');
+            router.push('/dashboard/hr/files');
+        } catch (err: any) {
+            alert('Failed to delete staff file: ' + (err.response?.data?.message || err.message));
+        }
+    };
 
     useEffect(() => {
         const fetchStaff = async () => {
@@ -46,9 +66,17 @@ export default function StaffDossierPage() {
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
-            <button onClick={() => router.back()} className="mb-6 flex items-center text-gray-500 hover:text-nounGreen transition-colors">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Registry
-            </button>
+            <div className="flex justify-between items-center mb-6">
+                <button onClick={() => router.back()} className="flex items-center text-gray-500 hover:text-nounGreen transition-colors">
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Back to Registry
+                </button>
+                <button
+                    onClick={handleDeleteFile}
+                    className="bg-red-50 text-red-700 hover:bg-red-100 px-4 py-2 rounded-xl text-xs font-bold transition-colors border border-red-200"
+                >
+                    Delete Staff File
+                </button>
+            </div>
 
             {/* Staff Header Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
@@ -86,9 +114,39 @@ export default function StaffDossierPage() {
                 </div>
             </div>
 
-            {/* Documents Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <DigitalDossier staffId={String(staff.id)} />
+            {/* Tabs Navigation */}
+            <div className="flex overflow-x-auto border-b border-gray-200 mb-6 scrollbar-hide">
+                {['Overview', 'Documents', 'Leaves', 'Transfers', 'APER', 'Queries'].map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`whitespace-nowrap py-3 px-6 text-sm font-medium border-b-2 transition-colors ${activeTab === tab
+                                ? 'border-nounGreen text-nounGreen'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            }`}
+                    >
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="min-h-[400px]">
+                {activeTab === 'Overview' && <BioDataTab staff={staff} />}
+                
+                {activeTab === 'Documents' && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <DigitalDossier staffId={String(staff.id)} staffName={staff.name} />
+                    </div>
+                )}
+                
+                {activeTab === 'Leaves' && <LeaveHistoryTab staffId={String(staff.id)} />}
+                
+                {activeTab === 'Transfers' && <TransferHistoryTab staffId={String(staff.userId)} />}
+                
+                {activeTab === 'APER' && <AperHistoryTab staffId={String(staff.id)} />}
+                
+                {activeTab === 'Queries' && <QueryHistoryTab staffId={String(staff.id)} />}
             </div>
         </div>
     );

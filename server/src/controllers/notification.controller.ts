@@ -1,8 +1,6 @@
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient(); // In a real app, use a singleton instance
+import prisma from '../prisma';
 
 // --- Internal Helper ---
 export const notifyUser = async (userId: string, title: string, message: string, type = 'INFO', link?: string) => {

@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { getAllStaff, createStaff, getStaffById, getUnitStaff, getAcademicStaff } from '../controllers/staff.controller';
+import { getAllStaff, createStaff, getStaffById, getUnitStaff, getAcademicStaff, getTransferredStaff } from '../controllers/staff.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -20,16 +20,20 @@ const viewRoles = [
     Role.ADMIN
 ];
 
-// Create Staff: HR Admin, Super User, Admin
+// Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin
 const manageRoles = [
     Role.HR_ADMIN,
     Role.SUPER_USER,
-    Role.ADMIN
+    Role.ADMIN,
+    Role.UNIT_HEAD,
+    Role.STUDY_CENTER_MANAGER,
+    Role.UNIT_ADMIN
 ];
 
-// Unit Heads viewing their own staff
+// Unit Heads and Unit Admins viewing their own staff
 const unitRoles = [
     Role.UNIT_HEAD,
+    Role.UNIT_ADMIN,
     Role.STUDY_CENTER_MANAGER,
     Role.ADMIN // Admin can debug
 ];
@@ -37,6 +41,8 @@ const unitRoles = [
 router.get('/', requireRole(viewRoles), getAllStaff);
 router.get('/academic', requireRole(viewRoles), getAcademicStaff);
 router.get('/unit', requireRole(unitRoles), getUnitStaff);
+router.get('/transferred', requireRole([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.ADMIN]), getTransferredStaff);
+
 // Individual staff can view their own profile, usually handled by checking ID vs requested ID in controller or separate /me endpoint.
 // But for generic getById:
 router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getPublications, createPublication, deletePublication, checkSabbatical, getTeachingWorkload, allocateCourse } from '../controllers/academic.controller';
+import { getPublications, createPublication, deletePublication, checkSabbatical, getTeachingWorkload, allocateCourse, getCourses } from '../controllers/academic.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -14,6 +14,9 @@ router.delete('/publications/:id', deletePublication);
 
 // Sabbatical
 router.get('/sabbatical/eligibility', checkSabbatical);
+
+// Courses
+router.get('/courses', getCourses);
 
 // Teaching Workload
 router.get('/workload', getTeachingWorkload);

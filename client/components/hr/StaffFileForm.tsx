@@ -25,7 +25,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         gender: 'Male',
 
         // Auth
-        password: 'password123', // Default for admin creation
+        password: '123456789', // Default for admin creation
 
         // Location
         address: '',
@@ -151,6 +151,18 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">Phone</label>
                         <input name="phone" className="w-full border p-1.5 rounded" value={formData.phone} onChange={handleChange} />
                     </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500">State of Origin</label>
+                        <input name="stateOfOrigin" className="w-full border p-1.5 rounded" value={formData.stateOfOrigin} onChange={handleChange} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500">LGA</label>
+                        <input name="lga" className="w-full border p-1.5 rounded" value={formData.lga} onChange={handleChange} />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-500">Residential Address</label>
+                        <input name="address" className="w-full border p-1.5 rounded" value={formData.address} onChange={handleChange} />
+                    </div>
                 </div>
             </div>
 
@@ -180,7 +192,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">System Role</label>
                         <select name="role" required className="w-full border p-1.5 rounded" value={formData.role} onChange={handleChange}>
                             <option value="STAFF">Regular Staff</option>
-                            <option value="UNIT_HEAD">Unit Head</option>
+                            <option value="UNIT_HEAD">Dean / Unit Head / Director</option>
                             <option value="STUDY_CENTER_MANAGER">Center Manager</option>
                             <option value="HR_ADMIN">HR Admin</option>
                             <option value="BURSARY">Bursary</option>
@@ -222,7 +234,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
 
                     {isHQ && (
                         <div>
-                            <label className="block text-xs font-medium text-gray-500">Directorate / Faculty</label>
+                            <label className="block text-xs font-medium text-gray-500">Directorate / Faculty / Department</label>
                             <select name="unitId" required className="w-full border p-1.5 rounded" value={formData.unitId} onChange={handleChange}>
                                 <option value="">Select Unit</option>
                                 <optgroup label="Faculties">
@@ -232,6 +244,11 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                                 </optgroup>
                                 <optgroup label="Directorates">
                                     {orgData.units.filter(u => u.type === 'DIRECTORATE').map(u => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Departments">
+                                    {orgData.units.filter(u => u.type === 'DEPARTMENT').map(u => (
                                         <option key={u.id} value={u.id}>{u.name}</option>
                                     ))}
                                 </optgroup>

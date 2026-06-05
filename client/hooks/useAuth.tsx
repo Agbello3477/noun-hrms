@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import api from '../lib/api';
 import { useRouter } from 'next/navigation';
 
@@ -9,6 +9,7 @@ interface User {
     id: string;
     email: string;
     name: string;
+    mustChangePassword?: boolean;
 
     // Phase 3 Enterprise Roles
     role: 'SUPER_USER' | 'HR_ADMIN' | 'UNIT_HEAD' | 'UNIT_ADMIN' | 'BURSARY' | 'AUDIT' | 'STUDY_CENTER_MANAGER' | 'STAFF' | 'ADMIN';
@@ -59,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
-    let idleTimer: NodeJS.Timeout;
+    const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const TIMEOUT_MS = 3 * 60 * 1000; // 3 Minutes
 
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         return () => {
-            if (idleTimer) clearTimeout(idleTimer);
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
             window.removeEventListener('mousemove', handleActivity);
             window.removeEventListener('keydown', handleActivity);
             window.removeEventListener('click', handleActivity);
@@ -92,10 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 const { data } = await api.get('/api/auth/me');
                 setUser(data);
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Failed to fetch user', error);
-                localStorage.removeItem('token');
-                setUser(null);
+                // Only remove the token if it's an explicit 401 Unauthorized or 403 Forbidden auth error.
+                // Keep the token on network timeouts, offline states, or 5xx server errors to preserve session.
+                if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                    localStorage.removeItem('token');
+                    setUser(null);
+                } else {
+                    setUser(null);
+                }
             }
         }
     };
@@ -107,6 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
 
         initializeAuth();
+
+        // Prevent BFCache from restoring an authenticated state after logout
+        const handlePageShow = (event: PageTransitionEvent) => {
+            if (event.persisted) {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    window.location.replace('/');
+                }
+            }
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
     }, []);
 
     const login = (token: string, userData: User) => {
@@ -138,13 +157,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         localStorage.removeItem('token');
         setUser(null);
-        router.push('/'); // Always return to homepage
+        window.location.href = '/'; // Always return to homepage (hard redirect to clear state/cache)
     };
 
     const resetTimer = () => {
-        if (idleTimer) clearTimeout(idleTimer);
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         if (user) {
-            idleTimer = setTimeout(() => {
+            idleTimerRef.current = setTimeout(() => {
                 console.log('Session timed out due to inactivity');
                 // Save current path before logging out
                 const currentPath = window.location.pathname;

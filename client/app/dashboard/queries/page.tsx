@@ -17,6 +17,7 @@ interface Query {
     issuedBy?: { name: string };
     response?: string;
     responseAttachmentUrl?: string;
+    copyHR?: boolean;
 }
 
 export default function MyQueriesPage() {
@@ -86,8 +87,11 @@ export default function MyQueriesPage() {
                             <div className="flex gap-4">
                                 <AlertTriangle className="text-red-600 mt-1" size={24} />
                                 <div>
-                                    <h3 className="font-bold text-red-900 pb-1">
+                                    <h3 className="font-bold text-red-900 pb-1 flex items-center gap-2">
                                         {query.title || 'Disciplinary Query'}
+                                        {!query.copyHR && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-150 text-indigo-850 border border-indigo-250 rounded">Internal Only</span>
+                                        )}
                                     </h3>
                                     <p className="text-xs text-red-700 mb-2">Issued by {query.issuedBy?.name || 'HR'}</p>
                                     <div className="text-red-800 text-sm whitespace-pre-wrap">{query.content || query.description}</div>

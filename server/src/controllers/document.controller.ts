@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient, AccessLevel, DocumentType, Department, Role } from '@prisma/client';
+import { AccessLevel, DocumentType, Department, Role, RequestStatus } from '@prisma/client';
 import { StorageService } from '../services/storage.service';
 import { AuditService } from '../services/audit.service';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };
@@ -47,7 +46,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
                 type: type as DocumentType,
                 url,
                 ownerId: staffId,
-                uploadedById: uploaderProfile!.id, // Assuming profile exists if auth user
+                uploadedById: uploaderProfile ? uploaderProfile.id : staffId, // Fallback to staff's own profile if Admin lacks one
                 accessLevel: accessLevel as AccessLevel || AccessLevel.CONFIDENTIAL,
                 currentLocation: Department.REGISTRY_MAIN // Default to HQ Registry
             }
@@ -78,16 +77,70 @@ export const getStaffDossier = async (req: AuthRequest, res: Response) => {
 
         if (!targetProfile) return res.status(404).json({ message: 'Staff profile not found' });
 
-        // Rule: Center Manager only sees own staff
-        if (viewerRole === Role.STUDY_CENTER_MANAGER) {
-            if (targetProfile.centerId !== viewerProfile?.centerId) {
-                return res.status(403).json({ message: 'Unauthorized Access to Dossier' });
+        let isAuthorized = false;
+
+        // 1. HR registry users, supers, and standard admins can view all dossiers
+        if ([Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(viewerRole as any)) {
+            isAuthorized = true;
+        }
+
+        // 2. Staff can see own dossier
+        if (viewerRole === Role.STAFF && viewerId === targetProfile.userId) {
+            isAuthorized = true;
+        }
+
+        // 3. Manager roles (UNIT_HEAD, STUDY_CENTER_MANAGER, UNIT_ADMIN, BURSARY, AUDIT, etc.)
+        if (
+            !isAuthorized &&
+            [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.BURSARY, Role.AUDIT].includes(viewerRole as any)
+        ) {
+            // Check if they have an active approved file request for this staff dossier
+            const hasApprovedRequest = await prisma.fileRequest.findFirst({
+                where: {
+                    requesterId: viewerId,
+                    staffId: targetProfile.id,
+                    status: RequestStatus.APPROVED
+                }
+            });
+
+            if (hasApprovedRequest) {
+                isAuthorized = true;
+            } else {
+                // Otherwise check their unit/center boundaries
+                const currentUnitId = viewerProfile?.unitId;
+                const currentCenterId = viewerProfile?.centerId;
+
+                const isCurrentStaff = (targetProfile.centerId && targetProfile.centerId === currentCenterId) ||
+                                       (targetProfile.unitId && targetProfile.unitId === currentUnitId);
+
+                if (isCurrentStaff) {
+                    isAuthorized = true;
+                } else {
+                    const managerPlacements = [
+                        ...(currentUnitId ? [currentUnitId] : []),
+                        ...(currentCenterId ? [currentCenterId] : [])
+                    ];
+
+                    if (managerPlacements.length > 0) {
+                        const wasTransferredFromHere = await prisma.transferLog.findFirst({
+                            where: {
+                                staffId: targetProfile.userId,
+                                oldCenterId: {
+                                    in: managerPlacements
+                                }
+                            }
+                        });
+
+                        if (wasTransferredFromHere) {
+                            isAuthorized = true;
+                        }
+                    }
+                }
             }
         }
 
-        // Rule: Staff can see own dossier? (Usually yes)
-        if (viewerRole === Role.STAFF && viewerId !== targetProfile.userId) {
-            return res.status(403).json({ message: 'Unauthorized' });
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Unauthorized Access to Dossier' });
         }
 
         const docs = await prisma.document.findMany({

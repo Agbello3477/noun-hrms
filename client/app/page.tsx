@@ -1,20 +1,39 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CheckCircle, Users, BookOpen, Shield } from 'lucide-react';
-
+import { ArrowRight, Users, BookOpen, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import LoginForm from '../components/auth/LoginForm';
+import RegisterForm from '../components/auth/RegisterForm';
 
 export default function Home() {
     const { user } = useAuth();
+    const [activeView, setActiveView] = useState<'hero' | 'login' | 'register'>('hero');
+
+    useEffect(() => {
+        // Automatically open login or register if specified in URL
+        if (typeof window !== 'undefined') {
+            const searchParams = new URLSearchParams(window.location.search);
+            const hash = window.location.hash;
+            
+            if (searchParams.get('login') === 'true' || hash === '#login') {
+                setActiveView('login');
+            } else if (searchParams.get('register') === 'true' || hash === '#register') {
+                setActiveView('register');
+            }
+        }
+    }, []);
 
     return (
         <div className="flex flex-col min-h-screen bg-white">
             {/* Header */}
-            <header className="border-b border-gray-100 bg-white/95 backdrop-blur-md sticky top-0 z-50">
+            <header className="border-b border-gray-100 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
                 <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        {/* Logo Placeholder - expecting /noun_logo.png */}
+                    <div 
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => setActiveView('hero')}
+                    >
                         <div className="h-12 w-12 relative">
                             <img
                                 src="/noun_logo.png"
@@ -43,18 +62,22 @@ export default function Home() {
                             </Link>
                         ) : (
                             <>
-                                <Link
-                                    href="/login"
-                                    className="text-sm font-semibold text-gray-600 hover:text-nounGreen transition-colors"
+                                <button
+                                    onClick={() => setActiveView('login')}
+                                    className={`text-sm font-semibold transition-colors ${activeView === 'login' ? 'text-nounGreen' : 'text-gray-600 hover:text-nounGreen'}`}
                                 >
                                     Sign In
-                                </Link>
-                                <Link
-                                    href="/register"
-                                    className="px-5 py-2.5 bg-nounGreen text-white text-sm font-bold rounded-full hover:bg-green-800 transition-all shadow-md hover:shadow-lg"
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('register')}
+                                    className={`px-5 py-2.5 text-sm font-bold rounded-full transition-all shadow-md hover:shadow-lg ${
+                                        activeView === 'register' 
+                                        ? 'bg-green-800 text-white' 
+                                        : 'bg-nounGreen text-white hover:bg-green-800'
+                                    }`}
                                 >
                                     Get Started
-                                </Link>
+                                </button>
                             </>
                         )}
                     </div>
@@ -62,34 +85,44 @@ export default function Home() {
             </header>
 
             {/* Hero Section */}
-            <main className="flex-1">
-                <section className="relative py-24 lg:py-36 overflow-hidden bg-gradient-to-br from-green-50 to-white">
-                    <div className="absolute top-0 right-0 w-1/3 h-full bg-nounGreen/5 skew-x-12 transform origin-top-right"></div>
+            <main className="flex-1 flex flex-col">
+                <section className={`relative transition-all duration-500 ease-in-out ${activeView === 'hero' ? 'py-24 lg:py-36' : 'py-12 flex-1 flex items-center justify-center'} overflow-hidden bg-gradient-to-br from-green-50 to-white`}>
+                    <div className="absolute top-0 right-0 w-1/3 h-full bg-nounGreen/5 skew-x-12 transform origin-top-right transition-transform duration-700 ease-in-out"></div>
 
-                    <div className="container mx-auto px-6 relative z-10 flex flex-col items-center text-center">
-                        <div className="max-w-4xl">
-                            <h1 className="text-4xl lg:text-7xl font-extrabold text-gray-900 tracking-tight mb-8">
-                                <span className="block text-nounGreen mb-2">Human Resource</span>
-                                <span className="block text-nounRed">Management System</span>
-                            </h1>
-                            <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-2xl mx-auto">
-                                The centralized platform for managing staff workflows, academic administration, and payroll services for the <span className="font-semibold text-nounGreen">National Open University of Nigeria</span>.
-                            </p>
-                            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                                <Link
-                                    href="/login"
-                                    className="inline-flex items-center justify-center px-8 py-4 bg-nounGreen text-white font-bold rounded-full hover:bg-green-800 transition-all shadow-xl shadow-green-900/10 hover:-translate-y-1"
-                                >
-                                    Log In to Portal <ArrowRight className="ml-2 h-5 w-5" />
-                                </Link>
-                                <Link
-                                    href="/register"
-                                    className="inline-flex items-center justify-center px-8 py-4 bg-white text-gray-800 border-2 border-gray-100 font-bold rounded-full hover:border-nounGreen hover:text-nounGreen transition-all hover:-translate-y-1"
-                                >
-                                    New Staff Registration
-                                </Link>
+                    <div className="container mx-auto px-6 relative z-10 flex flex-col items-center justify-center w-full">
+                        {activeView === 'hero' && (
+                            <div className="max-w-4xl text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
+                                <h1 className="text-4xl lg:text-7xl font-extrabold text-gray-900 tracking-tight mb-8">
+                                    <span className="block text-nounGreen mb-2">Human Resource</span>
+                                    <span className="block text-nounRed">Management System</span>
+                                </h1>
+                                <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-2xl mx-auto">
+                                    The centralized platform for managing staff workflows, academic administration, and payroll services for the <span className="font-semibold text-nounGreen">National Open University of Nigeria</span>.
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                    <button
+                                        onClick={() => setActiveView('login')}
+                                        className="inline-flex items-center justify-center px-8 py-4 bg-nounGreen text-white font-bold rounded-full hover:bg-green-800 transition-all shadow-xl shadow-green-900/10 hover:-translate-y-1"
+                                    >
+                                        Log In to Portal <ArrowRight className="ml-2 h-5 w-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveView('register')}
+                                        className="inline-flex items-center justify-center px-8 py-4 bg-white text-gray-800 border-2 border-gray-100 font-bold rounded-full hover:border-nounGreen hover:text-nounGreen transition-all hover:-translate-y-1"
+                                    >
+                                        New Staff Registration
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {activeView === 'login' && (
+                            <LoginForm onSwitchView={setActiveView} />
+                        )}
+
+                        {activeView === 'register' && (
+                            <RegisterForm onSwitchView={setActiveView} />
+                        )}
                     </div>
                 </section>
 
@@ -135,9 +168,14 @@ export default function Home() {
                         <div className="h-10 w-10 relative bg-white/10 rounded p-1">
                             <img src="/noun_logo.png" className="object-contain h-full w-full opacity-80" alt="NOUN" />
                         </div>
-                        <p className="text-sm">
-                            © {new Date().getFullYear()} National Open University of Nigeria.
-                        </p>
+                        <div className="flex flex-col">
+                            <p className="text-sm">
+                                © {new Date().getFullYear()} National Open University of Nigeria.
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Powered by: <span className="font-semibold text-nounGreen">MaSha Secure Tech</span>
+                            </p>
+                        </div>
                     </div>
 
                     <div className="flex gap-8 text-sm font-medium">

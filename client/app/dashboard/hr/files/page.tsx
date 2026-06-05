@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
@@ -10,17 +11,25 @@ import { Search, Plus, FileInput, X } from 'lucide-react';
 interface FileUser {
     id: string;
     name: string;
+    role: string;
     staffProfile: {
         staffId: string;
+        title?: string | null;
+        rank?: string | null;
+        level?: string | null;
+        cadre?: string | null;
         createdById: string | null;
         createdBy?: { name: string };
         createdAt: string;
         unit?: { name: string };
         studyCenter?: { name: string };
+        queries?: any[];
+        fileRequests?: any[];
     };
 }
 
 export default function FileRegistryPage() {
+    const router = useRouter();
     const [files, setFiles] = useState<FileUser[]>([]);
     const [filteredFiles, setFilteredFiles] = useState<FileUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -139,7 +148,7 @@ export default function FileRegistryPage() {
                     value={filterCenter}
                     onChange={(e) => setFilterCenter(e.target.value)}
                 >
-                    <option value="">All Centers</option>
+                    <option value="">All Study Centers</option>
                     {centers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
 
@@ -148,7 +157,7 @@ export default function FileRegistryPage() {
                     value={filterUnit}
                     onChange={(e) => setFilterUnit(e.target.value)}
                 >
-                    <option value="">All Directorates/Faculties</option>
+                    <option value="">All Units / Faculties / Directorates / Departments</option>
                     <optgroup label="Faculties">
                         {units.filter(u => u.type === 'FACULTY').map(u => (
                             <option key={u.id} value={u.name}>{u.name}</option>
@@ -156,6 +165,11 @@ export default function FileRegistryPage() {
                     </optgroup>
                     <optgroup label="Directorates">
                         {units.filter(u => u.type === 'DIRECTORATE').map(u => (
+                            <option key={u.id} value={u.name}>{u.name}</option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Departments">
+                        {units.filter(u => u.type === 'DEPARTMENT').map(u => (
                             <option key={u.id} value={u.name}>{u.name}</option>
                         ))}
                     </optgroup>
@@ -174,16 +188,36 @@ export default function FileRegistryPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 justify-items-center">
-                    {filteredFiles.map(file => (
-                        <FolderIcon
-                            key={file.id}
-                            staffName={file.name}
-                            staffId={file.staffProfile?.staffId || 'N/A'}
-                            createdAt={file.staffProfile?.createdAt}
-                            createdBy={file.staffProfile?.createdBy?.name || null}
-                            onClick={() => alert(`Opening dossier for ${file.name}... (Feature coming soon)`)}
-                        />
-                    ))}
+                    {filteredFiles.map(file => {
+                        let folderColor: 'blue' | 'yellow' | 'red' = 'blue';
+                        const hasOpenQuery = file.staffProfile?.queries && file.staffProfile.queries.length > 0;
+                        const hasActiveTransfer = file.staffProfile?.fileRequests && file.staffProfile.fileRequests.length > 0;
+
+                        if (hasOpenQuery) {
+                            folderColor = 'red';
+                        } else if (hasActiveTransfer) {
+                            folderColor = 'yellow';
+                        }
+
+                        const designationParts = [];
+                        if (file.staffProfile?.rank) designationParts.push(file.staffProfile.rank);
+                        if (file.staffProfile?.level) designationParts.push(`Level ${file.staffProfile.level}`);
+                        const designation = designationParts.join(' - ') || 'Staff';
+
+                        return (
+                            <FolderIcon
+                                key={file.id}
+                                staffName={`${file.staffProfile?.title ? file.staffProfile.title + ' ' : ''}${file.name}`}
+                                staffId={(file.staffProfile?.staffId || 'N/A').replace('NOUN/', '')}
+                                createdAt={file.staffProfile?.createdAt}
+                                createdBy={file.staffProfile?.createdBy?.name || null}
+                                color={folderColor}
+                                role={file.role}
+                                designation={designation}
+                                onClick={() => router.push(`/dashboard/hr/files/${encodeURIComponent(file.staffProfile?.staffId || file.id)}`)}
+                            />
+                        );
+                    })}
                 </div>
             )}
 

@@ -3,17 +3,193 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
+import api from '../../lib/api';
 import Sidebar from '../../components/dashboard/Sidebar';
 import Header from '../../components/dashboard/Header';
+import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+
+function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise<void> }) {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrent, setShowCurrent] = useState(false);
+    const [showNew, setShowNew] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [success, setSuccess] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        
+        if (newPassword.length < 8) {
+            setError('New password must be at least 8 characters long.');
+            return;
+        }
+        if (newPassword === '123456789') {
+            setError('New password cannot be the default password.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setError('New passwords do not match.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await api.post('/api/auth/change-password', {
+                currentPassword,
+                newPassword,
+            });
+            setSuccess(true);
+            setTimeout(async () => {
+                await refreshUser();
+            }, 1500);
+        } catch (err: any) {
+            const msg = err.response?.data?.message || 'Failed to change password. Please verify current password.';
+            setError(msg);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4 relative overflow-hidden w-full">
+            {/* Background Pattern */}
+            <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50 pointer-events-none" />
+            
+            <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl border border-gray-100 relative animate-in fade-in zoom-in-95 duration-300">
+                <div className="flex flex-col items-center mb-6 text-center">
+                    <div className="w-16 h-16 mb-4 bg-red-50 rounded-full flex items-center justify-center text-red-500 shadow-inner">
+                        <Lock className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">Change Default Password</h2>
+                    <p className="text-sm font-medium text-gray-500 mt-2">
+                        For security reasons, you must change your temporary default password before you can proceed to the portal.
+                    </p>
+                </div>
+
+                {error && (
+                    <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700 border border-red-100 flex items-start gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-red-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <span className="flex-1">{error}</span>
+                    </div>
+                )}
+
+                {success && (
+                    <div className="mb-4 rounded-lg bg-green-50 p-4 text-sm text-green-700 border border-green-100 flex items-start gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-green-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="flex-1">Password updated successfully! Redirecting you to the portal...</span>
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="currentPassword">
+                            Current Password
+                        </label>
+                        <div className="relative">
+                            <input
+                                className="w-full rounded-xl border border-gray-200 bg-gray-55 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                                id="currentPassword"
+                                type={showCurrent ? 'text' : 'password'}
+                                placeholder="Enter current password (e.g. 123456789)"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+                                onClick={() => setShowCurrent(!showCurrent)}
+                            >
+                                {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="newPassword">
+                            New Password
+                        </label>
+                        <div className="relative">
+                            <input
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                                id="newPassword"
+                                type={showNew ? 'text' : 'password'}
+                                placeholder="Min 8 characters"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+                                onClick={() => setShowNew(!showNew)}
+                            >
+                                {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="confirmPassword">
+                            Confirm New Password
+                        </label>
+                        <div className="relative">
+                            <input
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                                id="confirmPassword"
+                                type={showConfirm ? 'text' : 'password'}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+                                onClick={() => setShowConfirm(!showConfirm)}
+                            >
+                                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <button
+                        className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5 flex items-center justify-center gap-2 mt-6 disabled:opacity-75 disabled:cursor-not-allowed"
+                        type="submit"
+                        disabled={isSubmitting || success}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                Updating Password...
+                            </>
+                        ) : (
+                            'Update Password & Access Portal'
+                        )}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading, refreshUser } = useAuth();
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
+
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -21,7 +197,7 @@ export default function DashboardLayout({
 
     useEffect(() => {
         if (!isLoading && !user) {
-            router.push('/login');
+            router.push('/');
         }
     }, [user, isLoading, router]);
 
@@ -37,12 +213,33 @@ export default function DashboardLayout({
         return null; // Will redirect via useEffect
     }
 
+    if (user.mustChangePassword) {
+        return <ForcedPasswordChangeModal refreshUser={refreshUser} />;
+    }
+
     return (
-        <div className="flex h-screen bg-gray-50">
-            <Sidebar />
-            <div className="flex flex-1 flex-col overflow-hidden">
-                <Header />
-                <main className="flex-1 overflow-auto p-8">
+        <div className="flex h-screen bg-gray-50 overflow-hidden relative">
+            {/* Mobile Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+            
+            {/* Mobile Sidebar */}
+            <div className={`md:hidden fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 flex-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+            </div>
+
+            {/* Desktop Sidebar (NO absolute/fixed positioning whatsoever) */}
+            <div className="hidden md:block flex-none">
+                <Sidebar />
+            </div>
+            
+            <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+                <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+                <main className="flex-1 overflow-auto p-4 md:p-8">
                     {children}
                 </main>
             </div>

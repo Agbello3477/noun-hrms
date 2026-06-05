@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { PayrollService } from '../services/payroll.service';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: Role };

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, ChevronRight } from 'lucide-react';
 import api from '../../../../lib/api';
 import AddStaffModal from '../../../../components/dashboard/AddStaffModal';
+import Link from 'next/link';
 
 interface Staff {
     id: string;
@@ -15,6 +16,7 @@ interface Staff {
         rank: string;
         unit?: { name: string };
         studyCenter?: { name: string };
+        leaves?: any[];
     };
 }
 
@@ -83,46 +85,82 @@ export default function UnitStaffPage() {
                                 <th className="px-6 py-4">Role</th>
                                 <th className="px-6 py-4">Unit / Center</th>
                                 <th className="px-6 py-4">Rank</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                                         Loading staff data...
                                     </td>
                                 </tr>
                             ) : filteredStaff.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                                         No staff members found in your unit.
                                     </td>
                                 </tr>
                             ) : (
-                                filteredStaff.map((staff) => (
-                                    <tr key={staff.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
-                                                    {staff.name?.charAt(0) || 'U'}
+                                filteredStaff.map((staff) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+
+                                    const parseUTCDateToLocal = (dateInput: any) => {
+                                        if (!dateInput) return new Date(0);
+                                        const isoString = typeof dateInput === 'string' ? dateInput : new Date(dateInput).toISOString();
+                                        const parts = isoString.split('T')[0].split('-');
+                                        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                                    };
+
+                                    const activeLeave = staff.staffProfile?.leaves?.find((l: any) => {
+                                        const start = parseUTCDateToLocal(l.startDate);
+                                        const end = parseUTCDateToLocal(l.endDate);
+                                        return today >= start && today <= end;
+                                    });
+                                    const isOnLeave = !!activeLeave;
+
+                                    return (
+                                        <tr key={staff.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
+                                                        {staff.name?.charAt(0) || 'U'}
+                                                    </div>
+                                                    <span className="font-medium text-gray-900">{staff.name}</span>
                                                 </div>
-                                                <span className="font-medium text-gray-900">{staff.name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">{staff.email}</td>
-                                        <td className="px-6 py-4">
-                                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                                                {staff.role.replace(/_/g, ' ')}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">
-                                            {staff.staffProfile?.unit?.name || staff.staffProfile?.studyCenter?.name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">
-                                            {staff.staffProfile?.rank || '-'}
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-600">{staff.email}</td>
+                                            <td className="px-6 py-4">
+                                                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                                                    {staff.role.replace(/_/g, ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-600">
+                                                {staff.staffProfile?.unit?.name || staff.staffProfile?.studyCenter?.name || '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-600">
+                                                {staff.staffProfile?.rank || '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 text-xs font-semibold rounded-md ${
+                                                    isOnLeave ? 'bg-orange-50 text-orange-700 border border-orange-100 animate-pulse' : 'bg-green-50 text-green-750 border border-green-100'
+                                                }`}>
+                                                    {isOnLeave ? 'On Leave' : 'Active'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <Link
+                                                    href={`/dashboard/staff/${staff.id}`}
+                                                    className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition"
+                                                >
+                                                    Manage Profile <ChevronRight size={14} />
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

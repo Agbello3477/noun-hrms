@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, CheckCircle, Star, MessageSquare, ChevronRight, X } from 'lucide-react';
-import api from '../../../../../lib/api';
-import { useAuth } from '../../../../../context/AuthContext';
+import api from '../../../../lib/api';
+import { useAuth } from '../../../../hooks/useAuth';
 
 export default function UnitAperReview() {
     const { user } = useAuth();
@@ -34,7 +34,7 @@ export default function UnitAperReview() {
         const fetchForms = async () => {
             setLoading(true);
             try {
-                const { data } = await api.get(`/api/aper/hr/forms?sessionId=${selectedSession}&unitId=${user.staffProfile.unitId}`);
+                const { data } = await api.get(`/api/aper/hr/forms?sessionId=${selectedSession}&unitId=${user?.staffProfile?.unitId}`);
                 setForms(data);
             } catch (error) {
                 console.error(error);

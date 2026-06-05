@@ -18,6 +18,7 @@ model User {
   role      Role     @default(STAFF)
   
   isActive  Boolean  @default(true)
+  mustChangePassword Boolean  @default(false)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -39,6 +40,8 @@ model User {
   
   // Phase 7 Relations
   requestedFiles     FileRequest[] @relation("RequestedFiles")
+  approvedFiles      FileRequest[] @relation("ApprovedFiles")
+  transferredFiles   FileRequest[] @relation("TransferredFiles")
   issuedQueries      StaffQuery[]  @relation("IssuedQueries")
   
   // Phase 12
@@ -46,6 +49,11 @@ model User {
   
   // Phase 13
   notifications      Notification[]
+
+  // Phase 14 Memos
+  sentMemos          Memo[]         @relation("SentMemos")
+  receivedMemos      Memo[]         @relation("ReceivedMemos")
+  memoResponses      MemoResponse[]
 
   @@map("users")
 }
@@ -132,6 +140,7 @@ model StaffProfile {
   surname     String?
   otherNames  String?
   title       String?  // e.g. Mr, Mrs, Dr, Prof
+  rank        String?  // e.g. Director, Dean, Senior Admin Officer
   staffId     String?  @unique // Indexed specifically
   
   level       String?  // e.g. "CONTISS 13"
@@ -362,6 +371,7 @@ model TransferLog {
   
   reason        String?
   effectiveDate DateTime  @default(now())
+  applied       Boolean   @default(false)
   createdAt     DateTime  @default(now())
 
   @@map("transfer_logs")
@@ -506,6 +516,7 @@ enum RequestStatus {
   APPROVED
   REJECTED
   EXPIRED
+  RETURNED
 }
 
 model FileRequest {
@@ -521,6 +532,11 @@ model FileRequest {
   
   accessLink  String?       // Function generated secure link
   expiresAt   DateTime?
+
+  approvedById   String?
+  approvedBy     User?        @relation("ApprovedFiles", fields: [approvedById], references: [id])
+  transferredById String?
+  transferredBy  User?        @relation("TransferredFiles", fields: [transferredById], references: [id])
   
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -550,6 +566,7 @@ model StaffQuery {
   responseAttachmentUrl String?
   
   status      QueryStatus @default(OPEN)
+  copyHR      Boolean     @default(true)
   
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -612,4 +629,34 @@ model AperForm {
 
   @@unique([staffId, sessionId]) // One form per session per staff
   @@map("aper_forms")
+}
+
+model Memo {
+  id             String         @id @default(uuid())
+  title          String
+  content        String         @db.Text
+  allowResponses Boolean        @default(true)
+  senderId       String
+  sender         User           @relation("SentMemos", fields: [senderId], references: [id])
+  recipientId    String?
+  recipient      User?          @relation("ReceivedMemos", fields: [recipientId], references: [id])
+  responses      MemoResponse[]
+  attachmentUrl  String?
+  attachmentName String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("memos")
+}
+
+model MemoResponse {
+  id        String   @id @default(uuid())
+  memoId    String
+  memo      Memo     @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  staffId   String
+  staff     User     @relation(fields: [staffId], references: [id])
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("memo_responses")
 }

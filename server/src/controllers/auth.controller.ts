@@ -2,9 +2,8 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, Role, Cadre } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { Role, Cadre } from '@prisma/client';
+import prisma from '../prisma';
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -37,9 +36,16 @@ export const register = async (req: Request, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Use user provided role if valid, else default to STAFF
         const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
-        const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
+        
+        let resolvedCadre: Cadre | undefined = undefined;
+        if (cadre) {
+            if (cadre === 'NON_ACADEMIC' || cadre === 'SENIOR') {
+                resolvedCadre = Cadre.ADMINISTRATIVE;
+            } else if (Object.values(Cadre).includes(cadre as any)) {
+                resolvedCadre = cadre as Cadre;
+            }
+        }
 
         const user = await prisma.user.create({
             data: {
@@ -102,15 +108,74 @@ export const register = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+export const applyPendingTransfers = async (userId: string) => {
+    try {
+        const pendingTransfers = await prisma.transferLog.findMany({
+            where: {
+                staffId: userId,
+                applied: false,
+                createdAt: {
+                    lte: new Date(Date.now() - 48 * 60 * 60 * 1000) // 48 hours ago
+                }
+            },
+            orderBy: {
+                createdAt: 'asc'
+            }
+        });
+
+        for (const log of pendingTransfers) {
+            if (!log.newCenterId) continue;
+
+            const isUnit = await prisma.unit.findUnique({
+                where: { id: log.newCenterId }
+            });
+
+            if (isUnit) {
+                await prisma.staffProfile.update({
+                    where: { userId },
+                    data: {
+                        unitId: log.newCenterId,
+                        centerId: null
+                    }
+                });
+            } else {
+                const isCenter = await prisma.studyCenter.findUnique({
+                    where: { id: log.newCenterId }
+                });
+                if (isCenter) {
+                    await prisma.staffProfile.update({
+                        where: { userId },
+                        data: {
+                            centerId: log.newCenterId,
+                            unitId: null
+                        }
+                    });
+                }
+            }
+
+            await prisma.transferLog.update({
+                where: { id: log.id },
+                data: { applied: true }
+            });
+        }
+    } catch (error) {
+        console.error('Error applying pending transfers:', error);
+    }
+};
 
 export const login = async (req: Request, res: Response) => {
     try {
         console.log('Login Request Body:', req.body);
-        const { email, password } = req.body;
+        const { email, password } = req.body; // email field holds either email or staffId from UI
 
-        // Find user with deep profile relations
-        const user = await prisma.user.findUnique({
-            where: { email },
+        // Find user by either email or staffProfile.staffId with deep profile relations
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: email },
+                    { staffProfile: { staffId: email } }
+                ]
+            },
             include: {
                 staffProfile: {
                     include: {
@@ -140,11 +205,31 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
+        // Apply pending transfers
+        await applyPendingTransfers(user.id);
+
+        // Re-fetch updated user profile
+        const updatedUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            include: {
+                staffProfile: {
+                    include: {
+                        studyCenter: true,
+                        unit: true
+                    }
+                }
+            }
+        });
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
         // Log Login Event (Phase 3 Requirement)
         try {
             await prisma.auditLog.create({
                 data: {
-                    userId: user.id,
+                    userId: updatedUser.id,
                     action: 'LOGIN',
                     resource: 'AUTH',
                     details: JSON.stringify({ ip: req.ip, userAgent: req.headers['user-agent'] }),
@@ -157,7 +242,7 @@ export const login = async (req: Request, res: Response) => {
 
         // Generate token
         const token = jwt.sign(
-            { id: user.id, role: user.role },
+            { id: updatedUser.id, role: updatedUser.role },
             process.env.JWT_SECRET as string,
             { expiresIn: '1d' }
         );
@@ -166,12 +251,13 @@ export const login = async (req: Request, res: Response) => {
             message: 'Login successful',
             token,
             user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-                isActive: user.isActive,
-                staffProfile: user.staffProfile
+                id: updatedUser.id,
+                email: updatedUser.email,
+                name: updatedUser.name,
+                role: updatedUser.role,
+                isActive: updatedUser.isActive,
+                mustChangePassword: updatedUser.mustChangePassword,
+                staffProfile: updatedUser.staffProfile
             },
         });
     } catch (error) {
@@ -184,6 +270,9 @@ export const getMe = async (req: Request, res: Response) => {
     try {
         // @ts-ignore - user is attached by middleware
         const userId = req.user?.id;
+
+        // Apply pending transfers
+        await applyPendingTransfers(userId);
 
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -253,7 +342,10 @@ export const changePassword = async (req: Request, res: Response) => {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await prisma.user.update({
             where: { id: userId },
-            data: { password: hashedPassword }
+            data: {
+                password: hashedPassword,
+                mustChangePassword: false
+            }
         });
 
         // Audit

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getHRAnalytics } from '../controllers/analytics.controller';
+import { getHRAnalytics, getManagerDashboardStats } from '../controllers/analytics.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -10,6 +10,13 @@ router.get('/dashboard',
     verifyToken,
     requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.AUDIT, Role.UNIT_HEAD]),
     getHRAnalytics
+);
+
+// Manager Scoped Dashboard Analytics
+router.get('/manager',
+    verifyToken,
+    requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN]),
+    getManagerDashboardStats
 );
 
 export default router;

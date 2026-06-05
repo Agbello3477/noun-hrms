@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient, Department, Role } from '@prisma/client';
+import { Department, Role } from '@prisma/client';
 import { AuditService } from '../services/audit.service';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };

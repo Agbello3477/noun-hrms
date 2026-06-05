@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 // NOUN HQ Mock Coordinates (Abuja)
 const STUDY_CENTER_COORDS = { lat: 9.0765, lng: 7.3986 };

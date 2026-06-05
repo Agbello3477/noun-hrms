@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient, LeaveStatus, LeaveType } from '@prisma/client';
+import { LeaveStatus, LeaveType, Role, AperStatus } from '@prisma/client';
 import { redisService } from '../services/redis.service';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 export const getHRAnalytics = async (req: Request, res: Response) => {
     try {
@@ -73,5 +72,103 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Analytics Error:', error);
         res.status(500).json({ message: 'Error fetching analytics' });
+    }
+};
+
+export const getManagerDashboardStats = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const userId = req.user.id;
+
+        const managerProfile = await prisma.staffProfile.findUnique({
+            where: { userId },
+            select: { id: true, unitId: true, centerId: true }
+        });
+
+        if (!managerProfile) {
+            return res.status(403).json({ message: 'Unauthorized: You do not have a staff profile' });
+        }
+
+        const unitId = managerProfile.unitId;
+        const centerId = managerProfile.centerId;
+
+        if (!unitId && !centerId) {
+            return res.json({
+                totalStaff: 0,
+                activeLeaves: 0,
+                pendingLeaves: 0,
+                pendingAper: 0,
+                activeQueries: 0
+            });
+        }
+
+        const staffOrClause = [
+            ...(unitId ? [{ unitId }] : []),
+            ...(centerId ? [{ centerId }] : [])
+        ];
+
+        // 1. Total Staff count
+        const totalStaff = await prisma.user.count({
+            where: {
+                isActive: true,
+                staffProfile: {
+                    OR: staffOrClause
+                }
+            }
+        });
+
+        // 2. Active Leaves
+        const today = new Date();
+        const activeLeaves = await prisma.leaveRequest.count({
+            where: {
+                status: LeaveStatus.APPROVED,
+                endDate: { gte: today },
+                staff: {
+                    OR: staffOrClause
+                }
+            }
+        });
+
+        // 3. Pending Leaves
+        const pendingLeaves = await prisma.leaveRequest.count({
+            where: {
+                status: LeaveStatus.PENDING,
+                staff: {
+                    OR: staffOrClause
+                }
+            }
+        });
+
+        // 4. Pending Appraisal Reviews
+        const pendingAper = await prisma.aperForm.count({
+            where: {
+                status: AperStatus.SUBMITTED,
+                staff: {
+                    OR: staffOrClause
+                }
+            }
+        });
+
+        // 5. Active Queries
+        const activeQueries = await prisma.staffQuery.count({
+            where: {
+                status: 'OPEN',
+                staff: {
+                    OR: staffOrClause
+                }
+            }
+        });
+
+        res.json({
+            totalStaff,
+            activeLeaves,
+            pendingLeaves,
+            pendingAper,
+            activeQueries
+        });
+
+    } catch (error) {
+        console.error('Error fetching manager dashboard stats:', error);
+        res.status(500).json({ message: 'Error fetching manager dashboard stats' });
     }
 };

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import api from '../../lib/api';
+import { useAuth } from '../../hooks/useAuth';
 
 interface AddStaffModalProps {
     onClose: () => void;
@@ -15,6 +16,9 @@ interface OrganizationData {
 }
 
 export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps) {
+    const { user: currentUser } = useAuth();
+    const isHrAdmin = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(currentUser?.role || '');
+
     const [formData, setFormData] = useState({
         // Identity
         staffId: '',
@@ -79,6 +83,21 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         fetchOrgData();
     }, []);
 
+    // Lock parameters for Study Center Managers and Unit Heads
+    useEffect(() => {
+        if (currentUser && !isHrAdmin) {
+            setFormData(prev => ({
+                ...prev,
+                centerId: currentUser.staffProfile?.centerId || '',
+                unitId: currentUser.staffProfile?.unitId || '',
+                role: 'STAFF'
+            }));
+            if (currentUser.staffProfile?.unitId) {
+                setIsHQ(true);
+            }
+        }
+    }, [currentUser, isHrAdmin]);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -103,8 +122,27 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         setError('');
 
         try {
+            let dbRole = formData.role;
+            let assignedRank = formData.cadre === 'ACADEMIC' ? 'Academic Staff' : 'Staff';
+
+            if (formData.role === 'DIRECTOR') {
+                dbRole = 'UNIT_HEAD';
+                assignedRank = 'Director';
+            } else if (formData.role === 'DEAN') {
+                dbRole = 'UNIT_HEAD';
+                assignedRank = 'Dean';
+            } else if (formData.role === 'UNIT_HEAD') {
+                dbRole = 'UNIT_HEAD';
+                assignedRank = 'Head of Unit';
+            } else if (formData.role === 'HEAD_OF_ADMIN') {
+                dbRole = 'UNIT_ADMIN';
+                assignedRank = 'Head of Admin';
+            }
+
             const payload = {
                 ...formData,
+                role: dbRole,
+                rank: assignedRank,
                 // Ensure unitId is null if empty string
                 unitId: formData.unitId || undefined,
 
@@ -216,50 +254,62 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                     <div className="space-y-4">
                         <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Official Service Record</h4>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700">Study Center / HQ</label>
-                                <select
-                                    name="centerId"
-                                    required
-                                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
-                                    value={formData.centerId}
-                                    onChange={handleChange}
-                                >
-                                    <option value="">-- Select Center --</option>
-                                    {orgData.centers.map(center => (
-                                        <option key={center.id} value={center.id}>
-                                            {center.name}
-                                        </option>
-                                    ))}
-                                </select>
+                        {!isHrAdmin ? (
+                            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm">
+                                <span className="font-semibold text-gray-705 text-xs uppercase tracking-wider block mb-1">Assigned Location</span>
+                                <span className="text-gray-805 font-medium">
+                                    {currentUser?.role === 'STUDY_CENTER_MANAGER'
+                                        ? currentUser?.staffProfile?.studyCenter?.name || 'My Study Center'
+                                        : currentUser?.staffProfile?.unit?.name || 'My Unit'
+                                    }
+                                </span>
                             </div>
-
-                            {isHQ && (
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700">Directorate / Faculty (HQ)</label>
+                                    <label className="block text-xs font-medium text-gray-705">Study Center / HQ</label>
                                     <select
-                                        name="unitId"
+                                        name="centerId"
                                         required
-                                        className="mt-1 block w-full rounded-md border border-blue-300 bg-blue-50 p-2"
-                                        value={formData.unitId}
+                                        className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                                        value={formData.centerId}
                                         onChange={handleChange}
                                     >
-                                        <option value="">-- Select Unit --</option>
-                                        <optgroup label="Faculties">
-                                            {orgData.units.filter(u => u.type === 'FACULTY').map(unit => (
-                                                <option key={unit.id} value={unit.id}>{unit.name}</option>
-                                            ))}
-                                        </optgroup>
-                                        <optgroup label="Directorates & Units">
-                                            {orgData.units.filter(u => u.type === 'DIRECTORATE').map(unit => (
-                                                <option key={unit.id} value={unit.id}>{unit.name}</option>
-                                            ))}
-                                        </optgroup>
+                                        <option value="">-- Select Center --</option>
+                                        {orgData.centers.map(center => (
+                                            <option key={center.id} value={center.id}>
+                                                {center.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
-                            )}
-                        </div>
+
+                                {isHQ && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-705">Directorate / Faculty (HQ)</label>
+                                        <select
+                                            name="unitId"
+                                            required
+                                            className="mt-1 block w-full rounded-md border border-blue-300 bg-blue-50 p-2"
+                                            value={formData.unitId}
+                                            onChange={handleChange}
+                                        >
+                                            <option value="">-- Select Unit --</option>
+                                            <optgroup label="Faculties">
+                                                {orgData.units.filter(u => u.type === 'FACULTY').map(unit => (
+                                                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                                                ))}
+                                            </optgroup>
+                                            <optgroup label="Directorates & Units">
+                                                {orgData.units.filter(u => u.type === 'DIRECTORATE').map(unit => (
+                                                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
@@ -290,22 +340,32 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700">System Role</label>
-                            <select
-                                name="role"
-                                className="mt-1 w-full border rounded p-2"
-                                value={formData.role}
-                                onChange={handleChange}
-                            >
-                                <option value="STAFF">Regular Staff</option>
-                                <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
-                                <option value="UNIT_HEAD">Unit Head / Director</option>
-                                <option value="HR_ADMIN">HR Admin</option>
-                                <option value="BURSARY">Bursary</option>
-                                <option value="AUDIT">Audit</option>
-                            </select>
-                        </div>
+                        {isHrAdmin ? (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-705">System Role</label>
+                                <select
+                                    name="role"
+                                    className="mt-1 w-full border rounded p-2"
+                                    value={formData.role}
+                                    onChange={handleChange}
+                                >
+                                    <option value="STAFF">Regular Staff</option>
+                                    <option value="DIRECTOR">Director (HQ/Directorate)</option>
+                                    <option value="DEAN">Dean (Faculty)</option>
+                                    <option value="UNIT_HEAD">Head of Unit / HOD</option>
+                                    <option value="HEAD_OF_ADMIN">Head of Admin</option>
+                                    <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
+                                    <option value="HR_ADMIN">HR Admin</option>
+                                    <option value="BURSARY">Bursary</option>
+                                    <option value="AUDIT">Audit</option>
+                                </select>
+                            </div>
+                        ) : (
+                            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm">
+                                <span className="font-semibold text-gray-700 text-xs uppercase tracking-wider block mb-1">System Role Scope</span>
+                                <span className="text-gray-800 font-medium">Regular Staff (Locked)</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Section 3: Academic Specifics */}

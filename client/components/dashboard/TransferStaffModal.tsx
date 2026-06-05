@@ -23,6 +23,8 @@ interface StaffBasic {
         staffId: string;
         department: string;
         rank: string;
+        surname?: string;
+        otherNames?: string;
         studyCenter?: { name: string };
         unit?: { name: string };
     };
@@ -48,6 +50,7 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
     const [fetchingStaff, setFetchingStaff] = useState(true);
     const [error, setError] = useState('');
     const [selectedStaff, setSelectedStaff] = useState<StaffBasic | null>(null);
+    const [staffSearchQuery, setStaffSearchQuery] = useState('');
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -133,13 +136,27 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
             }
 
             onSuccess();
-            onClose();
+            handleClose();
         } catch (err: any) {
             console.error('Transfer Error:', err);
             setError(err.response?.data?.message || err.message || 'Failed to initiate transfer');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleClose = () => {
+        setStaffSearchQuery('');
+        setSelectedStaff(null);
+        setFormData({
+            staffId: '',
+            targetType: 'CENTER',
+            toCenterId: '',
+            toUnitId: '',
+            reason: '',
+            effectiveDate: new Date().toISOString().split('T')[0]
+        });
+        onClose();
     };
 
     // Helper to get current location
@@ -155,7 +172,7 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
             <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl my-8">
                 <div className="mb-4 flex items-center justify-between border-b pb-2">
                     <h3 className="text-xl font-bold text-gray-900">Initiate Staff Transfer</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                    <button onClick={handleClose} className="text-gray-500 hover:text-gray-700">
                         <X size={24} />
                     </button>
                 </div>
@@ -163,13 +180,13 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
                 <div className="flex border-b mb-6">
                     <button
                         className={`px-4 py-2 text-sm font-medium ${mode === 'SINGLE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setMode('SINGLE')}
+                        onClick={() => { setMode('SINGLE'); setStaffSearchQuery(''); }}
                     >
                         Single Transfer
                     </button>
                     <button
                         className={`px-4 py-2 text-sm font-medium ${mode === 'BATCH' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setMode('BATCH')}
+                        onClick={() => { setMode('BATCH'); setStaffSearchQuery(''); }}
                     >
                         Bulk Upload
                     </button>
@@ -191,20 +208,53 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
                                 {fetchingStaff ? (
                                     <div className="text-sm text-gray-500">Loading staff list...</div>
                                 ) : (
-                                    <select
-                                        name="staffId"
-                                        required
-                                        className="w-full border rounded p-2"
-                                        value={formData.staffId}
-                                        onChange={handleChange}
-                                    >
-                                        <option value="">-- Search / Select Staff --</option>
-                                        {staffList.map(staff => (
-                                            <option key={staff.id} value={staff.id}>
-                                                {staff.name} ({staff.staffProfile?.staffId || 'No ID'})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <>
+                                        <input
+                                            type="text"
+                                            placeholder="Search staff by Name or Staff ID..."
+                                            value={staffSearchQuery}
+                                            onChange={e => setStaffSearchQuery(e.target.value)}
+                                            className="mb-2 block w-full border border-gray-300 rounded p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                                        />
+                                        {(() => {
+                                            const searchedStaff = staffList.filter(staff => {
+                                                const query = staffSearchQuery.toLowerCase().trim();
+                                                if (!query) return true;
+                                                const name = (staff.name || '').toLowerCase();
+                                                const email = (staff.email || '').toLowerCase();
+                                                const staffId = (staff.staffProfile?.staffId || '').toLowerCase();
+                                                const surname = (staff.staffProfile?.surname || '').toLowerCase();
+                                                const otherNames = (staff.staffProfile?.otherNames || '').toLowerCase();
+                                                return name.includes(query) || 
+                                                       email.includes(query) || 
+                                                       staffId.includes(query) ||
+                                                       surname.includes(query) || 
+                                                       otherNames.includes(query);
+                                            });
+
+                                            return (
+                                                <>
+                                                    <select
+                                                        name="staffId"
+                                                        required
+                                                        className="w-full border rounded p-2"
+                                                        value={formData.staffId}
+                                                        onChange={handleChange}
+                                                    >
+                                                        <option value="">-- Select Staff ({searchedStaff.length} found) --</option>
+                                                        {searchedStaff.map(staff => (
+                                                            <option key={staff.id} value={staff.id}>
+                                                                {staff.name} ({staff.staffProfile?.staffId || 'No ID'})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    {staffList.length > 0 && searchedStaff.length === 0 && (
+                                                        <p className="text-xs text-red-500 mt-1">No staff matches the search filter.</p>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </>
                                 )}
 
                                 {selectedStaff && (
@@ -345,7 +395,7 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
                     <div className="pt-4 flex justify-end gap-3">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleClose}
                             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md font-medium"
                         >
                             Cancel

@@ -47,12 +47,14 @@ async function main() {
     // 3. Registry HR Officer (HQ)
     await prisma.user.upsert({
         where: { email: 'registry@noun.edu.ng' },
-        update: {},
+        update: {
+            role: Role.HR_ADMIN
+        },
         create: {
             email: 'registry@noun.edu.ng',
             name: 'Registry Officer',
             password,
-            role: Role.STAFF, // Staff Role but Registry Dept
+            role: Role.HR_ADMIN, // HR_ADMIN role
             staffProfile: {
                 create: {
                     department: Department.REGISTRY_HR,
@@ -134,12 +136,75 @@ async function main() {
         });
     }
 
+    const CUSTOM_UNIT_CODES: Record<string, string> = {
+        // Map new names to existing codes to perform rename & avoid duplicates
+        "Directorate of Academic Registry": "DIR-ACADE",
+        "Directorate of Advancement and Linkages": "DIR-ADVAN",
+        "Directorate of Internal Audit": "DIR-AUDIT",
+        "Centre for Human Resource Development (CHRD)": "DIR-CHRD",
+        "Directorate for Entrepreneurship and General Studies (DEAGS)": "DIR-DEAGS",
+        "The Regional Training and Research Institute for Distance and Open Learning (RETRIDOL)": "DIR-CENTR",
+        "Directorate of Information & Communications Technology": "DIR-ICT",
+        "Directorate of Media and Publicity": "DIR-MEDIA",
+        "Directorate of Physical Planning and Development": "DIR-PHYSI",
+        "Directorate of Research Administration": "DIR-RESEA",
+        "Directorate Of Staff Training And Development": "DIR-STD",
+
+        // Rest of existing structures
+        "Human Resource Senior Section": "DIR-HR-SR",
+        "Human Resource Junior Section": "DIR-HR-JR",
+        "Council": "DIR-COUNC",
+        "Alumni": "DIR-ALUMN",
+        "Student Affairs": "DIR-STUDE",
+        "Vice-Chancellor's Office": "DIR-VICE-",
+        "Learner Support Services (LSS)": "DIR-LEARN",
+        "Bursary": "DIR-BURSA",
+
+        // Unique codes for the brand new Non-Academic Directorates to avoid duplicates/collisions
+        "Directorate of Security Services": "DIR-SEC",
+        "Directorate of Procurement": "DIR-PROC",
+        "Directorate of Quality Assurance": "DIR-QA",
+        "Directorate of Works & Services": "DIR-WORKS",
+        "Directorate of Protocol & General Services": "DIR-PROT",
+        "Directorate of Counselling Services & Career Development": "DIR-COUNS",
+        "Directorate of Examination & Assessment": "DIR-EXAM",
+        "Directorate of Management Information System (DMIS)": "DIR-DMIS",
+        "Software Development Unit": "DIR-SOFT",
+        "Directorate of Learning Content Management System": "DIR-LCMS",
+        "Directorate of Human Resources": "DIR-HR",
+
+        // Unique codes for brand new Academic Directorates
+        "Directorate of Academic Planning (DAP)": "DIR-DAP",
+        "African Council on Distance Education Quality Assurance and Accreditation Agency (ACDE-QAAA)": "DIR-ACDE",
+        "Student Industrial Work Experience Scheme (SIWES)": "DIR-SIWES",
+
+        // Unique codes for Units
+        "Course Material Development Unit": "UNIT-CMDU",
+        "SERVICOM Unit": "UNIT-SERVI",
+        "Anti-Corruption And Transparency Unit": "UNIT-ACTU",
+        "NOUN Information and Call Centre (NICC)": "UNIT-NICC",
+        "Manpower Development Unit": "UNIT-MDU",
+        "Legal Services": "UNIT-LEGAL",
+        "Deputy Registrar(Council)": "UNIT-DRC",
+        "Transport and Logistics": "UNIT-TRANS",
+        "University Clinic": "UNIT-CLIN",
+        "Medical Diagnostic Laboratory": "UNIT-LAB",
+
+        // Unique codes for Research Centers
+        "Africa Centre of Excellence on Technology Enhanced Learning (ACETEL)": "RC-ACETEL",
+        "Centre of Excellence in Migration and Global Studies (CEMGS)": "RC-CEMGS",
+        "Olusegun Obasanjo Centre For African Studies (OOCAS)": "RC-OOCAS"
+    };
+
     // Seed Directorates
     for (const directorate of NOUN_STRUCTURE.HQ_UNITS.DIRECTORATES) {
-        const code = `DIR-${directorate.toUpperCase().replace(/\s+/g, '-').slice(0, 5)}`;
+        const code = CUSTOM_UNIT_CODES[directorate] || `DIR-${directorate.toUpperCase().replace(/\s+/g, '-').slice(0, 5)}`;
         await prisma.unit.upsert({
             where: { code },
-            update: {},
+            update: {
+                name: directorate,
+                type: 'DIRECTORATE'
+            },
             create: {
                 name: directorate,
                 type: 'DIRECTORATE',

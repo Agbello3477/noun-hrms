@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, AlertTriangle, CheckCircle, Save } from 'lucide-react';
-import api from '../../../../../lib/api';
+import api from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
 
 export default function StaffAperPage() {

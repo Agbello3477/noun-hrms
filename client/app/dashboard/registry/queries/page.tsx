@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../../../lib/api';
 import { AlertTriangle, Plus, CheckCircle, Eye, Paperclip, X, Printer } from 'lucide-react';
+import { useAuth } from '../../../../hooks/useAuth';
 
 interface Query {
     id: string;
@@ -16,9 +17,15 @@ interface Query {
     staff: { user: { name: string, email: string } };
     response?: string;
     responseAttachmentUrl?: string;
+    copyHR?: boolean;
 }
 
 export default function RegistryQueriesPage() {
+    const { user } = useAuth();
+    const isHrAdmin = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(user?.role || '');
+    const isCenterManager = user?.role === 'STUDY_CENTER_MANAGER';
+    const isUnitHead = user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
+
     const [queries, setQueries] = useState<Query[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewQuery, setViewQuery] = useState<Query | null>(null);
@@ -33,10 +40,14 @@ export default function RegistryQueriesPage() {
     interface StaffBasic {
         id: string; // User ID
         name: string;
+        email?: string;
         staffProfile?: {
             id: string; // Profile ID (needed for query)
+            staffId?: string;
             centerId?: string;
             unitId?: string;
+            surname?: string;
+            otherNames?: string;
         };
     }
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
@@ -46,10 +57,12 @@ export default function RegistryQueriesPage() {
     const [targetType, setTargetType] = useState('CENTER'); // CENTER | UNIT
     const [selectedOrgId, setSelectedOrgId] = useState('');
     const [selectedStaffProfileId, setSelectedStaffProfileId] = useState('');
+    const [staffSearchQuery, setStaffSearchQuery] = useState('');
 
     const [description, setDescription] = useState('');
     const [severity, setSeverity] = useState('MINOR');
     const [deadline, setDeadline] = useState('');
+    const [copyHR, setCopyHR] = useState(true);
 
     const fetchAllData = async () => {
         try {
@@ -72,6 +85,19 @@ export default function RegistryQueriesPage() {
         fetchAllData();
     }, []);
 
+    // Auto-scope selectors for Center Managers and Unit Heads
+    useEffect(() => {
+        if (user) {
+            if (user.role === 'STUDY_CENTER_MANAGER') {
+                setTargetType('CENTER');
+                setSelectedOrgId(user.staffProfile?.centerId || '');
+            } else if (user.role === 'UNIT_HEAD' || user.role === 'UNIT_ADMIN') {
+                setTargetType('UNIT');
+                setSelectedOrgId(user.staffProfile?.unitId || '');
+            }
+        }
+    }, [user]);
+
     // Filter staff based on selection
     const filteredStaff = staffList.filter(s => {
         if (!selectedOrgId) return false;
@@ -91,7 +117,8 @@ export default function RegistryQueriesPage() {
             await api.post('/api/queries/issue', {
                 staffId: selectedStaffProfileId,
                 title,
-                content
+                content,
+                copyHR
             });
             setShowModal(false);
 
@@ -99,6 +126,8 @@ export default function RegistryQueriesPage() {
             setSelectedStaffProfileId('');
             setDescription('');
             setDeadline('');
+            setStaffSearchQuery('');
+            setCopyHR(true);
 
             // Refresh
             const res = await api.get('/api/queries');
@@ -118,11 +147,7 @@ export default function RegistryQueriesPage() {
 
         setIsSubmitting(true);
         try {
-            await fetch(`/api/queries/${viewQuery.id}/resolve`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'CLOSED' }) // Send 'CLOSED' to match Schema
-            });
+            await api.put(`/api/queries/${viewQuery.id}/resolve`, { status: 'CLOSED' });
 
             // Update local state
             setQueries(queries.map(q =>
@@ -252,7 +277,12 @@ export default function RegistryQueriesPage() {
                                     <div className="text-xs text-gray-500">{q.staff?.user?.email}</div>
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-500 custom-truncate max-w-xs truncate" title={q.content || q.description}>
-                                    <span className="font-semibold block text-gray-700">{q.title}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-700">{q.title}</span>
+                                        {!q.copyHR && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150 rounded">Internal</span>
+                                        )}
+                                    </div>
                                     <span className="text-xs">{(q.content || q.description || '').substring(0, 50)}...</span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -396,62 +426,117 @@ export default function RegistryQueriesPage() {
                         <form onSubmit={handleIssueQuery} className="space-y-4">
 
                             {/* 1. Location Selection */}
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Type</label>
-                                    <select
-                                        className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm"
-                                        value={targetType}
-                                        onChange={e => {
-                                            setTargetType(e.target.value);
-                                            setSelectedOrgId('');
-                                            setSelectedStaffProfileId('');
-                                        }}
-                                    >
-                                        <option value="CENTER">Study Center</option>
-                                        <option value="UNIT">HQ / Unit</option>
-                                    </select>
+                            {!isHrAdmin ? (
+                                <div className="bg-gray-55 p-3 rounded-lg border border-gray-200 text-sm">
+                                    <span className="font-semibold text-gray-700 text-xs uppercase tracking-wider block mb-1">Location Scope</span>
+                                    <span className="text-gray-800 font-medium">
+                                        {isCenterManager
+                                            ? user?.staffProfile?.studyCenter?.name || 'My Study Center'
+                                            : user?.staffProfile?.unit?.name || 'My Unit'
+                                        }
+                                    </span>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Location</label>
-                                    <select
-                                        className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm"
-                                        value={selectedOrgId}
-                                        onChange={e => {
-                                            setSelectedOrgId(e.target.value);
-                                            setSelectedStaffProfileId('');
-                                        }}
-                                    >
-                                        <option value="">-- Select --</option>
-                                        {targetType === 'CENTER' ? (
-                                            orgData.centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                                        ) : (
-                                            orgData.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)
-                                        )}
-                                    </select>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Type</label>
+                                        <select
+                                            className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm"
+                                            value={targetType}
+                                            onChange={e => {
+                                                setTargetType(e.target.value);
+                                                setSelectedOrgId('');
+                                                setSelectedStaffProfileId('');
+                                                setStaffSearchQuery('');
+                                            }}
+                                        >
+                                            <option value="CENTER">Study Center</option>
+                                            <option value="UNIT">HQ / Unit</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Location</label>
+                                        <select
+                                            className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm"
+                                            value={selectedOrgId}
+                                            onChange={e => {
+                                                setSelectedOrgId(e.target.value);
+                                                setSelectedStaffProfileId('');
+                                                setStaffSearchQuery('');
+                                            }}
+                                        >
+                                            <option value="">-- Select --</option>
+                                            {targetType === 'CENTER' ? (
+                                                orgData.centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                                            ) : (
+                                                orgData.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)
+                                            )}
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* 2. Staff Selection */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Staff Member</label>
-                                <select
-                                    required
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={selectedStaffProfileId}
-                                    onChange={e => setSelectedStaffProfileId(e.target.value)}
-                                    disabled={!selectedOrgId}
-                                >
-                                    <option value="">-- Select Staff --</option>
-                                    {filteredStaff.map(s => (
-                                        <option key={s.id} value={s.staffProfile?.id}>
-                                            {s.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {selectedOrgId && filteredStaff.length === 0 && (
-                                    <p className="text-xs text-red-500 mt-1">No staff found in this location.</p>
+                                {selectedOrgId && (
+                                    <input
+                                        type="text"
+                                        placeholder="Search staff by Name or Staff ID..."
+                                        value={staffSearchQuery}
+                                        onChange={e => setStaffSearchQuery(e.target.value)}
+                                        className="mt-1 mb-2 block w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                    />
                                 )}
+                                {(() => {
+                                    const searchedStaff = filteredStaff.filter(s => {
+                                        const query = staffSearchQuery.toLowerCase().trim();
+                                        if (!query) return true;
+                                        const name = (s.name || '').toLowerCase();
+                                        const email = (s.email || '').toLowerCase();
+                                        const staffId = (s.staffProfile?.staffId || '').toLowerCase();
+                                        const surname = (s.staffProfile?.surname || '').toLowerCase();
+                                        const otherNames = (s.staffProfile?.otherNames || '').toLowerCase();
+                                        return name.includes(query) || 
+                                               email.includes(query) || 
+                                               staffId.includes(query) || 
+                                               surname.includes(query) || 
+                                               otherNames.includes(query);
+                                    });
+
+                                    return (
+                                        <>
+                                            <select
+                                                required
+                                                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
+                                                value={selectedStaffProfileId}
+                                                onChange={e => setSelectedStaffProfileId(e.target.value)}
+                                                disabled={!selectedOrgId}
+                                            >
+                                                <option value="">
+                                                    {selectedOrgId 
+                                                        ? `-- Select Staff (${searchedStaff.length} found) --` 
+                                                        : '-- Select Location First --'
+                                                    }
+                                                </option>
+                                                {searchedStaff.map(s => {
+                                                    const staffIdStr = s.staffProfile?.staffId ? ` (${s.staffProfile.staffId})` : '';
+                                                    return (
+                                                        <option key={s.id} value={s.staffProfile?.id}>
+                                                            {s.name}{staffIdStr}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                            {selectedOrgId && filteredStaff.length === 0 && (
+                                                <p className="text-xs text-red-500 mt-1">No staff found in this location.</p>
+                                            )}
+                                            {selectedOrgId && filteredStaff.length > 0 && searchedStaff.length === 0 && (
+                                                <p className="text-xs text-red-500 mt-1">No staff matches the search filter.</p>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             <div>
@@ -485,8 +570,20 @@ export default function RegistryQueriesPage() {
                                     onChange={e => setDeadline(e.target.value)}
                                 />
                             </div>
+                            <div className="flex items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    id="copyHR"
+                                    checked={copyHR}
+                                    onChange={e => setCopyHR(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <label htmlFor="copyHR" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                                    Copy HR (Registry) on this query
+                                </label>
+                            </div>
                             <div className="flex gap-2 pt-4">
-                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded hover:bg-gray-50">Cancel</button>
+                                <button type="button" onClick={() => { setShowModal(false); setStaffSearchQuery(''); }} className="px-4 py-2 border rounded hover:bg-gray-50">Cancel</button>
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || !selectedStaffProfileId}

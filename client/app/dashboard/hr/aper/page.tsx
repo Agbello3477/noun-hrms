@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Calendar, ToggleLeft, ToggleRight, Edit, Loader2 } from 'lucide-react';
-import api from '../../../../../lib/api';
-import { AperSession } from '../../../../../types/aper';
+import api from '../../../../lib/api';
+import { AperSession } from '../../../../types/aper';
 
 export default function HRAperDashboard() {
     const [sessions, setSessions] = useState<AperSession[]>([]);

@@ -34,11 +34,60 @@ export const NOUN_STRUCTURE = {
             "Health Sciences", "Law", "Management Sciences", "Sciences", "Social Sciences"
         ],
         DIRECTORATES: [
-            "Vice-Chancellor's Office", "Academic Registry", "Bursary", "Audit",
-            "Physical Development & Works", "ICT", "Learner Support Services (LSS)",
-            "Media & Information", "Research Administration",
-            "Centres of Excellence (RETRIDOL)", "Centres of Excellence (DEAGS)",
-            "Centres of Excellence (CHRD)"
+            "Vice-Chancellor's Office",
+            "Bursary",
+            "Learner Support Services (LSS)",
+            "Human Resource Senior Section",
+            "Human Resource Junior Section",
+            "Council",
+            "Alumni",
+            "Student Affairs",
+            
+            // Non-Academic Directorates
+            "Directorate of Physical Planning and Development",
+            "Directorate of Security Services",
+            "Directorate of Media and Publicity",
+            "Directorate Of Staff Training And Development",
+            "Directorate of Internal Audit",
+            "Directorate of Procurement",
+            "Directorate of Quality Assurance",
+            "Directorate of Works & Services",
+            "Directorate of Protocol & General Services",
+            "Directorate of Advancement and Linkages",
+            "Directorate of Counselling Services & Career Development",
+            "Directorate of Academic Registry",
+            "Directorate of Information & Communications Technology",
+            "Directorate of Examination & Assessment",
+            "Directorate of Management Information System (DMIS)",
+            "Software Development Unit",
+            "Directorate of Learning Content Management System",
+            "Directorate of Human Resources",
+
+            // Academic Directorates
+            "Directorate for Entrepreneurship and General Studies (DEAGS)",
+            "Directorate of Academic Planning (DAP)",
+            "The Regional Training and Research Institute for Distance and Open Learning (RETRIDOL)",
+            "African Council on Distance Education Quality Assurance and Accreditation Agency (ACDE-QAAA)",
+            "Student Industrial Work Experience Scheme (SIWES)",
+            "Directorate of Research Administration",
+
+            // Units
+            "Course Material Development Unit",
+            "SERVICOM Unit",
+            "Anti-Corruption And Transparency Unit",
+            "NOUN Information and Call Centre (NICC)",
+            "Manpower Development Unit",
+            "Legal Services",
+            "Deputy Registrar(Council)",
+            "Transport and Logistics",
+            "University Clinic",
+            "Medical Diagnostic Laboratory",
+
+            // Research Centers
+            "Africa Centre of Excellence on Technology Enhanced Learning (ACETEL)",
+            "Centre of Excellence in Migration and Global Studies (CEMGS)",
+            "Olusegun Obasanjo Centre For African Studies (OOCAS)",
+            "Centre for Human Resource Development (CHRD)"
         ]
     }
 };

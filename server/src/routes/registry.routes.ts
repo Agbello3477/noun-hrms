@@ -3,7 +3,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { uploadDocument, getStaffDossier, deleteDocument, updateDocument } from '../controllers/document.controller';
 import { transferStaff, batchTransfer, getTransferHistory, getCenters } from '../controllers/transfer.controller';
-import { createStaffFile, addExistingFile, getJobFiles, getStaffFile } from '../controllers/hr.controller';
+import { createStaffFile, addExistingFile, getJobFiles, getStaffFile, deleteStaffFile } from '../controllers/hr.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -38,5 +38,6 @@ router.post('/files/create', requireRole(fileRoles), createStaffFile);
 router.post('/files/existing', requireRole(fileRoles), addExistingFile);
 router.get('/files/:id', requireRole(fileRoles), getStaffFile);
 router.get('/files', requireRole(fileRoles), getJobFiles);
+router.delete('/files/:id', requireRole(fileRoles), deleteStaffFile);
 
 export default router;

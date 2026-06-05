@@ -1,11 +1,11 @@
 
 import { Request, Response } from 'express';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { sendTransferNotification } from '../services/email.service';
+import { notifyUser } from './notification.controller';
 import { parse } from 'csv-parse';
 import fs from 'fs';
-
-const prisma = new PrismaClient();
+import prisma from '../prisma';
 
 // ... existing code ...
 
@@ -64,20 +64,24 @@ export const batchTransfer = async (req: Request, res: Response) => {
                     data: {
                         staffId: staff.id,
                         initiatedById,
-                        oldCenterId: staff.staffProfile.centerId || staff.staffProfile.unitId || 'Unassigned',
-                        newCenterId: newCenterId || newUnitId,
+                        oldCenterId: staff.staffProfile.unitId || staff.staffProfile.centerId || 'Unassigned',
+                        newCenterId: newUnitId || newCenterId,
                         reason: reason || 'Batch Transfer',
                         effectiveDate: new Date(effective_date || Date.now())
                     }
                 });
 
-                await prisma.staffProfile.update({
-                    where: { id: staff.staffProfile.id },
-                    data: {
-                        centerId: newCenterId,
-                        unitId: newUnitId
-                    }
-                });
+                // Deferred Activation: Update is skipped here.
+                // The transfer remains applied: false and will be processed upon their next login after 48 hours.
+
+                // Notify staff member immediately via system notification
+                await notifyUser(
+                    staff.id,
+                    'Transfer Initiated',
+                    `You have been scheduled for transfer to ${newLocationName}. This transfer will take effect on your next login after 48 hours.`,
+                    'WARNING',
+                    '/dashboard/profile'
+                );
 
                 // 4. Notify
                 sendTransferNotification(
@@ -163,25 +167,24 @@ export const transferStaff = async (req: Request, res: Response) => {
             data: {
                 staffId: staff.user.id, // User UUID
                 initiatedById,
-                oldCenterId: staff.centerId, // We can store ID if it fits schema. 
-                // Schema: oldCenterId String? 
-                // Wait, TransferLog schema has oldCenterId/newCenterId. 
-                // Does it handle Unit IDs? "oldCenterId" implies Center. 
-                // For simplified log, let's just store the string ID.
-                newCenterId: toCenterId || toUnitId,
+                oldCenterId: staff.unitId || staff.centerId || 'Unassigned', 
+                newCenterId: toUnitId || toCenterId,
                 reason,
                 effectiveDate: new Date(effectiveDate || Date.now())
             }
         });
 
-        // 4. Update Staff Profile
-        await prisma.staffProfile.update({
-            where: { id: staff.id },
-            data: {
-                centerId: toCenterId || null,
-                unitId: toUnitId || null
-            }
-        });
+        // Deferred Activation: Update is skipped here.
+        // The transfer remains applied: false and will be processed upon their next login after 48 hours.
+
+        // Notify staff member immediately via system notification
+        await notifyUser(
+            staff.user.id,
+            'Transfer Initiated',
+            `You have been scheduled for transfer to ${newCenterName}. This transfer will take effect on your next login after 48 hours.`,
+            'WARNING',
+            '/dashboard/profile'
+        );
 
         // 5. Send Notification
         // Trigger Email Service

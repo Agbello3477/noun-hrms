@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
 import { AcademicService } from '../services/academic.service';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: Role; staffProfile?: { id: string } };
 }
-
-const prisma = new PrismaClient(); // Helper for direct lookups if needed
 
 export const getPublications = async (req: AuthRequest, res: Response) => {
     try {
@@ -100,19 +99,64 @@ export const getTeachingWorkload = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getCourses = async (req: Request, res: Response) => {
+    try {
+        let courses = await prisma.course.findMany({
+            orderBy: { code: 'asc' }
+        });
+
+        // Auto-seed default courses if table is empty or missing key GST107 course
+        if (courses.length === 0 || !courses.some(c => c.code === 'GST107')) {
+            const defaultCourses = [
+                { code: 'GST107', title: 'A Study Guide for the Distance Learner', unit: 2, semester: 'FIRST' },
+                { code: 'GST101', title: 'Use of English and Communication Skills I', unit: 2, semester: 'FIRST' },
+                { code: 'CIT211', title: 'Introduction to Computer Programming', unit: 3, semester: 'FIRST' },
+                { code: 'CIT311', title: 'Computer Networks', unit: 3, semester: 'FIRST' },
+                { code: 'CSS111', title: 'Introduction to Sociology', unit: 3, semester: 'FIRST' },
+                { code: 'LIS201', title: 'Foundations of Library and Information Science', unit: 3, semester: 'FIRST' },
+                { code: 'BUS102', title: 'Introduction to Business', unit: 3, semester: 'SECOND' },
+                { code: 'ECO122', title: 'Principles of Economics II', unit: 3, semester: 'SECOND' }
+            ];
+
+            await Promise.all(
+                defaultCourses.map(c => 
+                    prisma.course.upsert({
+                        where: { code: c.code },
+                        update: {},
+                        create: c
+                    })
+                )
+            );
+
+            courses = await prisma.course.findMany({
+                orderBy: { code: 'asc' }
+            });
+        }
+
+        res.json(courses);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching courses' });
+    }
+};
+
 export const allocateCourse = async (req: AuthRequest, res: Response) => {
     try {
-        const { courseCode, session, students } = req.body;
+        const { courseCode, session, students, staffId } = req.body;
 
-        // Demo: Allow self-allocation or Admin allocation
-        const user = await prisma.user.findUnique({
-            where: { id: req.user!.id },
-            include: { staffProfile: true }
-        });
-        if (!user?.staffProfile) return res.status(400).json({ message: 'Profile required' });
+        // Use provided staffId, or fall back to the requester's own profile ID
+        let targetStaffId = staffId;
+
+        if (!targetStaffId) {
+            const user = await prisma.user.findUnique({
+                where: { id: req.user!.id },
+                include: { staffProfile: true }
+            });
+            if (!user?.staffProfile) return res.status(400).json({ message: 'Profile required' });
+            targetStaffId = user.staffProfile.id;
+        }
 
         const allocation = await AcademicService.allocateTeaching({
-            staffId: user.staffProfile.id,
+            staffId: targetStaffId,
             courseCode,
             session,
             students: Number(students)

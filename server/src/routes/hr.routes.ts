@@ -27,12 +27,12 @@ payrollRouter.post('/run', requireRole(payrollGenRoles), runPayroll);
 payrollRouter.post('/export-ippis', requireRole(payrollGenRoles), exportIPPISData);
 payrollRouter.get('/stats', requireRole(payrollGenRoles), getPayrollStats);
 payrollRouter.get('/records', requireRole(payrollGenRoles), getPayrollRecords);
+const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN];
+
 payrollRouter.get('/pending', requireRole(auditRoles), getPendingPayroll);
 
 // Audit Workflow
 // Pending/Approve: Audit, Super User
-const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN];
-
 payrollRouter.post('/approve', requireRole(auditRoles), approvePayrollRun);
 // payrollRouter.post('/finalize', requireRole(auditRoles), finalizePayroll); // Removed for now
 

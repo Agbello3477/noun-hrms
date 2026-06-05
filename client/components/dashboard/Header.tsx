@@ -2,18 +2,28 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
+import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
 import api from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export default function Header() {
+export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }) {
     const { user } = useAuth();
     const pathname = usePathname();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const notifiedIdsRef = useRef<Set<string>>(new Set());
+
+    // Request Notification permission on mount
+    useEffect(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+    }, []);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -29,8 +39,27 @@ export default function Header() {
     const fetchNotifications = async () => {
         try {
             const { data } = await api.get('/api/notifications');
-            setNotifications(data.notifications);
-            setUnreadCount(data.unreadCount);
+            
+            // Trigger browser desktop notifications for new unread messages
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                const unreadList = data.notifications || [];
+                const newUnread = unreadList.filter((n: any) => !n.isRead && !notifiedIdsRef.current.has(n.id));
+                newUnread.forEach((n: any) => {
+                    notifiedIdsRef.current.add(n.id);
+                    new Notification(n.title, {
+                        body: n.message,
+                        icon: '/noun_logo.png'
+                    });
+                });
+            }
+
+            // Keep track of all fetched notification IDs to avoid duplicates
+            if (data.notifications && Array.isArray(data.notifications)) {
+                data.notifications.forEach((n: any) => notifiedIdsRef.current.add(n.id));
+            }
+
+            setNotifications(data.notifications || []);
+            setUnreadCount(data.unreadCount || 0);
         } catch (error) {
             console.error('Failed to load notifications');
         }
@@ -74,12 +103,22 @@ export default function Header() {
     };
 
     return (
-        <header className="flex h-16 w-full items-center justify-between bg-white px-8 shadow-sm z-20 relative">
-            <h2 className="text-xl font-semibold text-gray-800">
-                {pathname.includes('hr') ? 'Registry Dashboard' :
-                    pathname.includes('bursary') ? 'Bursary Dashboard' :
-                        'Staff Dashboard'}
-            </h2>
+        <header className="flex h-16 w-full items-center justify-between bg-white px-4 md:px-8 shadow-sm z-20 relative">
+            <div className="flex items-center gap-3">
+                {toggleSidebar && (
+                    <button 
+                        onClick={toggleSidebar} 
+                        className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
+                        <Menu size={24} />
+                    </button>
+                )}
+                <h2 className="text-lg md:text-xl font-semibold text-gray-800">
+                    {pathname.includes('hr') ? 'Registry Dashboard' :
+                        pathname.includes('bursary') ? 'Bursary Dashboard' :
+                            'Staff Dashboard'}
+                </h2>
+            </div>
 
             <div className="flex items-center gap-6">
                 {/* Notification Bell */}
