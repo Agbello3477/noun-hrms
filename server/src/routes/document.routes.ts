@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { uploadDocument, deleteDocument, getMyDocuments } from '../controllers/document.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
+import { upload } from '../middleware/upload.middleware';
 
 const router = Router();
 
 // Upload document (Staff can upload their own or HR for others - logic in controller)
-router.post('/upload', verifyToken, uploadDocument);
+router.post('/upload', verifyToken, upload.single('file'), uploadDocument);
 
 // Get my documents
 router.get('/my', verifyToken, getMyDocuments);

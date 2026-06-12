@@ -18,23 +18,32 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
 
         if (!uploaderId || !file) return res.status(400).json({ message: 'Missing file or authentication' });
 
-        // 1. Permission Check
-        // Only Admin, Registry Staff, or Center Manager (for their own staff) can upload.
-        // Simplified check here, strict check requires fetching staff profile vs uploader center.
-
         // Find Uploader Profile
         const uploaderProfile = await prisma.staffProfile.findUnique({ where: { userId: uploaderId } });
+
+        // Fallback target staff ID to the uploader's own staff profile if not provided
+        let targetStaffId = staffId;
+        if (!targetStaffId && uploaderProfile) {
+            targetStaffId = uploaderProfile.id;
+        }
+
+        if (!targetStaffId) {
+            return res.status(400).json({ message: 'Staff profile identifier is missing' });
+        }
+
         // Find Target Staff Profile
-        const targetProfile = await prisma.staffProfile.findUnique({ where: { id: staffId } });
+        const targetProfile = await prisma.staffProfile.findUnique({ where: { id: targetStaffId } });
 
         if (!targetProfile) return res.status(404).json({ message: 'Target staff profile not found' });
 
-        if (uploaderRole === Role.STUDY_CENTER_MANAGER) {
-            if (targetProfile.centerId !== uploaderProfile?.centerId) {
-                return res.status(403).json({ message: 'Unauthorized: Cannot upload for staff in another center' });
+        // 1. Permission Check
+        if (uploaderId !== targetProfile.userId) {
+            if (uploaderRole === Role.STUDY_CENTER_MANAGER) {
+                if (targetProfile.centerId !== uploaderProfile?.centerId) {
+                    return res.status(403).json({ message: 'Unauthorized: Cannot upload for staff in another center' });
+                }
             }
         }
-        // Registry Logic: Ideally check if uploader.department starts with REGISTRY
 
         // 2. Upload File
         const url = await StorageService.uploadFile(file);
@@ -45,8 +54,8 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
                 title,
                 type: type as DocumentType,
                 url,
-                ownerId: staffId,
-                uploadedById: uploaderProfile ? uploaderProfile.id : staffId, // Fallback to staff's own profile if Admin lacks one
+                ownerId: targetStaffId,
+                uploadedById: uploaderProfile ? uploaderProfile.id : targetStaffId, // Fallback to staff's own profile if Admin lacks one
                 accessLevel: accessLevel as AccessLevel || AccessLevel.CONFIDENTIAL,
                 currentLocation: Department.REGISTRY_MAIN // Default to HQ Registry
             }
