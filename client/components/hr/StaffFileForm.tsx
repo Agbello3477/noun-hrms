@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '../../lib/api';
+import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 
 interface OrganizationData {
     centers: { id: string; name: string; code: string }[];
@@ -74,6 +75,10 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
 
+        if (name === 'stateOfOrigin') {
+            setFormData(prev => ({ ...prev, stateOfOrigin: value, lga: '' }));
+        }
+
         if (name === 'centerId') {
             const selectedCenter = orgData.centers.find(c => c.id === value);
             const isHQSelected = selectedCenter?.code === 'HQ-001';
@@ -84,14 +89,31 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         }
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { value } = e.target;
+        // Keep only digits
+        const digits = value.replace(/\D/g, '');
+        // Limit to 11 characters
+        const limitedDigits = digits.slice(0, 11);
+        setFormData(prev => ({ ...prev, phone: limitedDigits }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
 
         try {
+            let submittedPhone = formData.phone;
+            if (submittedPhone) {
+                const cleaned = submittedPhone.replace(/\D/g, '');
+                const withoutZero = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
+                submittedPhone = `+234${withoutZero}`;
+            }
+
             const payload = {
                 ...formData,
+                phone: submittedPhone || undefined,
                 name: `${formData.surname} ${formData.otherNames}`,
                 unitId: formData.unitId || undefined,
             };
@@ -149,15 +171,47 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                     </div>
                     <div className="col-span-2">
                         <label className="block text-xs font-medium text-gray-500">Phone</label>
-                        <input name="phone" className="w-full border p-1.5 rounded" value={formData.phone} onChange={handleChange} />
+                        <div className="flex rounded border mt-0.5 overflow-hidden">
+                            <span className="bg-gray-100 text-gray-500 text-sm px-3 flex items-center border-r select-none">+234</span>
+                            <input
+                                name="phone"
+                                type="tel"
+                                maxLength={11}
+                                placeholder="e.g. 08031234567"
+                                className="w-full p-1.5 focus:outline-none"
+                                value={formData.phone}
+                                onChange={handlePhoneChange}
+                            />
+                        </div>
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">State of Origin</label>
-                        <input name="stateOfOrigin" className="w-full border p-1.5 rounded" value={formData.stateOfOrigin} onChange={handleChange} />
+                        <select
+                            name="stateOfOrigin"
+                            className="w-full border p-1.5 rounded mt-0.5"
+                            value={formData.stateOfOrigin}
+                            onChange={handleChange}
+                        >
+                            <option value="">Select State</option>
+                            {Object.keys(NIGERIAN_STATES_AND_LGAS).map(state => (
+                                <option key={state} value={state}>{state}</option>
+                            ))}
+                        </select>
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">LGA</label>
-                        <input name="lga" className="w-full border p-1.5 rounded" value={formData.lga} onChange={handleChange} />
+                        <select
+                            name="lga"
+                            className="w-full border p-1.5 rounded mt-0.5"
+                            value={formData.lga}
+                            onChange={handleChange}
+                            disabled={!formData.stateOfOrigin}
+                        >
+                            <option value="">Select LGA</option>
+                            {(NIGERIAN_STATES_AND_LGAS[formData.stateOfOrigin] || []).map(lga => (
+                                <option key={lga} value={lga}>{lga}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="col-span-2">
                         <label className="block text-xs font-medium text-gray-500">Residential Address</label>

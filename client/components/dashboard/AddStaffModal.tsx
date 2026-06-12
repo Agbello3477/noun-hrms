@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 
 interface AddStaffModalProps {
     onClose: () => void;
@@ -102,6 +103,10 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
 
+        if (name === 'stateOfOrigin') {
+            setFormData(prev => ({ ...prev, stateOfOrigin: value, lga: '' }));
+        }
+
         // Check for HQ Selection to trigger conditional logic
         if (name === 'centerId') {
             const selectedCenter = orgData.centers.find(c => c.id === value);
@@ -114,6 +119,15 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 setFormData(prev => ({ ...prev, unitId: '' }));
             }
         }
+    };
+
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { value } = e.target;
+        // Keep only digits
+        const digits = value.replace(/\D/g, '');
+        // Limit to 11 characters
+        const limitedDigits = digits.slice(0, 11);
+        setFormData(prev => ({ ...prev, phone: limitedDigits }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -139,8 +153,16 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 assignedRank = 'Head of Admin';
             }
 
+            let submittedPhone = formData.phone;
+            if (submittedPhone) {
+                const cleaned = submittedPhone.replace(/\D/g, '');
+                const withoutZero = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
+                submittedPhone = `+234${withoutZero}`;
+            }
+
             const payload = {
                 ...formData,
+                phone: submittedPhone,
                 role: dbRole,
                 rank: assignedRank,
                 // Ensure unitId is null if empty string
@@ -216,21 +238,51 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">Phone Number</label>
-                                <input type="tel" name="phone" required className="mt-1 w-full border rounded p-2"
-                                    value={formData.phone} onChange={handleChange} />
+                                <div className="flex rounded border mt-1 overflow-hidden">
+                                    <span className="bg-gray-100 text-gray-500 text-sm px-3 flex items-center border-r select-none">+234</span>
+                                    <input
+                                        type="tel"
+                                        name="phone"
+                                        required
+                                        maxLength={11}
+                                        placeholder="e.g. 08031234567"
+                                        className="w-full p-2 focus:outline-none"
+                                        value={formData.phone}
+                                        onChange={handlePhoneChange}
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">State of Origin</label>
-                                <input type="text" name="stateOfOrigin" className="mt-1 w-full border rounded p-2"
-                                    value={formData.stateOfOrigin} onChange={handleChange} />
+                                <select
+                                    name="stateOfOrigin"
+                                    className="mt-1 w-full border rounded p-2"
+                                    value={formData.stateOfOrigin}
+                                    onChange={handleChange}
+                                >
+                                    <option value="">Select State</option>
+                                    {Object.keys(NIGERIAN_STATES_AND_LGAS).map(state => (
+                                        <option key={state} value={state}>{state}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">LGA</label>
-                                <input type="text" name="lga" className="mt-1 w-full border rounded p-2"
-                                    value={formData.lga} onChange={handleChange} />
+                                <select
+                                    name="lga"
+                                    className="mt-1 w-full border rounded p-2"
+                                    value={formData.lga}
+                                    onChange={handleChange}
+                                    disabled={!formData.stateOfOrigin}
+                                >
+                                    <option value="">Select LGA</option>
+                                    {(NIGERIAN_STATES_AND_LGAS[formData.stateOfOrigin] || []).map(lga => (
+                                        <option key={lga} value={lga}>{lga}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">Gender</label>
