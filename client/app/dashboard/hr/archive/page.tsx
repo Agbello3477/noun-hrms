@@ -48,9 +48,7 @@ export default function RegistryArchivePage() {
   const fetchArchivedFiles = async (code: string) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/registry/files/archive', {
-        headers: { 'x-archive-code': code }
-      });
+      const { data } = await api.get(`/api/registry/files/archive?code=${encodeURIComponent(code)}`);
       setArchivedFiles(data);
       setFilteredFiles(data);
       setIsAuthenticated(true);
