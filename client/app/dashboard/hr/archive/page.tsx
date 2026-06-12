@@ -53,8 +53,6 @@ export default function RegistryArchivePage() {
       setFilteredFiles(data);
       setIsAuthenticated(true);
       setAuthError('');
-      // Store code in session storage for convenience during session
-      sessionStorage.setItem('archive_security_code', code);
     } catch (err: any) {
       console.error(err);
       setAuthError(err.response?.data?.message || 'Access Denied. Incorrect security code.');
@@ -63,17 +61,6 @@ export default function RegistryArchivePage() {
       setLoading(false);
     }
   };
-
-  // Check session storage on mount
-  useEffect(() => {
-    if (isAuthorized) {
-      const savedCode = sessionStorage.getItem('archive_security_code');
-      if (savedCode) {
-        setSecurityCode(savedCode);
-        fetchArchivedFiles(savedCode);
-      }
-    }
-  }, [isAuthorized]);
 
   // Handle Search filtering
   useEffect(() => {
@@ -100,7 +87,7 @@ export default function RegistryArchivePage() {
   };
 
   const handleRestoreFile = async (file: ArchivedFile) => {
-    const activeCode = securityCode || sessionStorage.getItem('archive_security_code') || '';
+    const activeCode = securityCode;
     if (!confirm(`Are you sure you want to restore the staff file for ${file.user.name}? This will restore their active portal status.`)) {
       return;
     }
