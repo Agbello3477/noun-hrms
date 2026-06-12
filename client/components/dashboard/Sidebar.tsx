@@ -145,7 +145,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
-                <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Leave Applications" />
+                <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Applications" />
                 <LinkItem href="/dashboard/leaves?open=apply" icon={FileText} label="Apply for Leave" />
 
                 {/* Academic Services */}
