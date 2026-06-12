@@ -58,7 +58,7 @@ export default function QueryHistoryTab({ staffId }: { staffId: string }) {
                                 </span>
                             </div>
                             <div className="mt-3 text-sm text-gray-700 bg-white p-3 rounded border border-red-50">
-                                {q.content}
+                                <div dangerouslySetInnerHTML={{ __html: q.content }} className="prose max-w-none text-black" />
                             </div>
                             {q.response && (
                                 <div className="mt-3 text-sm text-gray-600 pl-4 border-l-2 border-gray-300">

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '../../../../lib/api';
 import { AlertTriangle, Plus, CheckCircle, Eye, Paperclip, X, Printer } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
+import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
 
 interface Query {
     id: string;
@@ -110,9 +111,8 @@ export default function RegistryQueriesPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            // Map Description to Content and Auto-generate Title
             const title = `[${severity}] Disciplinary Query`;
-            const content = `${description}\n\nResponse Deadline: ${deadline || 'Immediate'}`;
+            const content = `${description}<br/><br/><strong>Response Deadline:</strong> ${deadline || 'Immediate'}`;
 
             await api.post('/api/queries/issue', {
                 staffId: selectedStaffProfileId,
@@ -283,7 +283,7 @@ export default function RegistryQueriesPage() {
                                             <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-150 rounded">Internal</span>
                                         )}
                                     </div>
-                                    <span className="text-xs">{(q.content || q.description || '').substring(0, 50)}...</span>
+                                    <span className="text-xs">{(q.content || q.description || '').replace(/<[^>]*>/g, '').substring(0, 50)}...</span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <span className={`px-2 py-1 rounded text-xs font-bold ${q.severity === 'GROSS_MISCONDUCT' ? 'bg-red-100 text-red-800' :
@@ -343,9 +343,10 @@ export default function RegistryQueriesPage() {
                                     {viewQuery.severity}
                                 </span>
                                 <h4 className="text-sm font-bold text-red-900 uppercase mb-2">Allegation / Query</h4>
-                                <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                                    {viewQuery.content || viewQuery.description}
-                                </div>
+                                <div 
+                                    dangerouslySetInnerHTML={{ __html: viewQuery.content || viewQuery.description }} 
+                                    className="text-sm text-gray-800 prose max-w-none leading-relaxed" 
+                                />
                                 <p className="text-xs text-gray-500 mt-4 pt-4 border-t border-red-100">
                                     Issued on: {new Date(viewQuery.createdAt).toLocaleString()}
                                 </p>
@@ -552,13 +553,11 @@ export default function RegistryQueriesPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Description / Allegation</label>
-                                <textarea
-                                    required
-                                    rows={4}
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Description / Allegation</label>
+                                <RichTextEditor
                                     value={description}
-                                    onChange={e => setDescription(e.target.value)}
+                                    onChange={setDescription}
+                                    placeholder="Enter allegation details..."
                                 />
                             </div>
                             <div>

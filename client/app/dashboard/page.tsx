@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
-    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock
+    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -121,10 +121,9 @@ export default function DashboardHome() {
                     color: 'border-blue-500 bg-blue-50/40 text-blue-700'
                 }));
 
-                // Combine and sort by date desc, then take top 5
+                // Combine and sort by date desc, showing all activities in a thread
                 const combined = [...fetchedMemos, ...fetchedTransfers, ...fetchedQueries]
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .slice(0, 5);
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
                 setActivities(combined);
 
@@ -643,26 +642,64 @@ export default function DashboardHome() {
             </div>
 
             <div className="mt-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                <h2 className="mb-4 text-lg font-semibold text-gray-800">Recent Registry Activity</h2>
-                <div className="space-y-4">
+                <h2 className="mb-6 text-lg font-bold text-gray-950 flex items-center gap-2">
+                    <History className="text-blue-600" size={20} />
+                    Recent Registry Activity Thread
+                </h2>
+                
+                <div className="max-h-[550px] overflow-y-auto pr-2 scrollbar-thin relative">
                     {loadingActivities ? (
-                        <div className="flex justify-center items-center py-8">
-                            <Loader2 className="animate-spin text-nounGreen" size={24} />
+                        <div className="flex justify-center items-center py-12">
+                            <Loader2 className="animate-spin text-nounGreen" size={28} />
                         </div>
                     ) : activities.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 text-sm bg-gray-50 rounded-lg">
-                            No recent activity found.
+                        <div className="text-center py-12 text-gray-500 text-sm bg-gray-50 rounded-2xl border border-dashed">
+                            No recent activity recorded.
                         </div>
                     ) : (
-                        activities.map((act) => (
-                            <div key={act.id} className={`border-l-4 ${act.color.split(' ')[0]} ${act.color.split(' ').slice(1).join(' ')} p-4 rounded-r-lg shadow-sm transition-all hover:bg-opacity-80`}>
-                                <p className="text-sm font-bold text-gray-900">{act.title}</p>
-                                <p className="text-sm text-gray-600 mt-1">{act.description}</p>
-                                <p className="mt-2 text-xs font-medium text-gray-400">
-                                    {new Date(act.createdAt).toLocaleString()}
-                                </p>
-                            </div>
-                        ))
+                        <div className="relative pl-6 border-l-2 border-gray-150 space-y-6 ml-3 py-1">
+                            {activities.map((act) => {
+                                // Determine icon based on activity type
+                                let IconComponent = FileText;
+                                let iconBg = 'bg-blue-50 text-blue-700 border-blue-150';
+                                if (act.type === 'TRANSFER') {
+                                    IconComponent = MapPin;
+                                    iconBg = 'bg-amber-50 text-amber-700 border-amber-150';
+                                } else if (act.type === 'QUERY') {
+                                    IconComponent = AlertTriangle;
+                                    iconBg = 'bg-red-50 text-red-700 border-red-155';
+                                }
+
+                                return (
+                                    <div key={act.id} className="relative group">
+                                        {/* Connecting Dot/Icon */}
+                                        <div className={`absolute -left-[37px] top-1.5 h-7 w-7 rounded-full border flex items-center justify-center shadow-sm ${iconBg} transition-transform group-hover:scale-110 bg-white`}>
+                                            <IconComponent size={13} />
+                                        </div>
+
+                                        {/* Thread Message Card */}
+                                        <div className="bg-white rounded-xl border border-gray-150 p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-gray-250">
+                                            <div className="flex justify-between items-start gap-4 flex-wrap">
+                                                <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-900 transition-colors">
+                                                    {act.title}
+                                                </h4>
+                                                <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border px-2 py-0.5 rounded-md">
+                                                    {new Date(act.createdAt).toLocaleString(undefined, {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-650 mt-1.5 leading-relaxed">
+                                                {act.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
             </div>

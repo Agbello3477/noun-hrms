@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../../../lib/api';
 import { Mail, Plus, CheckCircle, Eye, X, Loader2, Calendar, User, MessageSquare, ChevronRight, Paperclip, Download } from 'lucide-react';
+import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
 
 interface MemoResponse {
     id: string;
@@ -296,8 +297,8 @@ export default function RegistryMemosPage() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                                    {viewMemo.content}
+                                <div className="text-sm text-gray-800 leading-relaxed">
+                                    <div dangerouslySetInnerHTML={{ __html: viewMemo.content }} className="prose max-w-none text-black" />
                                 </div>
                             </div>
 
@@ -549,13 +550,10 @@ export default function RegistryMemosPage() {
 
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Memo Content</label>
-                                <textarea
-                                    required
-                                    rows={6}
-                                    placeholder="Write your official announcement details here..."
-                                    className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                                <RichTextEditor
                                     value={content}
-                                    onChange={e => setContent(e.target.value)}
+                                    onChange={setContent}
+                                    placeholder="Write your official announcement details here..."
                                 />
                             </div>
 

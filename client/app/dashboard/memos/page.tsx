@@ -164,7 +164,7 @@ function MemosContent() {
                                     )}
                                 </div>
                                 <div className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-                                    {memo.content}
+                                    {memo.content.replace(/<[^>]*>/g, '')}
                                 </div>
                                 <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
                                     <span>{new Date(memo.createdAt).toLocaleDateString()}</span>
@@ -212,8 +212,8 @@ function MemosContent() {
                         </div>
 
                         {/* Content Card */}
-                        <div className="flex-1 bg-gray-50/50 p-6 rounded-2xl border border-gray-150 leading-relaxed text-gray-800 text-sm whitespace-pre-wrap">
-                            {selectedMemo.content}
+                        <div className="flex-1 bg-gray-50/50 p-6 rounded-2xl border border-gray-150 leading-relaxed text-gray-800 text-sm">
+                            <div dangerouslySetInnerHTML={{ __html: selectedMemo.content }} className="prose max-w-none text-black" />
                         </div>
 
                         {/* Attachment Section */}

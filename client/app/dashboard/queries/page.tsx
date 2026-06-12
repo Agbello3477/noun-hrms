@@ -94,7 +94,9 @@ export default function MyQueriesPage() {
                                         )}
                                     </h3>
                                     <p className="text-xs text-red-700 mb-2">Issued by {query.issuedBy?.name || 'HR'}</p>
-                                    <div className="text-red-800 text-sm whitespace-pre-wrap">{query.content || query.description}</div>
+                                    <div className="text-red-800 text-sm">
+                                        <div dangerouslySetInnerHTML={{ __html: query.content || query.description }} className="prose max-w-none text-red-950" />
+                                    </div>
 
                                     <div className="flex gap-4 mt-3 text-xs text-red-600 font-medium">
                                         <span className="uppercase bg-red-100 px-2 py-0.5 rounded">Severity: {query.severity || 'NORMAL'}</span>
