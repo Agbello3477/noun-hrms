@@ -475,7 +475,7 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
-                    <Link href="/dashboard/leaves/apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                    <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
                         <div className="mb-4 rounded-full bg-purple-50 p-4 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                             <MapPin size={28} />
                         </div>

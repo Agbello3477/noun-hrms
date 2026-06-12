@@ -144,7 +144,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
-                <LinkItem href="/dashboard/leaves/apply" icon={FileText} label="Apply for Leave" />
+                <LinkItem href="/dashboard/leaves?open=apply" icon={FileText} label="Apply for Leave" />
 
                 {/* Academic Services */}
                 {isAcademic && (
@@ -154,7 +154,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Research" />
                         <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
-                        <LinkItem href="/dashboard/leaves/sabbatical" icon={MapPin} label="Apply Sabbatical" />
+                        <LinkItem href="/dashboard/leaves?open=sabbatical" icon={MapPin} label="Apply Sabbatical" />
                     </>
                 )}
 

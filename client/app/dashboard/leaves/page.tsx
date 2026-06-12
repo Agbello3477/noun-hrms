@@ -1,17 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '../../../lib/api';
 import Link from 'next/link';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus, FileText } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
 
-export default function LeavesPage() {
+function LeavesContent() {
+    const searchParams = useSearchParams();
+    const openParam = searchParams.get('open');
+
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (openParam === 'apply') {
+            setIsApplyModalOpen(true);
+        } else if (openParam === 'sabbatical') {
+            setIsSabbaticalModalOpen(true);
+        }
+    }, [openParam]);
 
     useEffect(() => {
         fetchMyLeaves();
@@ -210,5 +222,17 @@ export default function LeavesPage() {
                 onSuccess={fetchMyLeaves}
             />
         </div>
+    );
+}
+
+export default function LeavesPage() {
+    return (
+        <Suspense fallback={
+            <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-[50vh]">
+                <div className="text-gray-500 font-medium">Loading leaves dashboard...</div>
+            </div>
+        }>
+            <LeavesContent />
+        </Suspense>
     );
 }
