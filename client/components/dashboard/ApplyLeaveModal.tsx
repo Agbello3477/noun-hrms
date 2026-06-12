@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import api from '../../lib/api';
-import { X } from 'lucide-react';
+import { X, Upload } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 
 interface ApplyLeaveModalProps {
@@ -16,6 +16,7 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [reason, setReason] = useState('');
+    const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState({ type: '', text: '' });
 
@@ -27,11 +28,27 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
         setMsg({ type: '', text: '' });
 
         try {
+            let documentUrl = '';
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('type', 'OTHER');
+                formData.append('title', `${type} Leave Supporting Document`);
+                formData.append('accessLevel', 'RESTRICTED');
+
+                const uploadRes = await api.post('/api/documents/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                documentUrl = uploadRes.data.url;
+            }
+
+            const finalReason = reason + (documentUrl ? `<br/><br/><a href="${documentUrl}" target="_blank" class="text-blue-600 underline font-semibold">[Attached Supporting Document]</a>` : '');
+
             await api.post('/api/leaves/apply', {
                 type,
                 startDate,
                 endDate,
-                reason
+                reason: finalReason
             });
             setMsg({ type: 'success', text: 'Leave Request Submitted Successfully' });
             setTimeout(() => {
@@ -42,6 +59,7 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                 setStartDate('');
                 setEndDate('');
                 setReason('');
+                setFile(null);
                 setMsg({ type: '', text: '' });
             }, 1500);
         } catch (error: any) {
@@ -125,6 +143,25 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                                     onChange={setReason}
                                     placeholder="Brief reason or handover notes..."
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Supporting Document (Optional / PDF/Docx/Image)</label>
+                                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition-colors">
+                                    <input
+                                        type="file"
+                                        id="supporting-file-upload"
+                                        className="hidden"
+                                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                                        accept=".pdf,.doc,.docx,image/*"
+                                    />
+                                    <label htmlFor="supporting-file-upload" className="cursor-pointer flex flex-col items-center gap-1.5">
+                                        <Upload className="text-gray-400" size={24} />
+                                        <span className="text-xs text-gray-600 font-medium">
+                                            {file ? file.name : 'Click to upload supporting document'}
+                                        </span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
