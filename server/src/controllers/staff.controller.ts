@@ -52,7 +52,7 @@ export const getStaffById = async (req: Request, res: Response) => {
                 }
             }
         });
-        if (!staff) return res.status(404).json({ message: 'Staff not found' });
+        if (!staff || (staff.staffProfile && staff.staffProfile.isDeleted)) return res.status(404).json({ message: 'Staff not found' });
 
         const isSelf = requesterId === staff.id;
         const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(requesterRole as any);

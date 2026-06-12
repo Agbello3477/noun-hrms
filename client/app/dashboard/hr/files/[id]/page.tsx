@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, User, Building, MapPin, Calendar, Shield } from 'lucide-react';
+import { ArrowLeft, User, Building, MapPin, Calendar, Shield, X } from 'lucide-react';
 import api from '../../../../../lib/api';
 import DigitalDossier from '../../../../../components/dashboard/DigitalDossier';
 import BioDataTab from '../../../../../components/hr/dossier/BioDataTab';
@@ -19,17 +19,34 @@ export default function StaffDossierPage() {
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('Overview');
 
-    const handleDeleteFile = async () => {
-        if (!confirm(`Are you sure you want to permanently delete the staff file for ${staff?.name || 'this staff'}? This will delete all their documents, queries, leaves, APER records, and user account. This action CANNOT be undone.`)) {
-            return;
-        }
+    // Soft delete confirmation modal states
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [confirmLoading, setConfirmLoading] = useState(false);
+    const [confirmError, setConfirmError] = useState('');
+
+    const handleDeleteFile = () => {
+        setConfirmPassword('');
+        setConfirmError('');
+        setShowDeleteConfirm(true);
+    };
+
+    const handleConfirmDelete = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setConfirmLoading(true);
+        setConfirmError('');
 
         try {
-            await api.delete(`/api/registry/files/${staff.id}`);
-            alert('Staff file deleted successfully.');
+            await api.delete(`/api/registry/files/${staff.id}`, {
+                data: { password: confirmPassword }
+            });
+            alert('Staff file successfully archived.');
+            setShowDeleteConfirm(false);
             router.push('/dashboard/hr/files');
         } catch (err: any) {
-            alert('Failed to delete staff file: ' + (err.response?.data?.message || err.message));
+            setConfirmError(err.response?.data?.message || 'Verification failed. Incorrect password.');
+        } finally {
+            setConfirmLoading(false);
         }
     };
 
@@ -148,6 +165,62 @@ export default function StaffDossierPage() {
                 
                 {activeTab === 'Queries' && <QueryHistoryTab staffId={String(staff.id)} />}
             </div>
+
+            {/* Soft Delete Password Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                        <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                            <h3 className="text-lg font-bold text-gray-800">Confirm Archive Deletion</h3>
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">
+                            You are about to archive the staff file for <strong className="text-gray-950">{staff.name}</strong>. 
+                            This will deactivate their user portal access and store their records in the archive. 
+                            Please enter your password to authorize this action.
+                        </p>
+                        {confirmError && (
+                            <div className="bg-red-50 text-red-700 p-2.5 rounded text-xs mb-4 border border-red-200">
+                                {confirmError}
+                            </div>
+                        )}
+                        <form onSubmit={handleConfirmDelete} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase">Your Password</label>
+                                <input
+                                    type="password"
+                                    required
+                                    className="w-full border p-2 rounded mt-1 focus:ring-2 focus:ring-blue-100 outline-none text-black"
+                                    placeholder="Enter your login password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="flex-1 py-2 border rounded text-gray-600 hover:bg-gray-50 font-medium text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={confirmLoading}
+                                    className="flex-1 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 font-medium text-sm"
+                                >
+                                    {confirmLoading ? 'Verifying...' : 'Confirm Archiving'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

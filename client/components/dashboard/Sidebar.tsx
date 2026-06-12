@@ -21,7 +21,8 @@ import {
     BookOpen,
     FolderOpen,
     ClipboardCheck,
-    Mail
+    Mail,
+    Archive
 } from 'lucide-react';
 
 
@@ -85,6 +86,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                             Registry
                         </div>
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
+                        {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
+                            <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
+                        )}
                         <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="Performance (APER)" />
                         <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />

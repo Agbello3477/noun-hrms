@@ -216,15 +216,17 @@ export const getJobFiles = async (req: Request, res: Response) => {
     try {
         const { directorateId, centerId, facultyId } = req.query;
 
-        const where: any = {};
-        if (directorateId) where.staffProfile = { ...where.staffProfile, unitId: String(directorateId) };
-        if (centerId) where.staffProfile = { ...where.staffProfile, centerId: String(centerId) };
-        if (facultyId) where.staffProfile = { ...where.staffProfile, unitId: String(facultyId) };
+        const whereProfile: any = {
+            isDeleted: false
+        };
+        if (directorateId) whereProfile.unitId = String(directorateId);
+        if (centerId) whereProfile.centerId = String(centerId);
+        if (facultyId) whereProfile.unitId = String(facultyId);
 
         const users = await prisma.user.findMany({
             where: {
                 role: { not: Role.SUPER_USER },
-                staffProfile: where.staffProfile
+                staffProfile: whereProfile
             },
             include: {
                 staffProfile: {
@@ -260,8 +262,8 @@ export const getStaffFile = async (req: Request, res: Response) => {
         const { id } = req.params; // Staff Profile ID or StaffID String? Let's check both
 
         // Attempt to find by Profile ID first (UUID)
-        let profile = await prisma.staffProfile.findUnique({
-            where: { id },
+        let profile = await prisma.staffProfile.findFirst({
+            where: { id, isDeleted: false },
             include: {
                 user: true,
                 unit: true,
@@ -272,8 +274,8 @@ export const getStaffFile = async (req: Request, res: Response) => {
 
         // If not found, try by Staff ID String
         if (!profile) {
-            profile = await prisma.staffProfile.findUnique({
-                where: { staffId: id },
+            profile = await prisma.staffProfile.findFirst({
+                where: { staffId: id, isDeleted: false },
                 include: {
                     user: true,
                     unit: true,
@@ -314,10 +316,32 @@ export const getStaffFile = async (req: Request, res: Response) => {
     }
 };
 
-// Delete Staff File
+// Delete Staff File (Soft Delete with Password Verification)
 export const deleteStaffFile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params; // Staff Profile ID or Staff ID
+        const { password } = req.body;
+        // @ts-ignore
+        const requesterId = req.user?.id;
+
+        if (!password) {
+            return res.status(400).json({ message: 'Password is required to confirm deletion' });
+        }
+
+        // Fetch requester to verify password
+        const requester = await prisma.user.findUnique({
+            where: { id: requesterId }
+        });
+
+        if (!requester) {
+            return res.status(404).json({ message: 'Requester account not found' });
+        }
+
+        // Verify password
+        const isPasswordCorrect = await bcrypt.compare(password, requester.password);
+        if (!isPasswordCorrect) {
+            return res.status(401).json({ message: 'Incorrect password. Deletion cancelled.' });
+        }
 
         let profile = await prisma.staffProfile.findFirst({
             where: {
@@ -330,66 +354,97 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
 
         if (!profile) return res.status(404).json({ message: 'Staff file not found' });
 
+        // Perform soft delete
         await prisma.$transaction(async (tx) => {
-            // Delete related documents
-            await tx.document.deleteMany({ where: { ownerId: profile!.id } });
-
-            // Delete related file requests
-            await tx.fileRequest.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete related queries
-            await tx.staffQuery.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete related teaching allocations
-            await tx.teachingAllocation.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete related publications
-            await tx.publication.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete related leave requests
-            await tx.leaveRequest.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete related aper forms
-            await tx.aperForm.deleteMany({ where: { staffId: profile!.id } });
-
-            // Delete attendance
-            await tx.attendance.deleteMany({ where: { userId: profile!.userId } });
-
-            // Delete payroll records
-            await tx.payroll.deleteMany({ where: { userId: profile!.userId } });
-
-            // Delete audit logs
-            await tx.auditLog.deleteMany({ where: { userId: profile!.userId } });
-
-            // Delete notifications
-            await tx.notification.deleteMany({ where: { userId: profile!.userId } });
-
-            // Delete memo responses
-            await tx.memoResponse.deleteMany({ where: { staffId: profile!.userId } });
-
-            // Delete memos (sent or received)
-            await tx.memo.deleteMany({
-                where: {
-                    OR: [
-                        { senderId: profile!.userId },
-                        { recipientId: profile!.userId }
-                    ]
+            await tx.staffProfile.update({
+                where: { id: profile!.id },
+                data: {
+                    isDeleted: true,
+                    deletedAt: new Date()
                 }
             });
 
-            // Delete document trails
-            await tx.documentTrail.deleteMany({ where: { actionById: profile!.userId } });
-
-            // Delete the staff profile
-            await tx.staffProfile.delete({ where: { id: profile!.id } });
-
-            // Delete the user account
-            await tx.user.delete({ where: { id: profile!.userId } });
+            await tx.user.update({
+                where: { id: profile!.userId },
+                data: {
+                    isActive: false
+                }
+            });
         });
 
-        res.json({ message: 'Staff file deleted successfully' });
+        res.json({ message: 'Staff file successfully archived' });
     } catch (error) {
         console.error('Delete Staff File Error', error);
-        res.status(500).json({ message: 'Error deleting staff file' });
+        res.status(500).json({ message: 'Error archiving staff file' });
+    }
+};
+
+// Get Archived Files (HR / Super Users only)
+export const getArchivedFiles = async (req: Request, res: Response) => {
+    try {
+        const securityCode = req.headers['x-archive-code'] || req.query.code;
+        if (securityCode !== 'NOUN2026') {
+            return res.status(403).json({ message: 'Invalid archive security code' });
+        }
+
+        const archived = await prisma.staffProfile.findMany({
+            where: { isDeleted: true },
+            include: {
+                user: true,
+                unit: true,
+                studyCenter: true
+            },
+            orderBy: { deletedAt: 'desc' }
+        });
+
+        res.json(archived);
+    } catch (error) {
+        console.error('Get Archived Files Error', error);
+        res.status(500).json({ message: 'Error fetching archived files' });
+    }
+};
+
+// Restore Staff File
+export const restoreStaffFile = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const securityCode = req.headers['x-archive-code'] || req.body.code;
+
+        if (securityCode !== 'NOUN2026') {
+            return res.status(403).json({ message: 'Invalid archive security code' });
+        }
+
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id },
+                    { staffId: id }
+                ]
+            }
+        });
+
+        if (!profile) return res.status(404).json({ message: 'Staff file not found' });
+
+        await prisma.$transaction(async (tx) => {
+            await tx.staffProfile.update({
+                where: { id: profile!.id },
+                data: {
+                    isDeleted: false,
+                    deletedAt: null
+                }
+            });
+
+            await tx.user.update({
+                where: { id: profile!.userId },
+                data: {
+                    isActive: true
+                }
+            });
+        });
+
+        res.json({ message: 'Staff file restored successfully' });
+    } catch (error) {
+        console.error('Restore Staff File Error', error);
+        res.status(500).json({ message: 'Error restoring staff file' });
     }
 };

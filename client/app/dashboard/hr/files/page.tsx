@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
-import { Search, Plus, FileInput, X } from 'lucide-react';
+import { Search, Plus, FileInput, X, Archive } from 'lucide-react';
+import { useAuth } from '../../../../hooks/useAuth';
 
 interface FileUser {
     id: string;
@@ -30,6 +31,7 @@ interface FileUser {
 
 export default function FileRegistryPage() {
     const router = useRouter();
+    const { user } = useAuth();
     const [files, setFiles] = useState<FileUser[]>([]);
     const [filteredFiles, setFilteredFiles] = useState<FileUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -106,16 +108,24 @@ export default function FileRegistryPage() {
     return (
         <div className="p-6 min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Staff File Registry</h1>
-                    <p className="text-sm text-gray-500">Manage all staff digital dossiers</p>
+                    <h2 className="text-2xl font-bold text-gray-800">File Registry</h2>
+                    <p className="text-gray-500 text-sm">Manage official digitized staff profiles and records</p>
                 </div>
-
-                <div className="flex gap-2">
+                <div className="flex gap-3">
+                    {['HR_ADMIN', 'SUPER_USER'].includes(user?.role || '') && (
+                        <button
+                            onClick={() => router.push('/dashboard/hr/archive')}
+                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 shadow-sm text-sm font-medium"
+                        >
+                            <Archive size={16} className="text-gray-500" />
+                            View Archive
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowExistingModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                        className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 shadow-sm text-sm font-medium"
                     >
                         <FileInput size={16} />
                         Add Existing File

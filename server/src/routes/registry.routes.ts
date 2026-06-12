@@ -3,7 +3,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { uploadDocument, getStaffDossier, deleteDocument, updateDocument } from '../controllers/document.controller';
 import { transferStaff, batchTransfer, getTransferHistory, getCenters } from '../controllers/transfer.controller';
-import { createStaffFile, addExistingFile, getJobFiles, getStaffFile, deleteStaffFile } from '../controllers/hr.controller';
+import { createStaffFile, addExistingFile, getJobFiles, getStaffFile, deleteStaffFile, getArchivedFiles, restoreStaffFile } from '../controllers/hr.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -36,6 +36,8 @@ const fileRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN];
 
 router.post('/files/create', requireRole(fileRoles), createStaffFile);
 router.post('/files/existing', requireRole(fileRoles), addExistingFile);
+router.get('/files/archive', requireRole([Role.HR_ADMIN, Role.SUPER_USER]), getArchivedFiles);
+router.post('/files/archive/:id/restore', requireRole([Role.HR_ADMIN, Role.SUPER_USER]), restoreStaffFile);
 router.get('/files/:id', requireRole(fileRoles), getStaffFile);
 router.get('/files', requireRole(fileRoles), getJobFiles);
 router.delete('/files/:id', requireRole(fileRoles), deleteStaffFile);
