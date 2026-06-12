@@ -4,10 +4,14 @@ import { useState, useEffect } from 'react';
 import api from '../../../lib/api';
 import Link from 'next/link';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus, FileText } from 'lucide-react';
+import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
+import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
 
 export default function LeavesPage() {
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+    const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
 
     useEffect(() => {
         fetchMyLeaves();
@@ -80,20 +84,22 @@ export default function LeavesPage() {
                     <p className="text-sm text-gray-500 mt-1">Track and manage your leave requests and sabbatical applications</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <Link
-                        href="/dashboard/leaves/sabbatical"
+                    <button
+                        type="button"
+                        onClick={() => setIsSabbaticalModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2 border border-gray-300 rounded-xl bg-white hover:bg-gray-50 text-gray-750 text-xs font-bold transition-all shadow-sm"
                     >
                         <FileText size={14} />
                         <span>Sabbatical Apply</span>
-                    </Link>
-                    <Link
-                        href="/dashboard/leaves/apply"
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsApplyModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
                     >
                         <Plus size={14} />
                         <span>Apply for Leave</span>
-                    </Link>
+                    </button>
                 </div>
             </div>
 
@@ -128,13 +134,14 @@ export default function LeavesPage() {
                         <p className="text-sm text-gray-500">When you submit a leave request, it will appear here with its approval details.</p>
                     </div>
                     <div className="pt-2">
-                        <Link
-                            href="/dashboard/leaves/apply"
+                        <button
+                            type="button"
+                            onClick={() => setIsApplyModalOpen(true)}
                             className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
                         >
                             <Plus size={14} />
                             <span>Apply Now</span>
-                        </Link>
+                        </button>
                     </div>
                 </div>
             ) : (
@@ -190,6 +197,18 @@ export default function LeavesPage() {
                     </div>
                 </div>
             )}
+
+            <ApplyLeaveModal
+                isOpen={isApplyModalOpen}
+                onClose={() => setIsApplyModalOpen(false)}
+                onSuccess={fetchMyLeaves}
+            />
+
+            <ApplySabbaticalModal
+                isOpen={isSabbaticalModalOpen}
+                onClose={() => setIsSabbaticalModalOpen(false)}
+                onSuccess={fetchMyLeaves}
+            />
         </div>
     );
 }
