@@ -41,6 +41,10 @@ export const createStaffFile = async (req: Request, res: Response) => {
         const existing = await prisma.user.findUnique({ where: { email } });
         if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
 
+        if (!stateOfOrigin || !lga) {
+            return res.status(400).json({ message: 'State of Origin and LGA are required.' });
+        }
+
         if (phone) {
             const existingPhone = await prisma.staffProfile.findFirst({ where: { phone } });
             if (existingPhone) {
@@ -130,6 +134,10 @@ export const addExistingFile = async (req: Request, res: Response) => {
 
         const existing = await prisma.user.findUnique({ where: { email } });
         if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
+
+        if (!stateOfOrigin || !lga) {
+            return res.status(400).json({ message: 'State of Origin and LGA are required.' });
+        }
 
         let staffId = manualStaffId;
         if (!staffId) {

@@ -188,6 +188,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">State of Origin</label>
                         <select
                             name="stateOfOrigin"
+                            required
                             className="w-full border p-1.5 rounded mt-0.5"
                             value={formData.stateOfOrigin}
                             onChange={handleChange}
@@ -202,6 +203,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">LGA</label>
                         <select
                             name="lga"
+                            required
                             className="w-full border p-1.5 rounded mt-0.5"
                             value={formData.lga}
                             onChange={handleChange}

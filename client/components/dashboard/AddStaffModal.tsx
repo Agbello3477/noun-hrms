@@ -259,6 +259,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                 <label className="block text-xs font-medium text-gray-700">State of Origin</label>
                                 <select
                                     name="stateOfOrigin"
+                                    required
                                     className="mt-1 w-full border rounded p-2"
                                     value={formData.stateOfOrigin}
                                     onChange={handleChange}
@@ -273,6 +274,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                 <label className="block text-xs font-medium text-gray-700">LGA</label>
                                 <select
                                     name="lga"
+                                    required
                                     className="mt-1 w-full border rounded p-2"
                                     value={formData.lga}
                                     onChange={handleChange}

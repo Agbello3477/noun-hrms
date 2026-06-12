@@ -120,6 +120,10 @@ export const createStaff = async (req: Request, res: Response) => {
             programmeId, facilitatorInfo
         } = req.body;
 
+        if (!stateOfOrigin || !lga) {
+            return res.status(400).json({ message: 'State of Origin and LGA are required.' });
+        }
+
         // 1. Check duplicate email
         const existingEmail = await prisma.user.findUnique({ where: { email } });
         if (existingEmail) {
