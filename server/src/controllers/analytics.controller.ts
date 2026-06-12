@@ -59,10 +59,56 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             _count: { _all: true }
         });
 
+        // 4. Geo-political Zone Distribution
+        const STATE_TO_ZONE: Record<string, string> = {
+            'benue': 'North Central', 'kogi': 'North Central', 'kwara': 'North Central', 
+            'nasarawa': 'North Central', 'niger': 'North Central', 'plateau': 'North Central', 
+            'fct': 'North Central', 'abuja': 'North Central', 'federal capital territory': 'North Central',
+            'adamawa': 'North East', 'bauchi': 'North East', 'borno': 'North East', 
+            'gombe': 'North East', 'taraba': 'North East', 'yobe': 'North East',
+            'jigawa': 'North West', 'kaduna': 'North West', 'kano': 'North West', 
+            'katsina': 'North West', 'kebbi': 'North West', 'sokoto': 'North West', 
+            'zamfara': 'North West',
+            'abia': 'South East', 'anambra': 'South East', 'ebonyi': 'South East', 
+            'enugu': 'South East', 'imo': 'South East',
+            'akwa ibom': 'South South', 'bayelsa': 'South South', 'cross river': 'South South', 
+            'delta': 'South South', 'edo': 'South South', 'rivers': 'South South',
+            'ekiti': 'South West', 'lagos': 'South West', 'ogun': 'South West', 
+            'ondo': 'South West', 'osun': 'South West', 'oyo': 'South West'
+        };
+
+        const stateDist = await prisma.staffProfile.groupBy({
+            by: ['stateOfOrigin'],
+            where: { isDeleted: false },
+            _count: { _all: true }
+        });
+
+        const zoneCounts: Record<string, number> = {
+            'North Central': 0,
+            'North East': 0,
+            'North West': 0,
+            'South East': 0,
+            'South South': 0,
+            'South West': 0,
+            'Not Specified': 0
+        };
+
+        stateDist.forEach(group => {
+            const state = (group.stateOfOrigin || '').trim().toLowerCase();
+            const zone = STATE_TO_ZONE[state] || 'Not Specified';
+            zoneCounts[zone] += group._count._all;
+        });
+
+        const zoneDistribution = Object.entries(zoneCounts).map(([zone, count]) => ({
+            zone,
+            count
+        }));
+
         const result = {
             totalWorkforce: totalStaff,
             activeLeaves: leaveStats,
-            genderDistribution: genderDist
+            genderDistribution: genderDist,
+            zoneDistribution
         };
 
         await redisService.set(CACHE_KEY, result, 30); // 30 seconds cache for better real-time feel

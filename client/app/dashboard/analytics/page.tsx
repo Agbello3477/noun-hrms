@@ -17,6 +17,7 @@ interface AnalyticsData {
         annual: number;
     };
     genderDistribution: { gender: string; _count: { _all: number } }[];
+    zoneDistribution: { zone: string; count: number }[];
 }
 
 export default function AnalyticsPage() {
@@ -120,6 +121,22 @@ export default function AnalyticsPage() {
                         ))}
                         {data.genderDistribution.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No gender data available</p>}
                     </div>
+                </div>
+            </div>
+
+            {/* Geo-Political Zones Distribution */}
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">Geo-Political Zone Demographics</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    {data.zoneDistribution.map((z) => (
+                        <StatRow
+                            key={z.zone}
+                            label={z.zone}
+                            value={z.count}
+                            total={data.totalWorkforce}
+                            color="bg-blue-600"
+                        />
+                    ))}
                 </div>
             </div>
         </div>
