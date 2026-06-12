@@ -419,10 +419,10 @@ export default function RegistryQueriesPage() {
 
             {/* Issue Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-lg font-bold mb-4 text-red-600 flex items-center gap-2">
-                            <AlertTriangle size={20} /> Issue Staff Query
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-xl font-bold mb-4 text-red-650 flex items-center gap-2 border-b pb-3 border-gray-100">
+                            <AlertTriangle size={22} className="text-red-600" /> Issue Staff Query
                         </h3>
                         <form onSubmit={handleIssueQuery} className="space-y-4">
 

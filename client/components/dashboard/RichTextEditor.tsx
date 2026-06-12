@@ -208,7 +208,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           onMouseUp={checkCommandStates}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className="p-4 min-h-[160px] max-h-[350px] overflow-y-auto outline-none text-sm text-black prose max-w-none focus:outline-none"
+          className="p-4 min-h-[260px] max-h-[500px] overflow-y-auto outline-none text-sm text-black prose max-w-none focus:outline-none"
         />
         {!value && placeholder && (
           <div className="absolute top-4 left-4 text-gray-400 text-sm pointer-events-none select-none">
