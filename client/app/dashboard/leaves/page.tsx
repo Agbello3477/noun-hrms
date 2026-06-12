@@ -169,8 +169,8 @@ export default function LeavesPage() {
                                                     to {new Date(leave.endDate).toLocaleDateString()}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 max-w-xs text-sm text-gray-600 truncate" title={leave.reason}>
-                                                {leave.reason || 'N/A'}
+                                            <td className="px-6 py-4 max-w-xs text-sm text-gray-600 truncate" title={(leave.reason || '').replace(/<[^>]*>/g, '')}>
+                                                {(leave.reason || '').replace(/<[^>]*>/g, '') || 'N/A'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col gap-1.5 items-start">

@@ -138,8 +138,8 @@ export default function UnitLeavesPage() {
                                                 {duration} Days
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={leave.reason}>
-                                            {leave.reason}
+                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={(leave.reason || '').replace(/<[^>]*>/g, '')}>
+                                            {(leave.reason || '').replace(/<[^>]*>/g, '') || 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
@@ -227,9 +227,10 @@ export default function UnitLeavesPage() {
                                 </div>
                                 <div className="col-span-2 border-t pt-2 border-gray-200">
                                     <span className="text-gray-400 block text-xs">Reason</span>
-                                    <p className="text-gray-700 text-xs mt-1 italic leading-relaxed">
-                                        "{selectedLeave.reason || 'No reason provided'}"
-                                    </p>
+                                    <div 
+                                        dangerouslySetInnerHTML={{ __html: selectedLeave.reason || 'No reason provided' }} 
+                                        className="text-gray-700 text-xs mt-1 prose max-w-none leading-relaxed" 
+                                    />
                                 </div>
                             </div>
                         </div>

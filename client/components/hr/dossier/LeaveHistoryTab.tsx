@@ -56,7 +56,9 @@ export default function LeaveHistoryTab({ staffId }: { staffId: string }) {
                                         {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}<br/>
                                         <span className="text-xs text-gray-400">({leave.durationDays} days)</span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={leave.reason}>{leave.reason}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={(leave.reason || '').replace(/<[^>]*>/g, '')}>
+                                        {(leave.reason || '').replace(/<[^>]*>/g, '') || 'N/A'}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
                                             ${leave.status === 'APPROVED' ? 'bg-green-100 text-green-800' : 

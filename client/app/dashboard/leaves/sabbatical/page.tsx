@@ -5,6 +5,7 @@ import api from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
 import { FileText, AlertCircle, Upload, CheckCircle } from 'lucide-react';
+import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
 
 export default function SabbaticalPage() {
     const router = useRouter();
@@ -61,12 +62,12 @@ export default function SabbaticalPage() {
 
             const documentUrl = uploadRes.data.url;
 
-            // 2. Submit Leave Request
+            // 2. Submit Leave Request (saving with raw HTML format link)
             await api.post('/api/leaves/apply', {
                 type: 'SABBATICAL', // Must match backend enum
                 startDate,
                 endDate,
-                reason: reason + `\n\n[Attached Research Plan](${documentUrl})`
+                reason: reason + `<br/><br/><a href="${documentUrl}" target="_blank" class="text-blue-600 underline font-semibold">[Attached Research Plan]</a>`
             });
 
             router.push('/dashboard/leaves'); // Redirect to listing
@@ -130,10 +131,11 @@ export default function SabbaticalPage() {
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700">Research Topic / Abstract</label>
-                        <textarea required rows={4} className="w-full p-2 border rounded"
+                        <RichTextEditor
+                            value={reason}
+                            onChange={setReason}
                             placeholder="Briefly describe your research goals..."
-                            value={reason} onChange={e => setReason(e.target.value)}
-                        ></textarea>
+                        />
                     </div>
 
                     <div className="space-y-2">

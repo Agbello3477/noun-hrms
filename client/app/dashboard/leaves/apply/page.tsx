@@ -5,6 +5,8 @@ import { useState } from 'react';
 import api from '../../../../lib/api';
 import { useRouter } from 'next/navigation';
 
+import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
+
 export default function ApplyLeavePage() {
     const router = useRouter();
     const [type, setType] = useState('ANNUAL');
@@ -86,15 +88,12 @@ export default function ApplyLeavePage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                        <textarea
-                            className="w-full border rounded p-2"
-                            rows={4}
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
+                        <RichTextEditor
                             value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            required
+                            onChange={setReason}
                             placeholder="Brief reason or handover notes..."
-                        ></textarea>
+                        />
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4">
