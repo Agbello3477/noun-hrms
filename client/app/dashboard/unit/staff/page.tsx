@@ -17,6 +17,7 @@ interface Staff {
         unit?: { name: string };
         studyCenter?: { name: string };
         leaves?: any[];
+        status?: string;
     };
 }
 

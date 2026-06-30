@@ -43,6 +43,7 @@ interface User {
         lga: string | null;
         address: string | null;
         passportUrl: string | null;
+        status?: string | null;
     };
 }
 
