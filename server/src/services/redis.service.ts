@@ -50,6 +50,32 @@ class RedisService {
         }
     }
 
+    // Atomic increment with expiration
+    async incr(key: string, ttlSeconds: number): Promise<number> {
+        if (!this.isEnabled || !this.client) return 0;
+        try {
+            const count = await this.client.incr(key);
+            if (count === 1) {
+                await this.client.expire(key, ttlSeconds);
+            }
+            return count;
+        } catch (error) {
+            console.error('Redis incr error:', error);
+            return 0;
+        }
+    }
+
+    // Fetch key remaining expiration time (TTL) in seconds
+    async ttl(key: string): Promise<number> {
+        if (!this.isEnabled || !this.client) return -1;
+        try {
+            return await this.client.ttl(key);
+        } catch (error) {
+            console.error('Redis ttl error:', error);
+            return -1;
+        }
+    }
+
     // Pattern based delete (use cautiously)
     async clearPattern(pattern: string): Promise<void> {
         if (!this.isEnabled || !this.client) return;

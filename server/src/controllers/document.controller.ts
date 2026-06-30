@@ -38,9 +38,26 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
 
         // 1. Permission Check
         if (uploaderId !== targetProfile.userId) {
+            const isManagerOrAdmin = [
+                Role.HR_ADMIN,
+                Role.SUPER_USER,
+                Role.ADMIN,
+                Role.STUDY_CENTER_MANAGER,
+                Role.UNIT_HEAD,
+                Role.UNIT_ADMIN
+            ].includes(uploaderRole as any);
+
+            if (!isManagerOrAdmin) {
+                return res.status(403).json({ message: 'Unauthorized: You can only upload files to your own dossier' });
+            }
+
             if (uploaderRole === Role.STUDY_CENTER_MANAGER) {
                 if (targetProfile.centerId !== uploaderProfile?.centerId) {
                     return res.status(403).json({ message: 'Unauthorized: Cannot upload for staff in another center' });
+                }
+            } else if ([Role.UNIT_HEAD, Role.UNIT_ADMIN].includes(uploaderRole as any)) {
+                if (targetProfile.unitId !== uploaderProfile?.unitId) {
+                    return res.status(403).json({ message: 'Unauthorized: Cannot upload for staff in another unit' });
                 }
             }
         }

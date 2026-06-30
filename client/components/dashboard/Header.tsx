@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
+import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, ChevronRight } from 'lucide-react';
 import api from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -13,6 +13,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
+    const [showPersistentModal, setShowPersistentModal] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const notifiedIdsRef = useRef<Set<string>>(new Set());
 
@@ -72,6 +73,15 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
         return () => clearInterval(interval);
     }, [user, pathname]); // Re-fetch on navigation too
 
+    // Synchronize persistent modal trigger with unreadCount
+    useEffect(() => {
+        if (unreadCount > 0) {
+            setShowPersistentModal(true);
+        } else {
+            setShowPersistentModal(false);
+        }
+    }, [unreadCount]);
+
     const markAllRead = async () => {
         try {
             await api.put('/api/notifications/read-all');
@@ -86,7 +96,6 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
         try {
             await api.put(`/api/notifications/${id}/read`);
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-            // Recalculate unread would require iteration, or simpler:
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error(error);
@@ -101,6 +110,8 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
             default: return <Info size={16} className="text-blue-500" />;
         }
     };
+
+    const unreadNotificationsList = notifications.filter(n => !n.isRead);
 
     return (
         <header className="flex h-16 w-full items-center justify-between bg-white px-4 md:px-8 shadow-sm z-20 relative">
@@ -210,6 +221,80 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                     </div>
                 </div>
             </div>
+
+            {/* System-wide Persistent Alert Modal */}
+            {showPersistentModal && unreadNotificationsList.length > 0 && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-red-100 flex flex-col overflow-hidden animate-scaleUp">
+                        {/* Header */}
+                        <div className="p-6 text-center border-b border-gray-100 bg-red-50/30 flex-shrink-0">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 animate-pulse mb-3 mx-auto">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">System Notification Alert</h3>
+                            <p className="text-xs text-gray-500 mt-1">
+                                You have {unreadCount} unread notification{unreadCount > 1 ? 's' : ''} that require{unreadCount === 1 ? 's' : ''} your immediate attention.
+                            </p>
+                        </div>
+
+                        {/* Body (List of unread notifications) */}
+                        <div className="p-6 overflow-y-auto max-h-[45vh] divide-y divide-gray-100 space-y-4">
+                            {unreadNotificationsList.map((note) => (
+                                <div key={note.id} className="pt-4 first:pt-0 flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="mt-0.5 flex-shrink-0">
+                                            {getIcon(note.type)}
+                                        </div>
+                                        <div className="pr-2">
+                                            <h4 className="text-sm font-bold text-gray-800">{note.title}</h4>
+                                            <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{note.message}</p>
+                                            <span className="text-[10px] text-gray-400 block mt-1">
+                                                {new Date(note.createdAt).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                        {note.link && (
+                                            <Link
+                                                href={note.link}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                onClick={async () => {
+                                                    await markOneRead(note.id);
+                                                }}
+                                                className="inline-flex items-center gap-0.5 text-xs font-bold text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded-md"
+                                            >
+                                                <span>Details</span>
+                                                <ChevronRight size={12} />
+                                            </Link>
+                                        )}
+                                        <button
+                                            onClick={() => markOneRead(note.id)}
+                                            className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-green-200"
+                                            title="Acknowledge"
+                                        >
+                                            <Check size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 flex-shrink-0">
+                            <button
+                                onClick={async () => {
+                                    await markAllRead();
+                                    setShowPersistentModal(false);
+                                }}
+                                className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors text-center"
+                            >
+                                Acknowledge All & Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </header>
     );
 }

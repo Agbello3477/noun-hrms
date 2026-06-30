@@ -3,7 +3,12 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Role, Cadre } from '@prisma/client';
+import { redisService } from '../services/redis.service';
 import prisma from '../prisma';
+
+// Memory fallback for lockouts and failure counts if Redis is offline
+const memoryLockoutStore = new Map<string, number>(); // email -> lockedUntil timestamp
+const memoryFailureStore = new Map<string, number>(); // email -> count
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -165,8 +170,80 @@ export const applyPendingTransfers = async (userId: string) => {
 
 export const login = async (req: Request, res: Response) => {
     try {
-        console.log('Login Request Body:', req.body);
         const { email, password } = req.body; // email field holds either email or staffId from UI
+        console.log('Login attempt for:', email);
+
+        const identifier = String(email).trim().toLowerCase();
+        const lockoutKey = `login:lockout:${identifier}`;
+        const failureKey = `login:failures:${identifier}`;
+
+        const isRedisActive = (redisService as any).isEnabled && (redisService as any).client;
+        let lockedTimeLeft = 0;
+
+        if (isRedisActive) {
+            try {
+                const ttl = await redisService.ttl(lockoutKey);
+                if (ttl > 0) {
+                    lockedTimeLeft = ttl;
+                }
+            } catch (err) {
+                console.error('Redis check lockout error:', err);
+            }
+        }
+
+        if (lockedTimeLeft <= 0) {
+            // Check memory store
+            const lockedUntil = memoryLockoutStore.get(identifier);
+            if (lockedUntil && Date.now() < lockedUntil) {
+                lockedTimeLeft = Math.ceil((lockedUntil - Date.now()) / 1000);
+            }
+        }
+
+        if (lockedTimeLeft > 0) {
+            return res.status(423).json({
+                message: `This account has been temporarily locked due to too many failed login attempts. Please try again after ${Math.ceil(lockedTimeLeft / 60)} minutes.`,
+                retryAfterSeconds: lockedTimeLeft
+            });
+        }
+
+        const handleLoginFailure = async () => {
+            let failures = 0;
+            if (isRedisActive) {
+                try {
+                    failures = await redisService.incr(failureKey, 900); // 15 minutes window
+                } catch (err) {
+                    console.error('Redis incr failure error:', err);
+                }
+            }
+
+            if (failures === 0) {
+                // Fallback to memory count
+                const count = (memoryFailureStore.get(identifier) || 0) + 1;
+                memoryFailureStore.set(identifier, count);
+                failures = count;
+            }
+
+            if (failures >= 5) {
+                const lockoutSeconds = 900; // 15 minutes
+                if (isRedisActive) {
+                    try {
+                        await redisService.set(lockoutKey, 'locked', lockoutSeconds);
+                        await redisService.del(failureKey);
+                    } catch (err) {
+                        console.error('Redis set lockout error:', err);
+                    }
+                }
+                memoryLockoutStore.set(identifier, Date.now() + (lockoutSeconds * 1000));
+                memoryFailureStore.delete(identifier);
+
+                return res.status(423).json({
+                    message: 'Too many failed login attempts. This account has been temporarily locked for 15 minutes.',
+                    retryAfterSeconds: lockoutSeconds
+                });
+            }
+
+            return res.status(401).json({ message: 'Incorrect Password or Email' });
+        };
 
         // Find user by either email or staffProfile.staffId with deep profile relations
         const user = await prisma.user.findFirst({
@@ -189,7 +266,7 @@ export const login = async (req: Request, res: Response) => {
         console.log('User found:', user ? user.email : 'NOT FOUND');
 
         if (!user) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return await handleLoginFailure();
         }
 
         if (!user.isActive) {
@@ -202,8 +279,20 @@ export const login = async (req: Request, res: Response) => {
         console.log(`Password match check for ${user.email}:`, isMatch);
 
         if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return await handleLoginFailure();
         }
+
+        // Clear failures and lockout on successful login
+        if (isRedisActive) {
+            try {
+                await redisService.del(failureKey);
+                await redisService.del(lockoutKey);
+            } catch (err) {
+                console.error('Redis clear credentials error:', err);
+            }
+        }
+        memoryFailureStore.delete(identifier);
+        memoryLockoutStore.delete(identifier);
 
         // Apply pending transfers
         await applyPendingTransfers(user.id);

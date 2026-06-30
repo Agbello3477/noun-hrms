@@ -126,6 +126,12 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
         // @ts-ignore
         const userId = req.user.id;
 
+        const CACHE_KEY = `manager:dashboard:stats:${userId}`;
+        const cached = await redisService.get(CACHE_KEY);
+        if (cached) {
+            return res.json(cached);
+        }
+
         const managerProfile = await prisma.staffProfile.findUnique({
             where: { userId },
             select: { id: true, unitId: true, centerId: true }
@@ -139,13 +145,15 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
         const centerId = managerProfile.centerId;
 
         if (!unitId && !centerId) {
-            return res.json({
+            const emptyResult = {
                 totalStaff: 0,
                 activeLeaves: 0,
                 pendingLeaves: 0,
                 pendingAper: 0,
                 activeQueries: 0
-            });
+            };
+            await redisService.set(CACHE_KEY, emptyResult, 30);
+            return res.json(emptyResult);
         }
 
         const staffOrClause = [
@@ -153,65 +161,70 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
             ...(centerId ? [{ centerId }] : [])
         ];
 
-        // 1. Total Staff count
-        const totalStaff = await prisma.user.count({
-            where: {
-                isActive: true,
-                staffProfile: {
-                    OR: staffOrClause
-                }
-            }
-        });
-
-        // 2. Active Leaves
         const today = new Date();
-        const activeLeaves = await prisma.leaveRequest.count({
-            where: {
-                status: LeaveStatus.APPROVED,
-                endDate: { gte: today },
-                staff: {
-                    OR: staffOrClause
-                }
-            }
-        });
 
-        // 3. Pending Leaves
-        const pendingLeaves = await prisma.leaveRequest.count({
-            where: {
-                status: LeaveStatus.PENDING,
-                staff: {
-                    OR: staffOrClause
-                }
-            }
-        });
-
-        // 4. Pending Appraisal Reviews
-        const pendingAper = await prisma.aperForm.count({
-            where: {
-                status: AperStatus.SUBMITTED,
-                staff: {
-                    OR: staffOrClause
-                }
-            }
-        });
-
-        // 5. Active Queries
-        const activeQueries = await prisma.staffQuery.count({
-            where: {
-                status: 'OPEN',
-                staff: {
-                    OR: staffOrClause
-                }
-            }
-        });
-
-        res.json({
+        // Run counts in parallel
+        const [
             totalStaff,
             activeLeaves,
             pendingLeaves,
             pendingAper,
             activeQueries
-        });
+        ] = await Promise.all([
+            prisma.user.count({
+                where: {
+                    isActive: true,
+                    staffProfile: {
+                        OR: staffOrClause
+                    }
+                }
+            }),
+            prisma.leaveRequest.count({
+                where: {
+                    status: LeaveStatus.APPROVED,
+                    endDate: { gte: today },
+                    staff: {
+                        OR: staffOrClause
+                    }
+                }
+            }),
+            prisma.leaveRequest.count({
+                where: {
+                    status: LeaveStatus.PENDING,
+                    staff: {
+                        OR: staffOrClause
+                    }
+                }
+            }),
+            prisma.aperForm.count({
+                where: {
+                    status: AperStatus.SUBMITTED,
+                    staff: {
+                        OR: staffOrClause
+                    }
+                }
+            }),
+            prisma.staffQuery.count({
+                where: {
+                    status: 'OPEN',
+                    staff: {
+                        OR: staffOrClause
+                    }
+                }
+            })
+        ]);
+
+        const result = {
+            totalStaff,
+            activeLeaves,
+            pendingLeaves,
+            pendingAper,
+            activeQueries
+        };
+
+        await redisService.set(CACHE_KEY, result, 30); // 30 seconds cache for better real-time feel
+
+        res.json(result);
 
     } catch (error) {
         console.error('Error fetching manager dashboard stats:', error);

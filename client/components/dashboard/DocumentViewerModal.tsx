@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Download, Printer, Loader2 } from 'lucide-react';
+import { X, Download, Printer, Loader2, FileText } from 'lucide-react';
 import api from '../../lib/api';
 
 interface DocumentViewerModalProps {
@@ -13,6 +13,10 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
     const [blobUrl, setBlobUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    const ext = document.url.split('.').pop()?.toLowerCase() || '';
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext);
+    const isPDF = ext === 'pdf';
 
     useEffect(() => {
         const fetchFile = async () => {
@@ -84,8 +88,9 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={handlePrint}
-                            disabled={loading || !!error}
+                            disabled={loading || !!error || (!isImage && !isPDF)}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium"
+                            title={(!isImage && !isPDF) ? "Print is only supported for PDFs and images" : ""}
                         >
                             <Printer size={16} /> Print
                         </button>
@@ -123,15 +128,35 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                     )}
                     
                     {!loading && !error && blobUrl && (
-                        document.url.match(/\.(jpg|jpeg|png)$/i) ? (
+                        isImage ? (
                             <img src={blobUrl} alt={document.title} className="w-full h-full object-contain" />
-                        ) : (
+                        ) : isPDF ? (
                             <object data={blobUrl} type="application/pdf" className="w-full h-full">
                                 <div className="flex flex-col items-center justify-center h-full text-gray-300">
                                     <p>Your browser does not support inline PDFs.</p>
                                     <button onClick={handleDownload} className="mt-4 text-nounGreen underline font-bold bg-white px-4 py-2 rounded">Download PDF instead</button>
                                 </div>
                             </object>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-gray-300 p-6 text-center max-w-md mx-auto space-y-4">
+                                <div className="w-16 h-16 bg-gray-800 text-gray-400 rounded-full flex items-center justify-center shadow-inner">
+                                    <FileText size={32} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="font-bold text-lg text-white">Preview Not Available</h4>
+                                    <p className="text-sm text-gray-400">
+                                        This file type ({ext.toUpperCase()}) cannot be previewed directly in the web browser. Please download it to view the content.
+                                    </p>
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={handleDownload} 
+                                    className="mt-2 bg-nounGreen hover:bg-green-800 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow flex items-center gap-2 mx-auto animate-pulse"
+                                >
+                                    <Download size={16} />
+                                    Download Document
+                                </button>
+                            </div>
                         )
                     )}
                 </div>

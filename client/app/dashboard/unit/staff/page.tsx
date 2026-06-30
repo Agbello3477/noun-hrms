@@ -114,12 +114,7 @@ export default function UnitStaffPage() {
                                         return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
                                     };
 
-                                    const activeLeave = staff.staffProfile?.leaves?.find((l: any) => {
-                                        const start = parseUTCDateToLocal(l.startDate);
-                                        const end = parseUTCDateToLocal(l.endDate);
-                                        return today >= start && today <= end;
-                                    });
-                                    const isOnLeave = !!activeLeave;
+                                    const isOnLeave = staff.staffProfile?.status === 'ON_LEAVE';
 
                                     return (
                                         <tr key={staff.id} className="hover:bg-gray-50">

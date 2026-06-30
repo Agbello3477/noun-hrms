@@ -143,15 +143,27 @@ export const allocateCourse = async (req: AuthRequest, res: Response) => {
     try {
         const { courseCode, session, students, staffId } = req.body;
 
-        // Use provided staffId, or fall back to the requester's own profile ID
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            include: { staffProfile: true }
+        });
+        if (!user?.staffProfile) return res.status(403).json({ message: 'Profile required' });
+
         let targetStaffId = staffId;
 
-        if (!targetStaffId) {
-            const user = await prisma.user.findUnique({
-                where: { id: req.user!.id },
-                include: { staffProfile: true }
-            });
-            if (!user?.staffProfile) return res.status(400).json({ message: 'Profile required' });
+        if (targetStaffId && targetStaffId !== user.staffProfile.id) {
+            const isAuthorized = [
+                Role.ADMIN,
+                Role.SUPER_USER,
+                Role.UNIT_HEAD,
+                Role.UNIT_ADMIN,
+                Role.HR_ADMIN
+            ].includes(req.user!.role as any);
+
+            if (!isAuthorized) {
+                return res.status(403).json({ message: 'Unauthorized: Only unit managers or admins can allocate courses to other staff members' });
+            }
+        } else if (!targetStaffId) {
             targetStaffId = user.staffProfile.id;
         }
 

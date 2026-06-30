@@ -8,7 +8,7 @@ const router = Router();
 // Only HR Admin, Super User, and maybe Audit/Director can see global analytics
 router.get('/dashboard',
     verifyToken,
-    requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.AUDIT, Role.UNIT_HEAD]),
+    requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.AUDIT, Role.UNIT_HEAD, Role.ADMIN]),
     getHRAnalytics
 );
 

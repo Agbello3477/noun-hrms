@@ -217,6 +217,14 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             }
         });
 
+        // Update StaffProfile status to ON_LEAVE if leave is approved
+        if (status === 'APPROVED' && existingLeave.staffId) {
+            await prisma.staffProfile.update({
+                where: { id: existingLeave.staffId },
+                data: { status: 'ON_LEAVE' }
+            });
+        }
+
         // Trigger notifications asynchronously
         if (existingLeave.staff?.user) {
             const staffUser = existingLeave.staff.user;

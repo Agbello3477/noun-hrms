@@ -3,6 +3,7 @@ import { issueQuery, respondToQuery, getQueries, resolveQuery } from '../control
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 import { upload } from '../middleware/upload.middleware';
+import { validate, queryIssueSchema, queryRespondSchema } from '../middleware/validation';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ const router = Router();
 router.post('/issue',
     verifyToken,
     requireRole([Role.HR_ADMIN, Role.SUPER_USER, Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN]),
+    validate(queryIssueSchema),
     issueQuery
 );
 
@@ -17,6 +19,7 @@ router.post('/issue',
 router.post('/respond',
     verifyToken,
     upload.single('file'),
+    validate(queryRespondSchema),
     respondToQuery
 );
 

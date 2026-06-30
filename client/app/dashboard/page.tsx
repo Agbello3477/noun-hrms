@@ -187,7 +187,7 @@ export default function DashboardHome() {
         return today >= start && today <= end;
     });
 
-    const isOnLeave = !!activeLeave;
+    const isOnLeave = user?.staffProfile?.status === 'ON_LEAVE';
     const dutyStatus = isOnLeave ? 'ON LEAVE' : 'ACTIVE';
     
     // Days applied for (duration of the active leave, or most recent request if not active)

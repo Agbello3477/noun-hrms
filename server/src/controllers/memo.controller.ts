@@ -47,6 +47,83 @@ export const createMemo = async (req: Request, res: Response) => {
             }
         }
 
+        // Check if sender is a Unit Manager (not HR/Admin)
+        // @ts-ignore
+        const senderRole = req.user?.role;
+        const isHR = ['SUPER_USER', 'HR_ADMIN', 'ADMIN'].includes(senderRole);
+
+        let managerProfile = null;
+        if (!isHR) {
+            managerProfile = await prisma.staffProfile.findUnique({
+                where: { userId: senderId }
+            });
+            if (!managerProfile || (!managerProfile.unitId && !managerProfile.centerId)) {
+                return res.status(400).json({ message: 'Your manager profile is not associated with any unit or study center' });
+            }
+        }
+
+        // Enforce boundary checks for Unit Managers
+        if (!isHR && managerProfile) {
+            if (parsedRecipientIds.length > 0) {
+                // Validate multiple selected recipients
+                const recipientsProfiles = await prisma.staffProfile.findMany({
+                    where: {
+                        userId: { in: parsedRecipientIds }
+                    },
+                    select: { userId: true, unitId: true, centerId: true }
+                });
+
+                const invalidRecipient = recipientsProfiles.find(p => {
+                    const sameUnit = managerProfile.unitId && p.unitId === managerProfile.unitId;
+                    const sameCenter = managerProfile.centerId && p.centerId === managerProfile.centerId;
+                    return !sameUnit && !sameCenter;
+                });
+
+                if (invalidRecipient || recipientsProfiles.length !== parsedRecipientIds.length) {
+                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center' });
+                }
+            } else if (recipientId) {
+                // Validate single recipient
+                const recipientProfile = await prisma.staffProfile.findUnique({
+                    where: { userId: recipientId },
+                    select: { unitId: true, centerId: true }
+                });
+
+                if (!recipientProfile) {
+                    return res.status(404).json({ message: 'Recipient staff member profile not found' });
+                }
+
+                const sameUnit = managerProfile.unitId && recipientProfile.unitId === managerProfile.unitId;
+                const sameCenter = managerProfile.centerId && recipientProfile.centerId === managerProfile.centerId;
+
+                if (!sameUnit && !sameCenter) {
+                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center' });
+                }
+            } else {
+                // Broadcast mode: fetch all active users in manager's unit/center
+                const unitStaffProfiles = await prisma.staffProfile.findMany({
+                    where: {
+                        OR: [
+                            ...(managerProfile.unitId ? [{ unitId: managerProfile.unitId }] : []),
+                            ...(managerProfile.centerId ? [{ centerId: managerProfile.centerId }] : [])
+                        ],
+                        user: { isActive: true }
+                    },
+                    select: { userId: true }
+                });
+
+                const recipientUserIds = unitStaffProfiles
+                    .map(p => p.userId)
+                    .filter(id => id !== senderId); // Exclude the sender
+
+                if (recipientUserIds.length === 0) {
+                    return res.status(400).json({ message: 'No staff members found in your unit/center to send the memo to' });
+                }
+
+                parsedRecipientIds = recipientUserIds;
+            }
+        }
+
         // Handle multiple selected staff recipients
         if (parsedRecipientIds.length > 0) {
             const validRecipients = await prisma.user.findMany({
@@ -196,7 +273,8 @@ export const getMemos = async (req: Request, res: Response) => {
                 where: {
                     OR: [
                         { recipientId: null },
-                        { recipientId: userId }
+                        { recipientId: userId },
+                        { senderId: userId }
                     ]
                 },
                 orderBy: { createdAt: 'desc' },
@@ -217,6 +295,9 @@ export const getMemos = async (req: Request, res: Response) => {
                                 }
                             }
                         }
+                    },
+                    _count: {
+                        select: { responses: true }
                     }
                 }
             });
@@ -239,8 +320,26 @@ export const getMemoById = async (req: Request, res: Response) => {
         const role = req.user?.role;
         const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(role);
 
-        if (isHR) {
-            // HR sees full memo and all responses
+        // Fetch memo first to check sender/recipient
+        const memoCheck = await prisma.memo.findUnique({
+            where: { id },
+            select: { senderId: true, recipientId: true }
+        });
+
+        if (!memoCheck) {
+            return res.status(404).json({ message: 'Memo not found' });
+        }
+
+        const isSender = memoCheck.senderId === userId;
+        const isRecipient = memoCheck.recipientId === userId;
+        const isBroadcast = memoCheck.recipientId === null;
+
+        if (!isHR && !isSender && !isRecipient && !isBroadcast) {
+            return res.status(403).json({ message: 'Access denied to this memo' });
+        }
+
+        if (isHR || isSender) {
+            // HR/Sender sees full memo and all responses
             const memo = await prisma.memo.findUnique({
                 where: { id },
                 include: {
@@ -281,10 +380,6 @@ export const getMemoById = async (req: Request, res: Response) => {
                 }
             });
 
-            if (!memo) {
-                return res.status(404).json({ message: 'Memo not found' });
-            }
-
             res.json(memo);
         } else {
             // Staff sees memo + their own response (if any)
@@ -305,15 +400,6 @@ export const getMemoById = async (req: Request, res: Response) => {
                     }
                 }
             });
-
-            if (!memo) {
-                return res.status(404).json({ message: 'Memo not found' });
-            }
-
-            // Access check: only broadcast or addressed to them
-            if (memo.recipientId && memo.recipientId !== userId) {
-                return res.status(403).json({ message: 'Access denied to this memo' });
-            }
 
             const myResponse = await prisma.memoResponse.findFirst({
                 where: { memoId: id, staffId: userId }

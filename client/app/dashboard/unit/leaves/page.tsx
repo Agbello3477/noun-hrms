@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import { CheckCircle, XCircle, Clock, User, ArrowRight, Eye } from 'lucide-react';
+import DocumentViewerModal from '../../../../components/dashboard/DocumentViewerModal';
 
 export default function UnitLeavesPage() {
     const [leaves, setLeaves] = useState<any[]>([]);
@@ -15,6 +16,7 @@ export default function UnitLeavesPage() {
     const [approvedDays, setApprovedDays] = useState<number>(0);
     const [rejectionReason, setRejectionReason] = useState<string>('');
     const [submitting, setSubmitting] = useState<boolean>(false);
+    const [viewingAttachment, setViewingAttachment] = useState<any | null>(null);
 
     // Check if the current manager is an HOD (Head of Department)
     const isHOD = currentUser?.role === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'DEPARTMENT';
@@ -228,7 +230,27 @@ export default function UnitLeavesPage() {
                                 <div className="col-span-2 border-t pt-2 border-gray-200">
                                     <span className="text-gray-400 block text-xs">Reason</span>
                                     <div 
-                                        dangerouslySetInnerHTML={{ __html: selectedLeave.reason || 'No reason provided' }} 
+                                        onClick={(e) => {
+                                            const target = e.target as HTMLElement;
+                                            const anchor = target.closest('a');
+                                            if (anchor) {
+                                                const href = anchor.getAttribute('href');
+                                                if (href && href.includes('/uploads/')) {
+                                                    e.preventDefault();
+                                                    const relativeUrl = href.substring(href.indexOf('/uploads/'));
+                                                    setViewingAttachment({
+                                                        id: 'leave-attachment',
+                                                        title: anchor.textContent || 'Supporting Document',
+                                                        url: relativeUrl,
+                                                        type: 'SUPPORTING_DOCUMENT'
+                                                    });
+                                                }
+                                            }
+                                        }}
+                                        dangerouslySetInnerHTML={{ 
+                                            __html: (selectedLeave.reason || 'No reason provided')
+                                                .replace(/href="\/uploads\//g, `href="${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}/uploads/`)
+                                        }} 
                                         className="text-gray-700 text-xs mt-1 prose max-w-none leading-relaxed" 
                                     />
                                 </div>
@@ -288,7 +310,7 @@ export default function UnitLeavesPage() {
                         </button>
                         <button
                             onClick={() => handleActionSubmit('REJECTED')}
-                            className="px-5 py-2.5 bg-red-650 hover:bg-red-755 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+                            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
                             disabled={submitting}
                         >
                             Reject
@@ -314,6 +336,13 @@ export default function UnitLeavesPage() {
                     </div>
                 </div>
             </div>
+        )}
+
+        {viewingAttachment && (
+            <DocumentViewerModal
+                document={viewingAttachment}
+                onClose={() => setViewingAttachment(null)}
+            />
         )}
     </div>
 );

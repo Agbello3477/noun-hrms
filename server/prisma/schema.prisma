@@ -196,6 +196,7 @@ model StaffProfile {
   // Phase 13b: APER
   aperForms       AperForm[]
 
+  status      String   @default("ACTIVE") // ACTIVE, ON_LEAVE, SUSPENDED, etc.
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
 
@@ -203,6 +204,9 @@ model StaffProfile {
   updatedAt   DateTime @updatedAt
 
   @@map("staff_profiles")
+  @@index([unitId])
+  @@index([centerId])
+  @@index([isDeleted])
 }
 
 model AcademicProgramme {
@@ -429,6 +433,9 @@ model LeaveRequest {
   updatedAt   DateTime    @updatedAt
 
   @@map("leave_requests")
+  @@index([staffId])
+  @@index([status])
+  @@index([endDate])
 }
 
 model Attendance {
@@ -545,6 +552,9 @@ model FileRequest {
   updatedAt   DateTime      @updatedAt
 
   @@map("file_requests")
+  @@index([staffId])
+  @@index([status])
+  @@index([requesterId])
 }
 
 enum QueryStatus {
@@ -575,6 +585,9 @@ model StaffQuery {
   updatedAt   DateTime    @updatedAt
 
   @@map("staff_queries")
+  @@index([staffId])
+  @@index([status])
+  @@index([copyHR])
 }
 
 model SystemSequence {
@@ -632,6 +645,8 @@ model AperForm {
 
   @@unique([staffId, sessionId]) // One form per session per staff
   @@map("aper_forms")
+  @@index([staffId])
+  @@index([status])
 }
 
 model Memo {
@@ -650,6 +665,9 @@ model Memo {
   updatedAt      DateTime       @updatedAt
 
   @@map("memos")
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([createdAt])
 }
 
 model MemoResponse {

@@ -22,6 +22,7 @@ import notificationRoutes from './routes/notification.routes';
 import aperRoutes from './routes/aper.routes';
 import memoRoutes from './routes/memo.routes';
 import systemRoutes from './routes/system.routes';
+import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 
 dotenv.config();
 
@@ -42,8 +43,12 @@ app.use(express.urlencoded({ extended: true }));
 // Serve Uploads (Local Mock)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Routes
-app.use('/api/auth', authRoutes);
+// Routes (Authenticated & Rate Limited)
+app.use('/api/auth', authRateLimit, authRoutes);
+
+// General API rate limit applied to all other endpoints
+app.use('/api', apiRateLimit);
+
 app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/payroll', payrollRouter);
