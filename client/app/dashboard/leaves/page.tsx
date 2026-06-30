@@ -194,6 +194,19 @@ function LeavesContent() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col gap-1.5 items-start">
                                                     {getStatusBadge(leave.status)}
+                                                    {leave.status === 'APPROVED' && leave.approvedBy?.staffProfile?.signatureUrl && (
+                                                        <div className="mt-1 flex items-center gap-2 border border-slate-100 bg-slate-50/70 p-1.5 rounded-lg shadow-sm">
+                                                            <div className="text-[9px] text-gray-500 font-bold leading-tight">
+                                                                Signed by:
+                                                                <div className="text-gray-700 font-extrabold truncate max-w-[80px]">{leave.approvedBy.name}</div>
+                                                            </div>
+                                                            <img 
+                                                                src={leave.approvedBy.staffProfile.signatureUrl} 
+                                                                alt="Signature" 
+                                                                className="max-h-[22px] object-contain border bg-white rounded p-0.5" 
+                                                            />
+                                                        </div>
+                                                    )}
                                                     {leave.status === 'REJECTED' && leave.rejectionReason && (
                                                         <span className="text-[11px] text-red-500 max-w-[200px] whitespace-normal leading-tight italic">
                                                             "{leave.rejectionReason}"

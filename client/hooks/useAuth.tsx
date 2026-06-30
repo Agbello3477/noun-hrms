@@ -12,7 +12,7 @@ interface User {
     mustChangePassword?: boolean;
 
     // Phase 3 Enterprise Roles
-    role: 'SUPER_USER' | 'HR_ADMIN' | 'UNIT_HEAD' | 'UNIT_ADMIN' | 'BURSARY' | 'AUDIT' | 'STUDY_CENTER_MANAGER' | 'STAFF' | 'ADMIN';
+    role: 'SUPER_USER' | 'HR_ADMIN' | 'UNIT_HEAD' | 'UNIT_ADMIN' | 'BURSARY' | 'AUDIT' | 'STUDY_CENTER_MANAGER' | 'STAFF' | 'ADMIN' | 'VICE_CHANCELLOR';
 
     staffProfile?: {
         id: string;
@@ -44,6 +44,7 @@ interface User {
         address: string | null;
         passportUrl: string | null;
         status?: string | null;
+        signatureUrl?: string | null;
     };
 }
 

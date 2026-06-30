@@ -15,7 +15,8 @@ export default function AnalyticsLayout({ children }: { children: React.ReactNod
                 'SUPER_USER',
                 'AUDIT',
                 'UNIT_HEAD',
-                'ADMIN'
+                'ADMIN',
+                'VICE_CHANCELLOR'
             ].includes(user.role);
             if (!hasAccess) {
                 router.push('/dashboard/access-denied');

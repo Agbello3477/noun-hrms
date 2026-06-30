@@ -16,6 +16,10 @@ interface Memo {
     sender: {
         name: string;
         email: string;
+        role?: string;
+        staffProfile?: {
+            signatureUrl?: string | null;
+        } | null;
     };
     recipientId?: string | null;
     recipient?: {
@@ -212,8 +216,22 @@ function MemosContent() {
                         </div>
 
                         {/* Content Card */}
-                        <div className="flex-1 bg-gray-50/50 p-6 rounded-2xl border border-gray-150 leading-relaxed text-gray-800 text-sm">
-                            <div dangerouslySetInnerHTML={{ __html: selectedMemo.content }} className="prose max-w-none text-black" />
+                        <div className="flex-1 bg-gray-50/50 p-6 rounded-2xl border border-gray-150 leading-relaxed text-gray-800 text-sm flex flex-col justify-between min-h-[180px]">
+                            <div dangerouslySetInnerHTML={{ __html: selectedMemo.content }} className="prose max-w-none text-black flex-1" />
+                            {selectedMemo.sender?.staffProfile?.signatureUrl && (
+                                <div className="mt-8 pt-4 border-t border-gray-200/60 flex items-center justify-between">
+                                    <div className="text-[10px] text-gray-400 font-medium">Verified Directive</div>
+                                    <div className="text-right space-y-1.5">
+                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Authorized Signature</div>
+                                        <img 
+                                            src={selectedMemo.sender.staffProfile.signatureUrl} 
+                                            alt="Authorized Signature" 
+                                            className="max-h-[45px] object-contain border bg-white rounded p-0.5 ml-auto shadow-sm" 
+                                        />
+                                        <div className="text-[9px] text-gray-400 font-medium">{new Date(selectedMemo.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Attachment Section */}

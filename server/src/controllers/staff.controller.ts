@@ -515,3 +515,32 @@ export const getTransferredStaff = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+export const uploadSignature = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const userId = req.user?.id;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ message: 'No signature file provided' });
+        }
+
+        // Upload signature file using StorageService
+        const signatureUrl = await StorageService.uploadFile(file);
+
+        // Update VC's StaffProfile
+        await prisma.staffProfile.update({
+            where: { userId },
+            data: { signatureUrl }
+        });
+
+        res.json({
+            message: 'Signature uploaded successfully',
+            signatureUrl
+        });
+    } catch (error: any) {
+        console.error('Upload signature error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};

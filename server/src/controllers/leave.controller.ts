@@ -53,6 +53,20 @@ export const getMyLeaves = async (req: Request, res: Response) => {
 
         const leaves = await prisma.leaveRequest.findMany({
             where: { staffId: staffProfile.id },
+            include: {
+                approvedBy: {
+                    select: {
+                        name: true,
+                        role: true,
+                        staffProfile: {
+                            select: {
+                                rank: true,
+                                signatureUrl: true
+                            }
+                        }
+                    }
+                }
+            },
             orderBy: { createdAt: 'desc' }
         });
         res.json(leaves);

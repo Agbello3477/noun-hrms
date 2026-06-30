@@ -50,7 +50,7 @@ export const createMemo = async (req: Request, res: Response) => {
         // Check if sender is a Unit Manager (not HR/Admin)
         // @ts-ignore
         const senderRole = req.user?.role;
-        const isHR = ['SUPER_USER', 'HR_ADMIN', 'ADMIN'].includes(senderRole);
+        const isHR = ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR'].includes(senderRole);
 
         let managerProfile = null;
         if (!isHR) {
@@ -249,7 +249,13 @@ export const getMemos = async (req: Request, res: Response) => {
                     sender: {
                         select: {
                             name: true,
-                            email: true
+                            email: true,
+                            role: true,
+                            staffProfile: {
+                                select: {
+                                    signatureUrl: true
+                                }
+                            }
                         }
                     },
                     recipient: {
@@ -282,7 +288,13 @@ export const getMemos = async (req: Request, res: Response) => {
                     sender: {
                         select: {
                             name: true,
-                            email: true
+                            email: true,
+                            role: true,
+                            staffProfile: {
+                                select: {
+                                    signatureUrl: true
+                                }
+                            }
                         }
                     },
                     recipient: {
@@ -344,7 +356,16 @@ export const getMemoById = async (req: Request, res: Response) => {
                 where: { id },
                 include: {
                     sender: {
-                        select: { name: true, email: true }
+                        select: {
+                            name: true,
+                            email: true,
+                            role: true,
+                            staffProfile: {
+                                select: {
+                                    signatureUrl: true
+                                }
+                            }
+                        }
                     },
                     recipient: {
                         select: {
@@ -387,7 +408,16 @@ export const getMemoById = async (req: Request, res: Response) => {
                 where: { id },
                 include: {
                     sender: {
-                        select: { name: true, email: true }
+                        select: {
+                            name: true,
+                            email: true,
+                            role: true,
+                            staffProfile: {
+                                select: {
+                                    signatureUrl: true
+                                }
+                            }
+                        }
                     },
                     recipient: {
                         select: {

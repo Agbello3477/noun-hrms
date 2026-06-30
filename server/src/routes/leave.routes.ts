@@ -19,7 +19,8 @@ const approvalRoles = [
     Role.STUDY_CENTER_MANAGER,
     Role.HR_ADMIN,
     Role.ADMIN,
-    Role.SUPER_USER
+    Role.SUPER_USER,
+    Role.VICE_CHANCELLOR
 ];
 
 router.get('/pending', requireRole(approvalRoles), getUnitPendingLeaves);

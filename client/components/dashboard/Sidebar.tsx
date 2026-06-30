@@ -55,20 +55,21 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     // Logic for Enterprise Roles
     const isSuperUser = role === 'SUPER_USER';
     const isAdmin = role === 'ADMIN' || isSuperUser; // Legacy Admin support
+    const isVC = role === 'VICE_CHANCELLOR';
 
     // Registry / HR
-    const isRegistry = role === 'HR_ADMIN' || isAdmin;
+    const isRegistry = role === 'HR_ADMIN' || isVC || isAdmin;
 
     // Bursary / Finance
-    const isBursary = role === 'BURSARY' || role === 'AUDIT' || isAdmin;
-    const isAudit = role === 'AUDIT' || isAdmin;
+    const isBursary = role === 'BURSARY' || role === 'AUDIT' || isVC || isAdmin;
+    const isAudit = role === 'AUDIT' || isVC || isAdmin;
 
     // Unit Heads (Directors/Deans) & Managers
-    const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isAdmin;
+    const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isVC || isAdmin;
     const isManager = role === 'STUDY_CENTER_MANAGER';
 
     // Academic check
-    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isSuperUser || isAdmin;
+    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isVC || isSuperUser || isAdmin;
 
     return (
         <aside className="h-screen w-52 flex-none border-r border-gray-200 bg-white overflow-y-auto">

@@ -65,6 +65,28 @@ async function main() {
         }
     });
 
+    // VC User
+    const vcUser = await prisma.user.upsert({
+        where: { email: 'vc@noun.edu.ng' },
+        update: {
+            role: Role.VICE_CHANCELLOR
+        },
+        create: {
+            email: 'vc@noun.edu.ng',
+            name: 'Prof. Vice Chancellor',
+            password,
+            role: Role.VICE_CHANCELLOR,
+            staffProfile: {
+                create: {
+                    level: 'CONTISS 15',
+                    rank: 'Vice Chancellor',
+                    centerId: abujaCenter.id,
+                    status: 'ACTIVE'
+                }
+            }
+        }
+    });
+
     // 4. Bursary Auditor (HQ)
     await prisma.user.upsert({
         where: { email: 'bursary@noun.edu.ng' },

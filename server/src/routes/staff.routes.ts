@@ -17,7 +17,8 @@ const viewRoles = [
     Role.STUDY_CENTER_MANAGER,
     Role.UNIT_HEAD,
     Role.UNIT_ADMIN,
-    Role.ADMIN
+    Role.ADMIN,
+    Role.VICE_CHANCELLOR
 ];
 
 // Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin
@@ -50,10 +51,13 @@ router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);
 router.post('/', requireRole(manageRoles), createStaff);
 
 import { upload } from '../middleware/upload.middleware';
-import { updateStaff } from '../controllers/staff.controller';
+import { updateStaff, uploadSignature } from '../controllers/staff.controller';
 
 // Update Profile (Self or Admin)
 // Use upload.single('passport')
 router.put('/:id', upload.single('passport'), updateStaff);
+
+// Upload VC Signature
+router.post('/signature', upload.single('file'), uploadSignature);
 
 export default router;

@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
-    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History
+    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -35,7 +35,158 @@ export default function DashboardHome() {
     });
     const [loadingManagerStats, setLoadingManagerStats] = useState(true);
 
-    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN';
+    // VC Memo Broadcaster & Signature States
+    const [allStaff, setAllStaff] = useState<any[]>([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+    const [memoTitle, setMemoTitle] = useState('');
+    const [memoContent, setMemoContent] = useState('');
+    const [memoRecipientType, setMemoRecipientType] = useState<'ALL' | 'INDIVIDUAL'>('ALL');
+    const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+    const [memoAttachment, setMemoAttachment] = useState<File | null>(null);
+    const [sendingMemo, setSendingMemo] = useState(false);
+    const [memoSuccess, setMemoSuccess] = useState('');
+    const [memoError, setMemoError] = useState('');
+
+    // Signature states
+    const [uploadingSig, setUploadingSig] = useState(false);
+    const [sigSuccess, setSigSuccess] = useState('');
+    const [sigError, setSigError] = useState('');
+    const [currentSigUrl, setCurrentSigUrl] = useState('');
+
+    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN' || user?.role === 'VICE_CHANCELLOR';
+    const isVC = user?.role === 'VICE_CHANCELLOR';
+
+    useEffect(() => {
+        if (user?.staffProfile?.signatureUrl) {
+            setCurrentSigUrl(user.staffProfile.signatureUrl);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        const fetchAllStaff = async () => {
+            if (user?.role !== 'VICE_CHANCELLOR') return;
+            try {
+                setLoadingStaff(true);
+                const { data } = await api.get('/api/staff');
+                setAllStaff(data || []);
+            } catch (error) {
+                console.error('Failed to fetch all staff for VC', error);
+            } finally {
+                setLoadingStaff(false);
+            }
+        };
+        fetchAllStaff();
+    }, [user]);
+
+    const handleVCUploadSignature = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingSig(true);
+        setSigSuccess('');
+        setSigError('');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const { data } = await api.post('/api/staff/signature', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setCurrentSigUrl(data.signatureUrl);
+            setSigSuccess('Signature uploaded successfully!');
+        } catch (error: any) {
+            console.error('Failed to upload signature', error);
+            setSigError(error.response?.data?.message || 'Failed to upload signature. Please try again.');
+        } finally {
+            setUploadingSig(false);
+        }
+    };
+
+    const handleVCSendMemo = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!memoTitle || !memoContent) {
+            setMemoError('Title and content are required.');
+            return;
+        }
+
+        setSendingMemo(true);
+        setMemoSuccess('');
+        setMemoError('');
+
+        const formData = new FormData();
+        formData.append('title', memoTitle);
+        formData.append('content', memoContent);
+        formData.append('allowResponses', 'true');
+
+        if (memoRecipientType === 'INDIVIDUAL' && selectedRecipients.length > 0) {
+            selectedRecipients.forEach(id => {
+                formData.append('recipientIds', id);
+            });
+        }
+
+        if (memoAttachment) {
+            formData.append('file', memoAttachment);
+        }
+
+        try {
+            await api.post('/api/memos', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setMemoSuccess('Memo sent and signed successfully!');
+            setMemoTitle('');
+            setMemoContent('');
+            setSelectedRecipients([]);
+            setMemoAttachment(null);
+            // Refresh memos timeline
+            const [memosRes, transfersRes, queriesRes, analyticsRes] = await Promise.all([
+                api.get('/api/memos').catch(() => ({ data: [] })),
+                api.get('/api/registry/transfers').catch(() => ({ data: [] })),
+                api.get('/api/queries').catch(() => ({ data: [] })),
+                api.get('/api/analytics/dashboard').catch(() => ({ data: null }))
+            ]);
+            const fetchedMemos = (memosRes.data || []).map((m: any) => {
+                const isDirect = !!m.recipient;
+                return {
+                    id: `memo-${m.id}`,
+                    type: 'MEMO',
+                    title: isDirect ? `Direct Memo Sent to ${m.recipient.name}` : 'Memo Broadcast Sent',
+                    description: isDirect 
+                        ? `Direct memo: "${m.title}" sent to ${m.recipient.name} (${m.recipient.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
+                        : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
+                    createdAt: m.createdAt,
+                    color: isDirect 
+                        ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
+                        : 'border-nounGreen bg-green-50/40 text-green-700'
+                };
+            });
+            const fetchedTransfers = (transfersRes.data || []).map((t: any) => ({
+                id: `transfer-${t.id}`,
+                type: 'TRANSFER',
+                title: 'Staff Transfer Approved',
+                description: `${t.staff?.name || 'Staff member'} transferred to ${t.newCenterId || 'Headquarters'}`,
+                createdAt: t.createdAt,
+                color: 'border-orange-500 bg-orange-50/40 text-orange-700'
+            }));
+            const fetchedQueries = (queriesRes.data || []).map((q: any) => ({
+                id: `query-${q.id}`,
+                type: 'QUERY',
+                title: 'Disciplinary Query Issued',
+                description: `Query "${q.title}" issued to ${q.staff?.user?.name || 'Staff member'}`,
+                createdAt: q.createdAt,
+                color: 'border-blue-500 bg-blue-50/40 text-blue-700'
+            }));
+            const combined = [...fetchedMemos, ...fetchedTransfers, ...fetchedQueries]
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setActivities(combined);
+        } catch (error: any) {
+            console.error('Failed to send memo', error);
+            setMemoError(error.response?.data?.message || 'Failed to send memo. Please check inputs.');
+        } finally {
+            setSendingMemo(false);
+        }
+    };
+
     const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
 
     useEffect(() => {
@@ -215,6 +366,309 @@ export default function DashboardHome() {
     });
     const usedDays = approvedAnnualThisYear.reduce((sum, l) => sum + (l.durationDays || 0), 0);
     const remainingDays = Math.max(0, 30 - usedDays);
+
+    // VC Executive Portal Dashboard View
+    if (isVC) {
+        const activeLeavesCount = Object.values(analytics.activeLeaves || {}).reduce((acc: number, val: any) => acc + (typeof val === 'number' ? val : 0), 0);
+        const activeDutyCount = Math.max(0, analytics.totalWorkforce - activeLeavesCount);
+
+        return (
+            <div className="space-y-8 animate-in fade-in duration-500">
+                {/* Executive Welcome Banner */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 p-8 text-white shadow-2xl">
+                    <div className="relative z-10 max-w-3xl">
+                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-3.5 py-1 rounded-full uppercase tracking-wider mb-4 inline-block">
+                            Vice Chancellor Executive Office
+                        </span>
+                        <h1 className="text-3xl font-black tracking-tight mb-2">
+                            Institutional Oversight & Administration
+                        </h1>
+                        <p className="text-slate-300 text-sm leading-relaxed">
+                            Complete visibility of workforce distribution, active leave pipelines, disciplinary audits, and digital signature authorization across HQ registry and all study centers.
+                        </p>
+                    </div>
+                    {/* Visual Highlights */}
+                    <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl"></div>
+                </div>
+
+                {/* Overall University Statistics */}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Workforce</h3>
+                                <p className="mt-2 text-3xl font-black text-gray-900">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : analytics.totalWorkforce}
+                                </p>
+                            </div>
+                            <span className="p-3 bg-blue-50 text-blue-600 rounded-xl"><FileText size={20} /></span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Active registered profiles</p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">On Active Leave</h3>
+                                <p className="mt-2 text-3xl font-black text-gray-900">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : activeLeavesCount}
+                                </p>
+                            </div>
+                            <span className="p-3 bg-green-50 text-green-600 rounded-xl"><Calendar size={20} /></span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Away from duty with approval</p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Active Duty</h3>
+                                <p className="mt-2 text-3xl font-black text-gray-900">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : activeDutyCount}
+                                </p>
+                            </div>
+                            <span className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><MapPin size={20} /></span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Currently available at placement</p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Action</h3>
+                                <p className="mt-2 text-3xl font-black text-red-600">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : pendingActionsCount}
+                                </p>
+                            </div>
+                            <span className="p-3 bg-red-50 text-red-600 rounded-xl"><AlertTriangle size={20} /></span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Transfers & disciplinary audits</p>
+                    </div>
+                </div>
+
+                {/* Digital Signature & Executive Memo Broadcast */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Column: Digital Signature Widget */}
+                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150 space-y-6">
+                        <div>
+                            <h2 className="text-lg font-black text-gray-900">Digital Signature Authorization</h2>
+                            <p className="text-xs text-gray-500 mt-1">Upload and configure your official signature to automatically authorize approvals and memos.</p>
+                        </div>
+
+                        {/* Signature Preview Panel */}
+                        <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center min-h-[160px] bg-slate-50/50">
+                            {currentSigUrl ? (
+                                <div className="text-center space-y-3">
+                                    <img src={currentSigUrl} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
+                                    <span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">Active Signature</span>
+                                </div>
+                            ) : (
+                                <div className="text-center space-y-2 text-gray-400">
+                                    <FileText size={40} className="mx-auto text-gray-300" />
+                                    <p className="text-xs font-medium">No signature uploaded yet</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* File Upload Field */}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Upload New Signature</label>
+                            <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={handleVCUploadSignature}
+                                className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                                disabled={uploadingSig}
+                            />
+                            {uploadingSig && <p className="text-xs text-blue-600 mt-2 font-medium">Uploading your signature...</p>}
+                            {sigSuccess && <p className="text-xs text-green-600 mt-2 font-semibold">✔ {sigSuccess}</p>}
+                            {sigError && <p className="text-xs text-red-600 mt-2 font-semibold">❌ {sigError}</p>}
+                        </div>
+                    </div>
+
+                    {/* Middle & Right: Memo Broadcaster */}
+                    <div className="lg:col-span-2 rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                        <div className="mb-6">
+                            <h2 className="text-lg font-black text-gray-900">Executive Memo Broadcaster</h2>
+                            <p className="text-xs text-gray-500 mt-1">Issue official directives with digital signature verification to staff members or broadcast to the entire university.</p>
+                        </div>
+
+                        <form onSubmit={handleVCSendMemo} className="space-y-4">
+                            {memoSuccess && (
+                                <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs font-semibold rounded-xl">
+                                    ✔ {memoSuccess}
+                                </div>
+                            )}
+                            {memoError && (
+                                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl">
+                                    ❌ {memoError}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Recipient Category</label>
+                                    <select
+                                        value={memoRecipientType}
+                                        onChange={(e) => setMemoRecipientType(e.target.value as any)}
+                                        className="w-full rounded-xl border border-gray-200 p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="ALL">Broadcast to All Staff</option>
+                                        <option value="INDIVIDUAL">Select Individual Staff Member(s)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Attachment (Optional)</label>
+                                    <input
+                                        type="file"
+                                        onChange={(e) => setMemoAttachment(e.target.files?.[0] || null)}
+                                        className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+
+                            {memoRecipientType === 'INDIVIDUAL' && (
+                                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
+                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Select Recipients</label>
+                                    {loadingStaff ? (
+                                        <div className="text-xs text-gray-400 flex items-center gap-1.5"><Loader2 className="animate-spin h-3 w-3" /> Loading staff directory...</div>
+                                    ) : (
+                                        <div className="max-h-[140px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                                            {allStaff.map(staff => {
+                                                const isChecked = selectedRecipients.includes(staff.id);
+                                                return (
+                                                    <label key={staff.id} className="flex items-center gap-2.5 text-xs text-gray-700 cursor-pointer hover:text-gray-900">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSelectedRecipients([...selectedRecipients, staff.id]);
+                                                                } else {
+                                                                    setSelectedRecipients(selectedRecipients.filter(id => id !== staff.id));
+                                                                }
+                                                            }}
+                                                            className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                                                        />
+                                                        <span className="font-medium">{staff.name}</span>
+                                                        <span className="text-[10px] text-gray-400">({staff.email} | {staff.staffProfile?.rank || 'Staff'})</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Memo Subject / Title</label>
+                                <input
+                                    type="text"
+                                    value={memoTitle}
+                                    onChange={(e) => setMemoTitle(e.target.value)}
+                                    placeholder="Enter memo subject..."
+                                    className="w-full rounded-xl border border-gray-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Directive / Content</label>
+                                <textarea
+                                    value={memoContent}
+                                    onChange={(e) => setMemoContent(e.target.value)}
+                                    placeholder="Draft your directive here..."
+                                    rows={4}
+                                    className="w-full rounded-xl border border-gray-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    required
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={sendingMemo}
+                                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 text-white font-bold text-sm shadow-md hover:from-blue-800 hover:to-indigo-800 transition-all disabled:opacity-50"
+                            >
+                                {sendingMemo ? (
+                                    <>
+                                        <Loader2 className="animate-spin h-4 w-4" />
+                                        <span>Signing and Broadcasting Directive...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileText size={16} />
+                                        <span>Sign and Broadcast Memo Directive</span>
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* University Activity Thread */}
+                <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                    <h2 className="mb-6 text-lg font-black text-gray-900 flex items-center gap-2">
+                        <History className="text-blue-600" size={20} />
+                        Global University Activity Feed
+                    </h2>
+                    
+                    <div className="max-h-[550px] overflow-y-auto pr-2 scrollbar-thin relative">
+                        {loadingActivities ? (
+                            <div className="flex justify-center items-center py-12">
+                                <Loader2 className="animate-spin text-nounGreen" size={28} />
+                            </div>
+                        ) : activities.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500 text-sm bg-gray-50 rounded-2xl border border-dashed">
+                                No recent activity recorded.
+                            </div>
+                        ) : (
+                            <div className="relative pl-6 border-l-2 border-gray-150 space-y-6 ml-3 py-1">
+                                {activities.map((act) => {
+                                    let IconComponent = FileText;
+                                    let iconBg = 'bg-blue-50 text-blue-700 border-blue-150';
+                                    if (act.type === 'TRANSFER') {
+                                        IconComponent = MapPin;
+                                        iconBg = 'bg-amber-50 text-amber-700 border-amber-150';
+                                    } else if (act.type === 'QUERY') {
+                                        IconComponent = AlertTriangle;
+                                        iconBg = 'bg-red-50 text-red-700 border-red-155';
+                                    }
+
+                                    return (
+                                        <div key={act.id} className="relative group">
+                                            <div className={`absolute -left-[37px] top-1.5 h-7 w-7 rounded-full border flex items-center justify-center shadow-sm ${iconBg} transition-transform group-hover:scale-110 bg-white`}>
+                                                <IconComponent size={13} />
+                                            </div>
+
+                                            <div className="bg-white rounded-xl border border-gray-150 p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-gray-250">
+                                                <div className="flex justify-between items-start gap-4 flex-wrap">
+                                                    <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-900 transition-colors">
+                                                        {act.title}
+                                                    </h4>
+                                                    <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border px-2 py-0.5 rounded-md">
+                                                        {new Date(act.createdAt).toLocaleString(undefined, {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                                                    {act.description}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Premium Manager Dashboard View
     if (!isRegistry && isUnitManager) {

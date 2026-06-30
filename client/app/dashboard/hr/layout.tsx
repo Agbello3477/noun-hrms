@@ -10,7 +10,7 @@ export default function HRAdminLayout({ children }: { children: React.ReactNode 
 
     useEffect(() => {
         if (!isLoading && user) {
-            const isHR = user.role === 'HR_ADMIN' || user.role === 'SUPER_USER' || user.role === 'ADMIN';
+            const isHR = user.role === 'HR_ADMIN' || user.role === 'SUPER_USER' || user.role === 'ADMIN' || user.role === 'VICE_CHANCELLOR';
             if (!isHR) {
                 router.push('/dashboard/access-denied');
             }

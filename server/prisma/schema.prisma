@@ -84,6 +84,7 @@ enum Role {
   STUDY_CENTER_MANAGER // Center Director (Special Unit Head)
   STAFF         // Regular Staff
   ADMIN         // Legacy System Admin (keep for safety)
+  VICE_CHANCELLOR // Vice Chancellor
 }
 
 enum Cadre {
@@ -197,6 +198,7 @@ model StaffProfile {
   aperForms       AperForm[]
 
   status      String   @default("ACTIVE") // ACTIVE, ON_LEAVE, SUSPENDED, etc.
+  signatureUrl String?
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
 

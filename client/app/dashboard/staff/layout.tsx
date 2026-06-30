@@ -16,7 +16,8 @@ export default function StaffDirectoryLayout({ children }: { children: React.Rea
                 'STUDY_CENTER_MANAGER',
                 'UNIT_HEAD',
                 'UNIT_ADMIN',
-                'ADMIN'
+                'ADMIN',
+                'VICE_CHANCELLOR'
             ].includes(user.role);
             if (!hasAccess) {
                 router.push('/dashboard/access-denied');
