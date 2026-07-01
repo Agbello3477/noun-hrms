@@ -371,6 +371,7 @@ export const getMe = async (req: Request, res: Response) => {
                 name: true,
                 role: true,
                 isActive: true,
+                mustChangePassword: true,
                 createdAt: true,
                 staffProfile: {
                     include: {
