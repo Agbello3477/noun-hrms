@@ -80,6 +80,29 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
     try {
         // @ts-ignore
         const userId = req.user.id;
+        // @ts-ignore
+        const userRole = req.user.role;
+
+        const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(userRole as any);
+
+        if (isGlobalApprover) {
+            const leaves = await prisma.leaveRequest.findMany({
+                where: {
+                    status: { in: [LeaveStatus.PENDING, LeaveStatus.RECOMMENDED] }
+                },
+                include: {
+                    staff: {
+                        select: {
+                            user: { select: { name: true, email: true } },
+                            level: true,
+                            unit: true,
+                            studyCenter: true
+                        }
+                    }
+                }
+            });
+            return res.json(leaves);
+        }
 
         const headProfile = await prisma.staffProfile.findUnique({
             where: { userId },
@@ -204,6 +227,62 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             }
         });
         if (!existingLeave) return res.status(404).json({ message: 'Leave request not found' });
+
+        // @ts-ignore
+        const approverRole = req.user.role;
+        const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(approverRole as any);
+
+        if (!isGlobalApprover) {
+            const approverProfile = await prisma.staffProfile.findUnique({
+                where: { userId: approverId },
+                include: { unit: true }
+            });
+            if (!approverProfile) {
+                return res.status(403).json({ message: 'Unauthorized: Approver profile not found' });
+            }
+
+            const targetStaff = existingLeave.staff;
+            if (!targetStaff) {
+                return res.status(400).json({ message: 'Target staff not found' });
+            }
+
+            let isAuthorized = false;
+
+            // Check if they are study center manager or unit head/admin of same unit/center
+            if (approverProfile.centerId && targetStaff.centerId === approverProfile.centerId) {
+                isAuthorized = true;
+            } else if (approverProfile.unitId && targetStaff.unitId === approverProfile.unitId) {
+                isAuthorized = true;
+            } else if (approverProfile.unit && approverProfile.unit.type === 'FACULTY') {
+                // Dean check
+                const facultyCode = approverProfile.unit.code || '';
+                const mapping: Record<string, string[]> = {
+                    'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                    'FAC-LAW': ['DEP-LAW'],
+                    'FAC-SOCIA': ['DEP-POL'],
+                    'FAC-MANAG': ['DEP-ACC'],
+                    'FAC-EDUCA': ['DEP-EDT'],
+                    'FAC-HEALT': ['DEP-PBH'],
+                    'FAC-AGRIC': ['DEP-AGR'],
+                    'FAC-ARTS': ['DEP-ART'],
+                    'FAC-COMPU': ['DEP-CMP']
+                };
+                const departmentCodes = mapping[facultyCode] || [];
+                
+                const deptUnits = await prisma.unit.findMany({
+                    where: { code: { in: departmentCodes } },
+                    select: { id: true }
+                });
+                const deptIds = deptUnits.map(d => d.id);
+                if (targetStaff.unitId && deptIds.includes(targetStaff.unitId)) {
+                    isAuthorized = true;
+                }
+            }
+
+            if (!isAuthorized) {
+                return res.status(403).json({ message: 'Unauthorized: Staff is not under your supervision boundary' });
+            }
+        }
 
         let updatedEndDate = existingLeave.endDate;
         let updatedDuration = existingLeave.durationDays;

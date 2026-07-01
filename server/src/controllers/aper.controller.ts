@@ -1,6 +1,6 @@
 
 import { Request, Response } from 'express';
-import { AperStatus } from '@prisma/client';
+import { AperStatus, Role } from '@prisma/client';
 import prisma from '../prisma';
 
 interface AuthRequest extends Request {
@@ -183,6 +183,38 @@ export const reviewForm = async (req: AuthRequest, res: Response) => {
         const { formId } = req.params;
         const { supervisorScores, supervisorComments, status } = req.body;
         const supervisorId = req.user?.id;
+
+        const form = await prisma.aperForm.findUnique({
+            where: { id: formId },
+            include: { staff: true }
+        });
+        if (!form) return res.status(404).json({ message: 'Appraisal form not found' });
+
+        const uploaderRole = req.user?.role;
+        const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(uploaderRole as any);
+
+        if (!isGlobalApprover) {
+            const supervisorProfile = await prisma.staffProfile.findUnique({
+                where: { userId: supervisorId },
+                select: { unitId: true, centerId: true }
+            });
+            if (!supervisorProfile) {
+                return res.status(403).json({ message: 'Unauthorized: Supervisor profile not found' });
+            }
+
+            const targetStaff = form.staff;
+            let isAuthorized = false;
+
+            if (uploaderRole === Role.STUDY_CENTER_MANAGER && supervisorProfile.centerId && targetStaff.centerId === supervisorProfile.centerId) {
+                isAuthorized = true;
+            } else if ([Role.UNIT_HEAD, Role.UNIT_ADMIN].includes(uploaderRole as any) && supervisorProfile.unitId && targetStaff.unitId === supervisorProfile.unitId) {
+                isAuthorized = true;
+            }
+
+            if (!isAuthorized) {
+                return res.status(403).json({ message: 'Unauthorized: This staff member is outside your supervision boundary' });
+            }
+        }
 
         // Ensure status is valid for review (e.g. REVIEWED or COMPLETED)
         const updatedForm = await prisma.aperForm.update({

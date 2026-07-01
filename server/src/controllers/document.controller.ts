@@ -44,7 +44,8 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
                 Role.ADMIN,
                 Role.STUDY_CENTER_MANAGER,
                 Role.UNIT_HEAD,
-                Role.UNIT_ADMIN
+                Role.UNIT_ADMIN,
+                Role.VICE_CHANCELLOR
             ].includes(uploaderRole as any);
 
             if (!isManagerOrAdmin) {
@@ -105,13 +106,13 @@ export const getStaffDossier = async (req: AuthRequest, res: Response) => {
 
         let isAuthorized = false;
 
-        // 1. HR registry users, supers, and standard admins can view all dossiers
-        if ([Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(viewerRole as any)) {
+        // 1. HR registry users, supers, standard admins, and the Vice Chancellor can view all dossiers
+        if ([Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(viewerRole as any)) {
             isAuthorized = true;
         }
 
-        // 2. Staff can see own dossier
-        if (viewerRole === Role.STAFF && viewerId === targetProfile.userId) {
+        // 2. Any user can see their own dossier
+        if (viewerId === targetProfile.userId) {
             isAuthorized = true;
         }
 

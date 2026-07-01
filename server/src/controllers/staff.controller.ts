@@ -55,7 +55,7 @@ export const getStaffById = async (req: Request, res: Response) => {
         if (!staff || (staff.staffProfile && staff.staffProfile.isDeleted)) return res.status(404).json({ message: 'Staff not found' });
 
         const isSelf = requesterId === staff.id;
-        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(requesterRole as any);
+        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(requesterRole as any);
 
         if (!isSelf && !isAdmin) {
             // Check if they are a manager/unit admin
@@ -342,7 +342,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         const isSelf = updaterId === user.id;
-        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(updaterRole as any);
+        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(updaterRole as any);
 
         let isManager = false;
         if ([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN].includes(updaterRole as any)) {

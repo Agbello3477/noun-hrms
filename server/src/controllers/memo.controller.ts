@@ -239,7 +239,7 @@ export const getMemos = async (req: Request, res: Response) => {
         const role = req.user?.role;
         // @ts-ignore
         const userId = req.user?.id;
-        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(role);
+        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role);
 
         let memos;
         if (isHR) {
@@ -330,7 +330,7 @@ export const getMemoById = async (req: Request, res: Response) => {
         const userId = req.user?.id;
         // @ts-ignore
         const role = req.user?.role;
-        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(role);
+        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role);
 
         // Fetch memo first to check sender/recipient
         const memoCheck = await prisma.memo.findUnique({

@@ -20,7 +20,7 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
         if (!staff) return res.status(404).json({ message: 'Staff profile not found' });
 
         // Boundary check for non-global managers
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER].includes(issuerRole as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(issuerRole as any);
         if (!isHQAdmin) {
             if ([Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN].includes(issuerRole as any)) {
                 const issuerProfile = await prisma.staffProfile.findUnique({
@@ -130,7 +130,7 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
 
         let whereClause: any = {};
 
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER].includes(role as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(role as any);
         if (isHQAdmin) {
             whereClause.OR = [
                 { copyHR: true },
@@ -218,7 +218,7 @@ export const resolveQuery = async (req: AuthRequest, res: Response) => {
 
         if (!existingQuery) return res.status(404).json({ message: 'Query not found' });
 
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER].includes(role as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(role as any);
         if (isHQAdmin) {
             if (!existingQuery.copyHR && existingQuery.issuedById !== userId) {
                 return res.status(403).json({ message: 'Unauthorized: This is an internal-only query and you did not issue it.' });

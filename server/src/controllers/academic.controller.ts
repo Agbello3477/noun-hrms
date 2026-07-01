@@ -9,13 +9,24 @@ interface AuthRequest extends Request {
 
 export const getPublications = async (req: AuthRequest, res: Response) => {
     try {
-        // If query 'staffId' provided (for viewing others), use it. Else use 'me'.
         let targetStaffId = req.query.staffId as string;
 
-        if (!targetStaffId) {
-            // Self
-            // Need to fetch user's profile ID if not in token. 
-            // Our middleware attaches user {id, role} but maybe not staffProfile.id
+        if (targetStaffId) {
+            const targetProfile = await prisma.staffProfile.findUnique({
+                where: { id: targetStaffId }
+            });
+            if (!targetProfile) return res.status(404).json({ message: 'Profile not found' });
+
+            const isSelf = req.user!.id === targetProfile.userId;
+            const isAuthorized = isSelf || [
+                Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR,
+                Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN
+            ].includes(req.user!.role as any);
+
+            if (!isAuthorized) {
+                return res.status(403).json({ message: 'Unauthorized access to this academic data' });
+            }
+        } else {
             const user = await prisma.user.findUnique({
                 where: { id: req.user!.id },
                 include: { staffProfile: true }
@@ -83,7 +94,22 @@ export const getTeachingWorkload = async (req: AuthRequest, res: Response) => {
     try {
         let targetStaffId = req.query.staffId as string;
 
-        if (!targetStaffId) {
+        if (targetStaffId) {
+            const targetProfile = await prisma.staffProfile.findUnique({
+                where: { id: targetStaffId }
+            });
+            if (!targetProfile) return res.status(404).json({ message: 'Profile not found' });
+
+            const isSelf = req.user!.id === targetProfile.userId;
+            const isAuthorized = isSelf || [
+                Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR,
+                Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN
+            ].includes(req.user!.role as any);
+
+            if (!isAuthorized) {
+                return res.status(403).json({ message: 'Unauthorized access to this academic data' });
+            }
+        } else {
             const user = await prisma.user.findUnique({
                 where: { id: req.user!.id },
                 include: { staffProfile: true }
