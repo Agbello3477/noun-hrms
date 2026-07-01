@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 
 export default function DashboardHome() {
-    const { user } = useAuth();
+    const { user, isLoading } = useAuth();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [loadingNotifications, setLoadingNotifications] = useState(true);
     const [leaves, setLeaves] = useState<any[]>([]);
@@ -55,6 +55,7 @@ export default function DashboardHome() {
 
     const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN' || user?.role === 'VICE_CHANCELLOR';
     const isVC = user?.role === 'VICE_CHANCELLOR';
+
 
     useEffect(() => {
         if (user?.staffProfile?.signatureUrl) {
@@ -319,6 +320,16 @@ export default function DashboardHome() {
         }, 30000); // Poll manager stats every 30s
         return () => clearInterval(interval);
     }, [user, isUnitManager]);
+
+    // Guard: show loading spinner while auth state is resolving or user is not yet set
+    // (must be after all hooks to respect React Rules of Hooks)
+    if (isLoading || !user) {
+        return (
+            <div className="flex h-full min-h-[60vh] items-center justify-center">
+                <Loader2 className="h-10 w-10 animate-spin text-nounGreen" />
+            </div>
+        );
+    }
 
     // Calculate leave status and details for current user
     const today = new Date();
