@@ -356,21 +356,21 @@ export default function StaffPage() {
                             >
                                 <div className="p-6 space-y-4">
                                     {/* Card Header (Avatar + Role Badge) */}
-                                    <div className="flex justify-between items-start">
-                                        <div className={`h-14 w-14 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-extrabold text-xl shadow-md transform group-hover:scale-105 transition-transform`}>
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div className={`h-14 w-14 flex-shrink-0 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-extrabold text-xl shadow-md transform group-hover:scale-105 transition-transform`}>
                                             {staff.name?.charAt(0) || 'U'}
                                         </div>
-                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
+                                        <span className={`inline-flex flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
                                             {getRoleDisplayName(staff)}
                                         </span>
                                     </div>
 
                                     {/* Core Bio Info */}
-                                    <div className="space-y-1">
-                                        <h3 className="text-lg font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors">
+                                    <div className="space-y-1 min-w-0">
+                                        <h3 className="text-lg font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors truncate">
                                             {staff.name}
                                         </h3>
-                                        <p className="text-xs font-medium text-gray-400">
+                                        <p className="text-xs font-medium text-gray-400 truncate">
                                             Staff ID: {staff.staffProfile?.staffId || 'N/A'}
                                         </p>
                                     </div>
@@ -445,13 +445,13 @@ export default function StaffPage() {
                                         <tr key={staff.id} className="hover:bg-slate-55/30 transition-colors">
                                             {/* Bio Cell */}
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className={`h-10 w-10 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
                                                         {staff.name?.charAt(0) || 'U'}
                                                     </div>
-                                                    <div>
-                                                        <span className="font-semibold text-gray-900 block">{staff.name}</span>
-                                                        <span className="text-[10px] text-gray-400 font-medium">ID: {staff.staffProfile?.staffId || 'N/A'}</span>
+                                                    <div className="min-w-0">
+                                                        <span className="font-semibold text-gray-900 block truncate max-w-[180px]">{staff.name}</span>
+                                                        <span className="text-[10px] text-gray-400 font-medium truncate block max-w-[180px]">ID: {staff.staffProfile?.staffId || 'N/A'}</span>
                                                     </div>
                                                 </div>
                                             </td>

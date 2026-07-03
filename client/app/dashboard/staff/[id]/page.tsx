@@ -259,12 +259,13 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                         </div>
                     </div>
 
-                    <div className="mt-16 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{staff.name}</h1>
-                            <p className="text-gray-500 font-medium text-sm mt-0.5">{staff.email}</p>
+                    {/* Name / Email / Role row — pl-36 reserves space for the 7rem (112px) avatar + gap */}
+                    <div className="mt-16 pl-36 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="min-w-0">
+                            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">{staff.name}</h1>
+                            <p className="text-gray-500 font-medium text-sm mt-0.5 truncate">{staff.email}</p>
                         </div>
-                        <span className="bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wide">
+                        <span className="flex-shrink-0 bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wide">
                             {displayRole(staff.role, staff.staffProfile?.rank || null)}
                         </span>
                     </div>
