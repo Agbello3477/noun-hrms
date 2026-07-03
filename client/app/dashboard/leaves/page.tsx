@@ -194,19 +194,27 @@ function LeavesContent() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col gap-1.5 items-start">
                                                     {getStatusBadge(leave.status)}
-                                                    {leave.status === 'APPROVED' && leave.approvedBy?.staffProfile?.signatureUrl && (
-                                                        <div className="mt-1 flex items-center gap-2 border border-slate-100 bg-slate-50/70 p-1.5 rounded-lg shadow-sm">
-                                                            <div className="text-[9px] text-gray-500 font-bold leading-tight">
-                                                                Signed by:
-                                                                <div className="text-gray-700 font-extrabold truncate max-w-[80px]">{leave.approvedBy.name}</div>
+
+                                                    {/* Signature block — shown for both APPROVED and REJECTED */}
+                                                    {(leave.status === 'APPROVED' || leave.status === 'REJECTED') && leave.approvedBy?.staffProfile?.signatureUrl && (
+                                                        <div className="mt-1 flex flex-col gap-1 border border-slate-100 bg-slate-50/70 p-2 rounded-xl shadow-sm min-w-[130px]">
+                                                            <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wide">
+                                                                {leave.status === 'APPROVED' ? 'Approved by' : 'Rejected by'}:
                                                             </div>
-                                                            <img 
-                                                                src={leave.approvedBy.staffProfile.signatureUrl} 
-                                                                alt="Signature" 
-                                                                className="max-h-[22px] object-contain border bg-white rounded p-0.5" 
+                                                            <div className="text-[10px] text-gray-700 font-extrabold truncate max-w-[120px]">
+                                                                {leave.approvedBy.name}
+                                                            </div>
+                                                            <img
+                                                                src={leave.approvedBy.staffProfile.signatureUrl}
+                                                                alt="Signature"
+                                                                className="max-h-[26px] object-contain border bg-white rounded p-0.5"
                                                             />
+                                                            <div className="text-[9px] text-gray-400 font-medium">
+                                                                {leave.updatedAt ? new Date(leave.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                                                            </div>
                                                         </div>
                                                     )}
+
                                                     {leave.status === 'REJECTED' && leave.rejectionReason && (
                                                         <span className="text-[11px] text-red-500 max-w-[200px] whitespace-normal leading-tight italic">
                                                             "{leave.rejectionReason}"

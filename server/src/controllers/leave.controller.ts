@@ -304,7 +304,8 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
                 status: status as LeaveStatus,
                 durationDays: updatedDuration,
                 endDate: updatedEndDate,
-                ...(status === 'APPROVED' ? { approvedById: approverId } : {}),
+                // Store the decision-maker for both APPROVED and REJECTED so their signature appears
+                ...(status === 'APPROVED' || status === 'REJECTED' ? { approvedById: approverId } : {}),
                 ...(status === 'RECOMMENDED' ? { recommendedById: approverId } : {}),
                 ...(status === 'REJECTED' ? { rejectionReason: comment || 'Rejected by supervisor' } : {})
             }

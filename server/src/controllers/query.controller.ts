@@ -188,7 +188,18 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
             where: whereClause,
             include: {
                 staff: { select: { user: { select: { name: true } }, staffId: true } },
-                issuedBy: { select: { name: true } }
+                issuedBy: {
+                    select: {
+                        name: true,
+                        role: true,
+                        staffProfile: {
+                            select: {
+                                rank: true,
+                                signatureUrl: true
+                            }
+                        }
+                    }
+                }
             },
             orderBy: { createdAt: 'desc' }
         });

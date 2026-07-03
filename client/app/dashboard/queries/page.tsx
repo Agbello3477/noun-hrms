@@ -12,9 +12,16 @@ interface Query {
     title?: string;
     severity: string;
     deadline?: string;
-    status: 'OPEN' | 'RESPONDED' | 'RESOLVED' | 'ESCALATED';
+    status: 'OPEN' | 'RESPONDED' | 'RESOLVED' | 'ESCALATED' | 'CLOSED';
     createdAt: string;
-    issuedBy?: { name: string };
+    updatedAt?: string;
+    issuedBy?: {
+        name: string;
+        staffProfile?: {
+            rank?: string;
+            signatureUrl?: string | null;
+        };
+    };
     response?: string;
     responseAttachmentUrl?: string;
     copyHR?: boolean;
@@ -172,8 +179,25 @@ export default function MyQueriesPage() {
                             </div>
                         )}
                         {(query.status !== 'OPEN' || query.response) && (
-                            <div className="p-4 border-t border-gray-200 bg-gray-50 text-center text-sm text-gray-500 font-medium flex items-center justify-center gap-2">
-                                <CheckCircle size={16} /> Response Submitted. Status: {query.status}
+                            <div className="p-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
+                                    <CheckCircle size={16} /> Response Submitted. Status: {query.status}
+                                </div>
+                                {/* Show issuer signature on CLOSED / RESOLVED queries */}
+                                {(query.status === 'CLOSED' || query.status === 'RESOLVED') && query.issuedBy?.staffProfile?.signatureUrl && (
+                                    <div className="flex flex-col items-end gap-1 border border-slate-200 bg-white p-2.5 rounded-xl shadow-sm">
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wide">Resolved &amp; signed by:</span>
+                                        <span className="text-[10px] text-gray-700 font-extrabold">{query.issuedBy.name}</span>
+                                        <img
+                                            src={query.issuedBy.staffProfile.signatureUrl}
+                                            alt="Signature"
+                                            className="max-h-[28px] object-contain border bg-white rounded p-0.5"
+                                        />
+                                        <span className="text-[9px] text-gray-400">
+                                            {query.updatedAt ? new Date(query.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
