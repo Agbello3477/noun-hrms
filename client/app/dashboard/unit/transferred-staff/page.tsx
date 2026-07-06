@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Search, FileText, ArrowRight, UserCheck, X, Download } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Search, FileText, ArrowRight, UserCheck, X } from 'lucide-react';
 import api from '../../../../lib/api';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface Staff {
     id: string; // User UUID
@@ -25,6 +26,8 @@ export default function TransferredStaffPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const fetchTransferredStaff = async () => {
         try {
@@ -37,14 +40,16 @@ export default function TransferredStaffPage() {
         }
     };
 
-    useEffect(() => {
-        fetchTransferredStaff();
-    }, []);
+    useEffect(() => { fetchTransferredStaff(); }, []);
+    useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
-    const filteredStaff = staffList.filter((staff) =>
+    const filteredStaff = useMemo(() => staffList.filter((staff) =>
         staff.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         staff.staffProfile?.staffId?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ), [staffList, searchTerm]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredStaff.length / pageSize));
+    const paginatedStaff = filteredStaff.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -118,7 +123,7 @@ export default function TransferredStaffPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredStaff.map((staff) => (
+                                paginatedStaff.map((staff) => (
                                     <tr key={staff.id} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -157,6 +162,16 @@ export default function TransferredStaffPage() {
                         </tbody>
                     </table>
                 </div>
+                {!loading && filteredStaff.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={filteredStaff.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
+                )}
             </div>
 
             {/* Dossier Reference Modal Overlay */}

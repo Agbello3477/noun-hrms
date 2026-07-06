@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import { CheckCircle, XCircle, Clock, User, ArrowRight, Eye } from 'lucide-react';
 import DocumentViewerModal from '../../../../components/dashboard/DocumentViewerModal';
+import Pagination from '../../../../components/ui/Pagination';
 
 export default function UnitLeavesPage() {
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const { user: currentUser } = useAuth();
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Modal state for leave request review
     const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
@@ -33,6 +36,16 @@ export default function UnitLeavesPage() {
             setRejectionReason('');
         }
     }, [selectedLeave]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [leaves]);
+
+    const paginatedLeaves = useMemo(() => {
+        return leaves.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [leaves, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(leaves.length / pageSize));
 
     const fetchPendingLeaves = async () => {
         try {
@@ -105,7 +118,7 @@ export default function UnitLeavesPage() {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {leaves.map((leave) => {
+                            {paginatedLeaves.map((leave) => {
                                 const staffUser = leave.staff?.user || leave.user || {};
                                 const staffProfile = leave.staff || leave.user?.staffProfile || {};
                                 const duration = leave.durationDays || Math.ceil((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / (1000 * 60 * 60 * 24)) || 1;
@@ -157,6 +170,16 @@ export default function UnitLeavesPage() {
                             })}
                         </tbody>
                     </table>
+                    {!loading && leaves.length > 0 && (
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            totalItems={leaves.length}
+                            pageSize={pageSize}
+                            onPageChange={setCurrentPage}
+                            onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                        />
+                    )}
                 </div>
             )}
 

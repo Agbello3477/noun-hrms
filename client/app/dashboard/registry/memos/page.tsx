@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import api from '../../../../lib/api';
 import { Mail, Plus, CheckCircle, Eye, X, Loader2, Calendar, User, MessageSquare, ChevronRight, Paperclip, Download } from 'lucide-react';
 import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface MemoResponse {
     id: string;
@@ -56,6 +57,8 @@ export default function RegistryMemosPage() {
     const [viewMemo, setViewMemo] = useState<Memo | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Form states
     const [title, setTitle] = useState('');
@@ -79,6 +82,16 @@ export default function RegistryMemosPage() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [memos]);
+
+    const paginatedMemos = useMemo(() => {
+        return Array.isArray(memos) ? memos.slice((currentPage - 1) * pageSize, currentPage * pageSize) : [];
+    }, [memos, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil((Array.isArray(memos) ? memos.length : 0) / pageSize));
 
     const fetchStaff = async () => {
         try {
@@ -203,7 +216,7 @@ export default function RegistryMemosPage() {
                                     <p className="text-sm">Click "New Memo" to create and broadcast your first general announcement.</p>
                                 </td>
                             </tr>
-                        ) : Array.isArray(memos) && memos.map((memo, index) => {
+                        ) : paginatedMemos.map((memo, index) => {
                             if (!memo) return null;
                             return (
                                 <tr key={memo.id || index} className="hover:bg-gray-50/50 transition-colors">
@@ -264,6 +277,16 @@ export default function RegistryMemosPage() {
                         })}
                     </tbody>
                 </table>
+                {!loading && Array.isArray(memos) && memos.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={memos.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
+                )}
             </div>
 
             {/* View Memo Details Modal */}

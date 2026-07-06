@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, CheckCircle, AlertCircle } from 'lucide-react';
 import api from '../../../../lib/api';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface PayrollRecord {
     id: string;
@@ -19,6 +20,8 @@ export default function AuditPage() {
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [message, setMessage] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const fetchPending = async () => {
         setLoading(true);
@@ -37,6 +40,16 @@ export default function AuditPage() {
     useEffect(() => {
         fetchPending();
     }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [records]);
+
+    const paginatedRecords = useMemo(() => {
+        return records.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [records, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(records.length / pageSize));
 
     const handleApprove = async () => {
         if (selectedIds.length === 0) return;
@@ -107,7 +120,7 @@ export default function AuditPage() {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {records.map(record => (
+                            {paginatedRecords.map(record => (
                                 <tr key={record.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4">
                                         <input
@@ -135,6 +148,16 @@ export default function AuditPage() {
                             ))}
                         </tbody>
                     </table>
+                )}
+                {!loading && records.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={records.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
                 )}
             </div>
         </div>

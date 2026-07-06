@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import api from '../../../../lib/api';
 import { AlertTriangle, Plus, CheckCircle, Eye, Paperclip, X, Printer } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface Query {
     id: string;
@@ -32,6 +33,8 @@ export default function RegistryQueriesPage() {
     const [viewQuery, setViewQuery] = useState<Query | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Initial Data
     interface OrganizationData {
@@ -85,6 +88,16 @@ export default function RegistryQueriesPage() {
     useEffect(() => {
         fetchAllData();
     }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [queries]);
+
+    const paginatedQueries = useMemo(() => {
+        return queries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [queries, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(queries.length / pageSize));
 
     // Auto-scope selectors for Center Managers and Unit Heads
     useEffect(() => {
@@ -270,7 +283,7 @@ export default function RegistryQueriesPage() {
                     <tbody className="bg-white divide-y divide-gray-200">
                         {loading ? (
                             <tr><td colSpan={6} className="text-center py-4">Loading...</td></tr>
-                        ) : queries.map(q => (
+                        ) : paginatedQueries.map(q => (
                             <tr key={q.id}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="text-sm font-medium text-gray-900">{q.staff?.user?.name || 'Unknown'}</div>
@@ -320,6 +333,16 @@ export default function RegistryQueriesPage() {
                         ))}
                     </tbody>
                 </table>
+                {!loading && queries.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={queries.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                    />
+                )}
             </div>
 
             {/* View Query Modal */}

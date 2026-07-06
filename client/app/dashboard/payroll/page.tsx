@@ -1,17 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import api from '../../../lib/api'; // Correct relative path
+import { useState, useEffect, useMemo } from 'react';
+import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { DollarSign, BarChart3, ArrowRight, PlayCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Pagination from '../../../components/ui/Pagination';
 
 export default function PayrollDashboard() {
     const { user } = useAuth();
     const router = useRouter();
     const [stats, setStats] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -139,7 +142,7 @@ export default function PayrollDashboard() {
                                 </td>
                             </tr>
                         ) : (
-                            stats.map((monthStat) => (
+                            stats.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((monthStat) => (
                                 <tr key={monthStat.month} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-900">{monthStat.month}</td>
                                     <td className="px-6 py-4 text-gray-600">{formatCurrency(monthStat._sum.grossPay)}</td>
@@ -161,6 +164,17 @@ export default function PayrollDashboard() {
                         )}
                     </tbody>
                 </table>
+                {stats.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={Math.max(1, Math.ceil(stats.length / pageSize))}
+                        totalItems={stats.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                        pageSizeOptions={[6, 12, 24]}
+                    />
+                )}
             </div>
         </div>
     );

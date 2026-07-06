@@ -1,10 +1,9 @@
-'use client';
-
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useMemo } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
 import api from '../../../../lib/api';
 import { Mail, Plus, CheckCircle, Eye, X, Loader2, Calendar, User, MessageSquare, ChevronRight, Paperclip, Download } from 'lucide-react';
 import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface MemoResponse {
     id: string;
@@ -62,6 +61,8 @@ function UnitMemosContent() {
     const [viewMemo, setViewMemo] = useState<Memo | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Form states
     const [title, setTitle] = useState('');
@@ -113,6 +114,10 @@ function UnitMemosContent() {
         fetchMemos();
         fetchStaff();
     }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, memos]);
 
     const handleCreateMemo = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -185,6 +190,12 @@ function UnitMemosContent() {
         }
     });
 
+    const paginatedMemos = useMemo(() => {
+        return filteredMemos.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [filteredMemos, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredMemos.length / pageSize));
+
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
             <div className="flex justify-between items-center">
@@ -251,7 +262,7 @@ function UnitMemosContent() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredMemos.map(memo => (
+                                {paginatedMemos.map(memo => (
                                     <tr key={memo.id} className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
@@ -306,6 +317,16 @@ function UnitMemosContent() {
                             </tbody>
                         </table>
                     </div>
+                    {!loading && filteredMemos.length > 0 && (
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            totalItems={filteredMemos.length}
+                            pageSize={pageSize}
+                            onPageChange={setCurrentPage}
+                            onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                        />
+                    )}
                 </div>
             )}
 
