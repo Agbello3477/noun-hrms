@@ -11,6 +11,15 @@ export const stripHtml = (val: string): string => {
     return val.replace(/<[^>]*>/g, '').trim();
 };
 
+export const sanitizeHtml = (val: string): string => {
+    if (typeof val !== 'string') return val;
+    // Remove potentially malicious script/style tags and execute commands but preserve safe formatting
+    let cleaned = val.replace(/<(script|style|iframe|object|embed)[^>]*>([\s\S]*?)<\/\1>/gi, '');
+    cleaned = cleaned.replace(/on\w+\s*=\s*(['"][^'"]*['"]|[^\s>]+)/gi, '');
+    cleaned = cleaned.replace(/href\s*=\s*['"]\s*javascript:[^'"]*['"]/gi, '');
+    return cleaned.trim();
+};
+
 // ----------------------------------------------------
 // Validation Middleware Helper
 // ----------------------------------------------------
@@ -103,8 +112,8 @@ export const leaveApplySchema = z.object({
         type: z.nativeEnum(LeaveType),
         startDate: z.string().refine(val => !isNaN(Date.parse(val)), 'Invalid start date format'),
         endDate: z.string().refine(val => !isNaN(Date.parse(val)), 'Invalid end date format'),
-        durationDays: z.number().int().min(1, 'Duration must be at least 1 day'),
-        reason: z.string().min(5, 'Reason must be at least 5 characters').max(500, 'Reason must not exceed 500 characters').transform(stripHtml)
+        durationDays: z.number().int().min(1).optional(),
+        reason: z.string().min(5, 'Reason must be at least 5 characters').max(5000, 'Reason must not exceed 5000 characters').transform(sanitizeHtml)
     })
 });
 
@@ -113,13 +122,13 @@ export const queryIssueSchema = z.object({
     body: z.object({
         staffId: z.string().uuid('Invalid staff profile ID format'),
         title: z.string().min(3, 'Query title must be at least 3 characters').max(100).transform(stripHtml),
-        content: z.string().min(10, 'Query content must be at least 10 characters').transform(stripHtml)
+        content: z.string().min(10, 'Query content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
     })
 });
 
 export const queryRespondSchema = z.object({
     body: z.object({
-        content: z.string().min(10, 'Response content must be at least 10 characters').transform(stripHtml)
+        content: z.string().min(10, 'Response content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
     })
 });
 
@@ -127,7 +136,7 @@ export const queryRespondSchema = z.object({
 export const memoCreateSchema = z.object({
     body: z.object({
         title: z.string().min(3, 'Memo title must be at least 3 characters').max(100).transform(stripHtml),
-        content: z.string().min(10, 'Memo content must be at least 10 characters').transform(stripHtml),
+        content: z.string().min(10, 'Memo content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml),
         recipientId: z.string().uuid('Invalid recipient ID format').optional().nullable(),
         allowResponses: z.preprocess(val => {
             if (val === 'true' || val === true) return true;

@@ -148,10 +148,12 @@ export default function ApplySabbaticalModal({ isOpen, onClose, onSuccess }: App
 
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-gray-700">Research Topic / Abstract</label>
-                                <RichTextEditor
+                                <textarea
+                                    className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors duration-150 min-h-[120px] bg-white placeholder-gray-400 text-gray-800"
                                     value={reason}
-                                    onChange={setReason}
+                                    onChange={(e) => setReason(e.target.value)}
                                     placeholder="Briefly describe your research goals..."
+                                    required
                                 />
                             </div>
 
