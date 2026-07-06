@@ -137,12 +137,10 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Reason</label>
-                                <textarea
-                                    className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:border-blue-500 outline-none transition-colors duration-150 min-h-[120px] bg-white placeholder-gray-400 text-gray-800"
+                                <RichTextEditor
                                     value={reason}
-                                    onChange={(e) => setReason(e.target.value)}
+                                    onChange={setReason}
                                     placeholder="Brief reason or handover notes..."
-                                    required
                                 />
                             </div>
 
