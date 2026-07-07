@@ -32,12 +32,12 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     insertOrderedList: false
   });
 
-  // Sync external value changes into the editor (only if the user is not actively typing)
+  // Sync external value changes into the editor (only if the user is not focused)
   useEffect(() => {
-    if (editorRef.current && !isTypingRef.current && editorRef.current.innerHTML !== value) {
+    if (editorRef.current && !isFocused && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || '';
     }
-  }, [value]);
+  }, [value, isFocused]);
 
   const commandStatesTimerRef = useRef<NodeJS.Timeout | null>(null);
 
