@@ -224,7 +224,7 @@ function MemosContent() {
                                     <div className="text-right space-y-1.5">
                                         <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Authorized Signature</div>
                                         <img 
-                                            src={selectedMemo.sender.staffProfile.signatureUrl} 
+                                            src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${selectedMemo.sender.staffProfile.signatureUrl}`} 
                                             alt="Authorized Signature" 
                                             className="max-h-[45px] object-contain border bg-white rounded p-0.5 ml-auto shadow-sm" 
                                         />

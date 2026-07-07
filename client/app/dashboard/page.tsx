@@ -470,7 +470,7 @@ export default function DashboardHome() {
                         <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center min-h-[160px] bg-slate-50/50">
                             {currentSigUrl ? (
                                 <div className="text-center space-y-3">
-                                    <img src={currentSigUrl} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
+                                    <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${currentSigUrl}`} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
                                     <span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">Active Signature</span>
                                 </div>
                             ) : (

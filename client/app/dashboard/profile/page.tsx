@@ -159,7 +159,7 @@ export default function ProfilePage() {
                                 <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center min-h-[90px] relative overflow-hidden">
                                     {currentSigUrl ? (
                                         <img
-                                            src={currentSigUrl}
+                                            src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${currentSigUrl}`}
                                             alt="Your signature"
                                             className="max-h-[80px] max-w-full object-contain p-2"
                                         />

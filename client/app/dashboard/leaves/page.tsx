@@ -205,7 +205,7 @@ function LeavesContent() {
                                                                 {leave.approvedBy.name}
                                                             </div>
                                                             <img
-                                                                src={leave.approvedBy.staffProfile.signatureUrl}
+                                                                src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${leave.approvedBy.staffProfile.signatureUrl}`}
                                                                 alt="Signature"
                                                                 className="max-h-[26px] object-contain border bg-white rounded p-0.5"
                                                             />
