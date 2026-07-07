@@ -39,12 +39,13 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     }
   }, [value]);
 
-  // Clean up debounce timer on unmount
+  const commandStatesTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clean up timers on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (commandStatesTimerRef.current) clearTimeout(commandStatesTimerRef.current);
     };
   }, []);
 
@@ -90,6 +91,15 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
       insertUnorderedList: document.queryCommandState('insertUnorderedList'),
       insertOrderedList: document.queryCommandState('insertOrderedList')
     });
+  };
+
+  const debouncedCheckCommandStates = () => {
+    if (commandStatesTimerRef.current) {
+      clearTimeout(commandStatesTimerRef.current);
+    }
+    commandStatesTimerRef.current = setTimeout(() => {
+      checkCommandStates();
+    }, 300); // 300ms debounce prevents rendering updates during active typing
   };
 
   const execCommand = (command: string, arg: string = '') => {
@@ -367,8 +377,8 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           contentEditable
           onInput={handleInput}
           onBlur={handleBlur}
-          onKeyUp={checkCommandStates}
-          onMouseUp={checkCommandStates}
+          onKeyUp={debouncedCheckCommandStates}
+          onMouseUp={debouncedCheckCommandStates}
           onFocus={() => setIsFocused(true)}
           className="p-5 min-h-[260px] max-h-[600px] overflow-y-auto outline-none text-sm text-gray-800 prose max-w-none focus:outline-none bg-white leading-relaxed font-sans"
           style={{
