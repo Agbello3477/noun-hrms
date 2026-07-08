@@ -26,11 +26,15 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
     }
 };
 
-export const requireRole = (roles: Role[]) => {
+export const requireRole = (roles: (Role | string)[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction) => {
-        if (!req.user || !roles.includes(req.user.role)) {
+        if (!req.user) {
             return res.status(403).json({ message: 'Insufficient permissions' });
         }
-        next();
+        // SUPER_USER and ADMIN roles bypass all route-based restrictions globally
+        if (req.user.role === Role.SUPER_USER || req.user.role === Role.ADMIN || roles.includes(req.user.role)) {
+            return next();
+        }
+        return res.status(403).json({ message: 'Insufficient permissions' });
     };
 };

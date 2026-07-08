@@ -66,7 +66,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
 
     // Unit Heads (Directors/Deans) & Managers
     const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isVC || isAdmin;
-    const isManager = role === 'STUDY_CENTER_MANAGER';
+    const isManager = role === 'STUDY_CENTER_MANAGER' || isAdmin;
 
     // Academic check
     const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isVC || isSuperUser || isAdmin;

@@ -11,7 +11,7 @@ export default function UnitLayout({ children }: { children: React.ReactNode }) 
 
     useEffect(() => {
         if (!isLoading && user) {
-            const isUnitHead = user.role === 'UNIT_HEAD' || user.role === 'STUDY_CENTER_MANAGER' || user.role === 'UNIT_ADMIN' || user.role === 'ADMIN';
+            const isUnitHead = user.role === 'UNIT_HEAD' || user.role === 'STUDY_CENTER_MANAGER' || user.role === 'UNIT_ADMIN' || user.role === 'ADMIN' || user.role === 'SUPER_USER';
             if (!isUnitHead) {
                 router.push('/dashboard/access-denied');
             }
