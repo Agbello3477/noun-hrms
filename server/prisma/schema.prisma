@@ -209,6 +209,8 @@ model StaffProfile {
   @@index([unitId])
   @@index([centerId])
   @@index([isDeleted])
+  @@index([stateOfOrigin])
+  @@index([status])
 }
 
 model AcademicProgramme {
@@ -453,6 +455,8 @@ model Attendance {
   updatedAt DateTime  @updatedAt
 
   @@map("attendance_logs")
+  @@index([userId])
+  @@index([clockIn])
 }
 
 model SalaryScale {
@@ -521,6 +525,7 @@ model Payroll {
 
   @@map("payroll_records")
   @@unique([userId, month, year])
+  @@index([month, year])
 }
 
 enum RequestStatus {

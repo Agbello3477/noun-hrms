@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { X, Upload } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -24,6 +24,31 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState({ type: '', text: '' });
+
+    // Load draft from IndexedDB when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            import('../../lib/indexedDb').then(({ getDraft }) => {
+                getDraft<{ type: string; startDate: string; endDate: string; reason: string }>('apply_leave').then((draft) => {
+                    if (draft) {
+                        setType(draft.type || 'ANNUAL');
+                        setStartDate(draft.startDate || '');
+                        setEndDate(draft.endDate || '');
+                        setReason(draft.reason || '');
+                    }
+                });
+            });
+        }
+    }, [isOpen]);
+
+    // Auto-save draft changes to IndexedDB
+    useEffect(() => {
+        if (isOpen && (type !== 'ANNUAL' || startDate || endDate || reason)) {
+            import('../../lib/indexedDb').then(({ saveDraft }) => {
+                saveDraft('apply_leave', { type, startDate, endDate, reason });
+            });
+        }
+    }, [isOpen, type, startDate, endDate, reason]);
 
     if (!isOpen) return null;
 
@@ -56,6 +81,10 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                 reason: finalReason
             });
             setMsg({ type: 'success', text: 'Leave Request Submitted Successfully' });
+            // Clear IndexedDB draft on successful submission
+            import('../../lib/indexedDb').then(({ clearDraft }) => {
+                clearDraft('apply_leave');
+            });
             setTimeout(() => {
                 onSuccess();
                 onClose();
