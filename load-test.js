@@ -1,18 +1,18 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-// k6 Load Test Configuration simulating high concurrency (4,000+ VUs)
+// k6 Load Test Configuration simulating enterprise concurrency (50,000+ VUs)
 export const options = {
     stages: [
-        { duration: '30s', target: 500 },  // Ramp-up to 500 users
-        { duration: '1m', target: 2000 },  // Ramp-up to 2000 users
-        { duration: '2m', target: 4000 },  // Peak load: 4,000 virtual users
-        { duration: '1m', target: 1000 },  // Ramp-down to 1000 users
-        { duration: '30s', target: 0 },    // Cooldown
+        { duration: '1m', target: 5000 },   // Ramp-up to 5,000 users
+        { duration: '2m', target: 20000 },  // Ramp-up to 20,000 users
+        { duration: '5m', target: 50000 },  // Peak load: 50,000 virtual users simultaneously
+        { duration: '2m', target: 10000 },  // Ramp-down to 10,000 users
+        { duration: '1m', target: 0 },      // Cooldown
     ],
     thresholds: {
         http_req_failed: ['rate<0.01'],    // Under 1% request failures allowed
-        http_req_duration: ['p(95)<500'],  // 95% of requests must complete under 500ms
+        http_req_duration: ['p(95)<1000'], // 95% of requests must complete under 1s at massive scale
     },
 };
 

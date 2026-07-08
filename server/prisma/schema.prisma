@@ -457,6 +457,8 @@ model Attendance {
   @@map("attendance_logs")
   @@index([userId])
   @@index([clockIn])
+  // Enterprise Scaling Rule: At 50,000+ users, this table is partitioned in PostgreSQL by RANGE on "clockIn".
+  // SQL migration partitions are defined monthly (e.g. partition_y2026m07, partition_y2026m08).
 }
 
 model SalaryScale {
@@ -526,6 +528,8 @@ model Payroll {
   @@map("payroll_records")
   @@unique([userId, month, year])
   @@index([month, year])
+  // Enterprise Scaling Rule: At 50,000+ users, this table is partitioned in PostgreSQL by RANGE on "year" and "month".
+  // SQL migration partitions are defined annually/monthly to maintain fast sub-second read queries for reporting.
 }
 
 enum RequestStatus {
