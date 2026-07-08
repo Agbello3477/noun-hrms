@@ -180,11 +180,11 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     <LogOut size={20} />
                     Sign Out
                 </button>
-                <div className="mt-6 text-center opacity-60">
-                    <p className="text-[5px] text-gray-400">
-                        Powered by: <span className="font-bold text-nounGreen">MaSha Secure Tech</span>
-                    </p>
-                </div>
+                 <div className="mt-6 text-center opacity-75">
+                     <p className="text-[10px] text-gray-500 font-medium tracking-wide">
+                         Powered by: <span className="font-bold text-nounGreen">MaSha Secure Tech</span>
+                     </p>
+                 </div>
             </div>
         </aside >
     );
