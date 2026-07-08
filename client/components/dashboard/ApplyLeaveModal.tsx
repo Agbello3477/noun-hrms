@@ -3,7 +3,12 @@
 import { useState } from 'react';
 import api from '../../lib/api';
 import { X, Upload } from 'lucide-react';
-import RichTextEditor from './RichTextEditor';
+import dynamic from 'next/dynamic';
+
+const RichTextEditor = dynamic(() => import('./RichTextEditor'), {
+    ssr: false,
+    loading: () => <div className="h-[300px] bg-slate-50 border rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400 font-medium">Loading editor...</div>
+});
 
 interface ApplyLeaveModalProps {
     isOpen: boolean;

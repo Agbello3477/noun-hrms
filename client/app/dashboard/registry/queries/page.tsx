@@ -4,7 +4,12 @@ import { useEffect, useState, useMemo } from 'react';
 import api from '../../../../lib/api';
 import { AlertTriangle, Plus, CheckCircle, Eye, Paperclip, X, Printer } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
-import RichTextEditor from '../../../../components/dashboard/RichTextEditor';
+import dynamic from 'next/dynamic';
+
+const RichTextEditor = dynamic(() => import('../../../../components/dashboard/RichTextEditor'), {
+    ssr: false,
+    loading: () => <div className="h-[300px] bg-slate-50 border rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400 font-medium">Loading editor...</div>
+});
 import Pagination from '../../../../components/ui/Pagination';
 
 interface Query {

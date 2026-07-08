@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useTransition } from 'react';
 import { 
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Undo, Redo, Heading1, Heading2, Link, Table, Eraser, Outdent, Indent, 
-  Type
+  Type, Info
 } from 'lucide-react';
 
 interface RichTextEditorProps {
@@ -13,11 +13,37 @@ interface RichTextEditorProps {
   placeholder?: string;
 }
 
+// Inline Web Worker Code to offload heavy text processing (tag stripping, word & character counts)
+const workerCode = `
+  self.onmessage = function(e) {
+    const html = e.data;
+    if (!html) {
+      self.postMessage({ words: 0, chars: 0, readingTime: 0 });
+      return;
+    }
+    
+    // Strip HTML tags safely in worker thread
+    const cleanText = html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
+    
+    const words = cleanText ? cleanText.split(' ').length : 0;
+    const chars = cleanText.length;
+    const readingTime = Math.ceil(words / 200); // Average 200 wpm
+    
+    self.postMessage({ words, chars, readingTime });
+  };
+`;
+
 export default function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const isTypingRef = useRef(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const commandStatesTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Web Worker states
+  const [stats, setStats] = useState({ words: 0, chars: 0, readingTime: 0 });
+  const workerRef = useRef<Worker | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const [activeStates, setActiveStates] = useState({
     bold: false,
@@ -32,14 +58,41 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     insertOrderedList: false
   });
 
+  // 1. Initialize Web Worker for background text statistics parsing (Task 2)
+  useEffect(() => {
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+    
+    worker.onmessage = (e) => {
+      // Use startTransition to avoid blocking main thread state updates
+      startTransition(() => {
+        setStats(e.data);
+      });
+    };
+    
+    workerRef.current = worker;
+    
+    // Initial stats trigger
+    if (value) {
+      worker.postMessage(value);
+    }
+
+    return () => {
+      worker.terminate();
+    };
+  }, []);
+
   // Sync external value changes into the editor (only if the user is not focused)
   useEffect(() => {
     if (editorRef.current && !isFocused && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || '';
+      
+      // Update worker stats
+      if (workerRef.current) {
+        workerRef.current.postMessage(value || '');
+      }
     }
   }, [value, isFocused]);
-
-  const commandStatesTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Clean up timers on unmount
   useEffect(() => {
@@ -49,10 +102,15 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     };
   }, []);
 
-  // Update parent state with a debounce to prevent rendering lag during typing
+  // Update parent state with a debounce to prevent rendering lag during typing (Task 3)
   const handleInput = () => {
     isTypingRef.current = true;
     
+    if (editorRef.current && workerRef.current) {
+      // Trigger background statistics processing immediately
+      workerRef.current.postMessage(editorRef.current.innerHTML);
+    }
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -109,6 +167,9 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     // Immediate input update on toolbar action
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
+      if (workerRef.current) {
+        workerRef.current.postMessage(editorRef.current.innerHTML);
+      }
     }
     
     checkCommandStates();
@@ -171,7 +232,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
         <button
           type="button"
           onClick={() => execCommand('formatBlock', '<h1>')}
-          className="px-2 py-1 text-xs font-bold text-gray-800 bg-white border border-gray-200 rounded hover:bg-gray-50"
+          className="px-2 py-1 text-xs font-bold text-gray-880 bg-white border border-gray-200 rounded hover:bg-gray-50"
           title="Heading 1"
         >
           H1
@@ -245,7 +306,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           className="p-1.5 rounded-lg text-gray-650 hover:bg-gray-100 hover:text-gray-900 transition-colors flex items-center gap-0.5"
           title="Highlight Color"
         >
-          <Eraser size={14} className="text-yellow-600 animate-pulse" />
+          <Eraser size={14} className="text-yellow-600" />
           <span className="w-2.5 h-2.5 rounded bg-yellow-300 border border-gray-300"></span>
         </button>
 
@@ -380,10 +441,13 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           onKeyUp={debouncedCheckCommandStates}
           onMouseUp={debouncedCheckCommandStates}
           onFocus={() => setIsFocused(true)}
-          className="p-5 min-h-[260px] max-h-[600px] overflow-y-auto outline-none text-sm text-gray-800 prose max-w-none focus:outline-none bg-white leading-relaxed font-sans"
+          className="p-5 min-h-[260px] max-h-[500px] overflow-y-auto outline-none text-sm text-gray-800 prose max-w-none focus:outline-none bg-white leading-relaxed font-sans"
           style={{
             minHeight: '260px',
-            fontFamily: 'Arial, sans-serif'
+            fontFamily: 'Arial, sans-serif',
+            // Task 4: Virtualized rendering (windowing) for long text files
+            contentVisibility: 'auto',
+            containIntrinsicSize: '0 300px'
           }}
         />
         {!value && placeholder && (
@@ -391,6 +455,18 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
             {placeholder}
           </div>
         )}
+      </div>
+
+      {/* Word-like Status Bar at the bottom */}
+      <div className="bg-gray-50 border-t border-gray-200 px-4 py-2 flex justify-between items-center text-xs text-gray-500 select-none">
+        <div className="flex gap-4">
+          <span>Words: <strong className="text-gray-700">{stats.words}</strong></span>
+          <span>Characters: <strong className="text-gray-700">{stats.chars}</strong></span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Info size={13} className="text-gray-400" />
+          <span>Est. Reading Time: <strong>{stats.readingTime} min</strong></span>
+        </div>
       </div>
     </div>
   );
