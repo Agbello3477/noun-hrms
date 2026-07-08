@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState, Suspense, useMemo } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
 import api from '../../../../lib/api';
