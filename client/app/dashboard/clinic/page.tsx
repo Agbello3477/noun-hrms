@@ -415,23 +415,34 @@ export default function ClinicDashboard() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block mb-1">Blood Group</label>
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-2 outline-none"
-                        placeholder="O+"
+                      <select
+                        className="w-full border rounded-lg p-2 bg-white outline-none"
                         value={newPatient.bloodGroup}
                         onChange={(e) => setNewPatient({ ...newPatient, bloodGroup: e.target.value })}
-                      />
+                      >
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                      </select>
                     </div>
                     <div>
                       <label className="block mb-1">Genotype</label>
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-2 outline-none"
-                        placeholder="AA"
+                      <select
+                        className="w-full border rounded-lg p-2 bg-white outline-none"
                         value={newPatient.genotype}
                         onChange={(e) => setNewPatient({ ...newPatient, genotype: e.target.value })}
-                      />
+                      >
+                        <option value="AA">AA</option>
+                        <option value="AS">AS</option>
+                        <option value="AC">AC</option>
+                        <option value="SS">SS</option>
+                        <option value="SC">SC</option>
+                      </select>
                     </div>
                   </div>
                   <div>
