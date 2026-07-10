@@ -76,6 +76,73 @@ export default function ClinicDashboard() {
   // Inventory form
   const [newStock, setNewStock] = useState({ name: '', quantity: '', unit: 'tabs' });
 
+  // Desktop Notifications variables
+  const [prevQueueCount, setPrevQueueCount] = useState<number>(0);
+
+  const sendDesktopNotification = (title: string, body: string) => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/favicon.ico' });
+    }
+  };
+
+  // Poll encounters for active role desktop notifications
+  useEffect(() => {
+    if (!activeRole) return;
+    
+    // Request permission on mount
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+
+    const poll = async () => {
+      try {
+        let statusFilter = '';
+        if (activeRole === 'CLINIC_DOCTOR') statusFilter = 'AWAITING_DOCTOR';
+        else if (activeRole === 'CLINIC_LAB_SCIENTIST') statusFilter = 'LAB_REQUESTED';
+        else if (activeRole === 'CLINIC_PHARMACIST') statusFilter = 'PHARMACY_REQUESTED';
+        else if (activeRole === 'CLINIC_NURSE') statusFilter = 'TRIAGE';
+
+        const res = await api.get(`/api/clinic/encounters${statusFilter ? `?status=${statusFilter}` : ''}`);
+        const currentCount = res.data.length;
+
+        // If count increased, trigger notification
+        if (currentCount > prevQueueCount) {
+          const newItem = res.data[0];
+          const patientName = newItem?.patientFile?.name || 'A Patient';
+          
+          if (activeRole === 'CLINIC_DOCTOR') {
+            sendDesktopNotification('New Consultation Queue', `${patientName} vitals have been logged and sent to your consultation queue.`);
+          } else if (activeRole === 'CLINIC_LAB_SCIENTIST') {
+            sendDesktopNotification('New Lab Test Request', `Laboratory tests have been requested for ${patientName}.`);
+          } else if (activeRole === 'CLINIC_PHARMACIST') {
+            sendDesktopNotification('New Prescription Dispense', `Medication is ready to be dispensed for ${patientName}.`);
+          } else if (activeRole === 'CLINIC_NURSE') {
+            sendDesktopNotification('New Patient Visit', `${patientName} has checked in and is ready for triage.`);
+          }
+        }
+        setPrevQueueCount(currentCount);
+
+        // Update local list if the tab matches active role
+        if (
+          (activeRole === 'CLINIC_DOCTOR' && activeTab === 'consultation') ||
+          (activeRole === 'CLINIC_LAB_SCIENTIST' && activeTab === 'laboratory') ||
+          (activeRole === 'CLINIC_PHARMACIST' && activeTab === 'pharmacy') ||
+          (activeRole === 'CLINIC_NURSE' && activeTab === 'triage')
+        ) {
+          setEncounters(res.data);
+        }
+      } catch (err) {
+        console.error('Error polling encounters:', err);
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 6000);
+    return () => clearInterval(interval);
+  }, [activeRole, prevQueueCount, activeTab]);
+
   // Fetch functions
   const fetchPatientFiles = async () => {
     try {
@@ -90,6 +157,8 @@ export default function ClinicDashboard() {
     try {
       const res = await api.get(`/api/clinic/encounters${status ? `?status=${status}` : ''}`);
       setEncounters(res.data);
+      // Synchronize queue count tracking to prevent double notifications
+      setPrevQueueCount(res.data.length);
     } catch (err) {
       console.error(err);
     }
@@ -495,8 +564,8 @@ export default function ClinicDashboard() {
                     encounters.filter(e => e.status === 'TRIAGE').map((e) => (
                       <div key={e.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
                         <div>
-                          <div className="font-bold text-slate-800">{e.patientFile.name}</div>
-                          <div className="text-xs text-gray-500 font-semibold">Patient ID: {e.patientFile.patientId}</div>
+                          <div className="font-bold text-slate-800">{e.patientFile?.name || 'Unknown Patient'}</div>
+                          <div className="text-xs text-gray-500 font-semibold">Patient ID: {e.patientFile?.patientId || 'N/A'}</div>
                         </div>
                         <button
                           onClick={() => setTriageVitals(prev => ({ ...prev, encounterId: e.id }))}
@@ -598,7 +667,7 @@ export default function ClinicDashboard() {
                     encounters.filter(e => ['AWAITING_DOCTOR', 'CONSULTATION'].includes(e.status)).map((e) => (
                       <div key={e.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
                         <div>
-                          <div className="font-bold text-slate-800">{e.patientFile.name}</div>
+                          <div className="font-bold text-slate-800">{e.patientFile?.name || 'Unknown Patient'}</div>
                           <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded ${
                             e.status === 'CONSULTATION' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 'bg-green-50 text-green-600 border border-green-200'
                           }`}>
@@ -628,7 +697,7 @@ export default function ClinicDashboard() {
                     <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-semibold text-slate-600">
                       <div>
                         <span className="text-gray-400 block mb-0.5">Patient Name:</span>
-                        <strong className="text-slate-800 text-sm">{selectedEncounter.patientFile.name}</strong>
+                        <strong className="text-slate-800 text-sm">{selectedEncounter.patientFile?.name || 'Unknown Patient'}</strong>
                       </div>
                       <div>
                         <span className="text-gray-400 block mb-0.5">BP:</span>
@@ -640,7 +709,7 @@ export default function ClinicDashboard() {
                       </div>
                       <div>
                         <span className="text-gray-400 block mb-0.5">Allergies:</span>
-                        <strong className="text-red-600">{selectedEncounter.patientFile.allergies || 'None'}</strong>
+                        <strong className="text-red-600">{selectedEncounter.patientFile?.allergies || 'None'}</strong>
                       </div>
                     </div>
 
@@ -736,7 +805,7 @@ export default function ClinicDashboard() {
                     encounters.filter(e => e.status === 'LAB_REQUESTED').map((e) => (
                       <div key={e.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
                         <div>
-                          <div className="font-bold text-slate-800">{e.patientFile.name}</div>
+                          <div className="font-bold text-slate-800">{e.patientFile?.name || 'Unknown Patient'}</div>
                           <div className="text-xs text-amber-600 font-bold">Requested: {e.labTests}</div>
                         </div>
                         <button
@@ -809,7 +878,7 @@ export default function ClinicDashboard() {
                     encounters.filter(e => e.status === 'PHARMACY_REQUESTED').map((e) => (
                       <div key={e.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
                         <div>
-                          <div className="font-bold text-slate-800">{e.patientFile.name}</div>
+                          <div className="font-bold text-slate-800">{e.patientFile?.name || 'Unknown Patient'}</div>
                           <div className="text-xs text-slate-500 mt-0.5">Diagnoses: <strong className="text-slate-700">{e.diagnoses}</strong></div>
                           <div className="text-xs text-emerald-600 font-bold mt-1">Prescribed: {e.prescriptions}</div>
                         </div>
