@@ -1,9 +1,10 @@
+import dotenv from 'dotenv';
+dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import path from 'path';
 
 import authRoutes from './routes/auth.routes';
@@ -22,9 +23,11 @@ import notificationRoutes from './routes/notification.routes';
 import aperRoutes from './routes/aper.routes';
 import memoRoutes from './routes/memo.routes';
 import systemRoutes from './routes/system.routes';
+import clinicRoutes from './routes/clinic.routes';
+import securityRoutes from './routes/security.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 
-dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -65,6 +68,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/aper', aperRoutes);
 app.use('/api/memos', memoRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/clinic', clinicRoutes);
+app.use('/api/security', securityRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });

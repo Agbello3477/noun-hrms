@@ -125,6 +125,92 @@ async function main() {
         }
     });
 
+    // Seed Clinic Staff Users
+    await prisma.user.upsert({
+        where: { email: 'nurse@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'nurse@noun.edu.ng',
+            name: 'Nurse Janet Adebayo',
+            password,
+            role: Role.CLINIC_NURSE,
+            staffProfile: {
+                create: { rank: 'Senior Nursing Officer', level: 'CONTISS 09', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
+    await prisma.user.upsert({
+        where: { email: 'doctor@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'doctor@noun.edu.ng',
+            name: 'Dr. Chidi Obi',
+            password,
+            role: Role.CLINIC_DOCTOR,
+            staffProfile: {
+                create: { rank: 'Principal Medical Officer', level: 'CONTISS 12', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
+    await prisma.user.upsert({
+        where: { email: 'lab@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'lab@noun.edu.ng',
+            name: 'Scientist Musa Bello',
+            password,
+            role: Role.CLINIC_LAB_SCIENTIST,
+            staffProfile: {
+                create: { rank: 'Laboratory Scientist I', level: 'CONTISS 08', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
+    await prisma.user.upsert({
+        where: { email: 'pharmacist@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'pharmacist@noun.edu.ng',
+            name: 'Pharmacist Aisha Danjuma',
+            password,
+            role: Role.CLINIC_PHARMACIST,
+            staffProfile: {
+                create: { rank: 'Pharmacist II', level: 'CONTISS 08', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
+    // Seed Security Staff Users
+    await prisma.user.upsert({
+        where: { email: 'security@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'security@noun.edu.ng',
+            name: 'Chief Security Officer',
+            password,
+            role: Role.SECURITY_HEAD,
+            staffProfile: {
+                create: { rank: 'Director of Security Services', level: 'CONTISS 14', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
+    await prisma.user.upsert({
+        where: { email: 'patrol@noun.edu.ng' },
+        update: {},
+        create: {
+            email: 'patrol@noun.edu.ng',
+            name: 'Officer Segun Alao',
+            password,
+            role: Role.SECURITY_OFFICER,
+            staffProfile: {
+                create: { rank: 'Patrol Officer', level: 'CONTISS 05', centerId: abujaCenter.id, status: 'ACTIVE' }
+            }
+        }
+    });
+
     // 6. Seed full NOUN Structure
     console.log('Seeding Study Centers...');
     for (const [zone, centers] of Object.entries(NOUN_STRUCTURE.HQ_ZONES)) {

@@ -55,6 +55,13 @@ model User {
   receivedMemos      Memo[]         @relation("ReceivedMemos")
   memoResponses      MemoResponse[]
 
+  // Clinic & Security Relations
+  clinicPatientFile  ClinicPatientFile?
+  securityRosters    SecurityRoster[]
+  reportedIncidents  SecurityIncident[] @relation("IncidentReporter")
+  assignedIncidents  SecurityIncident[] @relation("IncidentAssignee")
+  securityReports    ConsolidatedSecurityReport[]
+
   @@map("users")
 }
 
@@ -85,6 +92,12 @@ enum Role {
   STAFF         // Regular Staff
   ADMIN         // Legacy System Admin (keep for safety)
   VICE_CHANCELLOR // Vice Chancellor
+  CLINIC_NURSE
+  CLINIC_DOCTOR
+  CLINIC_PHARMACIST
+  CLINIC_LAB_SCIENTIST
+  SECURITY_HEAD
+  SECURITY_OFFICER
 }
 
 enum Cadre {
@@ -691,4 +704,120 @@ model MemoResponse {
   createdAt DateTime @default(now())
 
   @@map("memo_responses")
+}
+
+model ClinicPatientFile {
+  id                    String            @id @default(uuid())
+  patientId             String            @unique // HR Employee ID or Student Matrix Number
+  userId                String?           @unique // Optional link to authenticated User
+  user                  User?             @relation(fields: [userId], references: [id])
+  name                  String
+  gender                String
+  dob                   DateTime
+  bloodGroup            String?
+  genotype              String?
+  allergies             String?
+  encryptedMedicalHistory String          @db.Text // Encrypted clinical profile for strict privacy
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  encounters            ClinicEncounter[]
+
+  @@map("clinic_patient_files")
+}
+
+model ClinicEncounter {
+  id                String            @id @default(uuid())
+  patientFileId     String
+  patientFile       ClinicPatientFile @relation(fields: [patientFileId], references: [id], onDelete: Cascade)
+  status            String            @default("TRIAGE") // TRIAGE, AWAITING_DOCTOR, CONSULTATION, LAB_REQUESTED, PHARMACY_REQUESTED, CLOSED
+  
+  // Triage details (Nurses)
+  bp                String?
+  temperature       Float?
+  weight            Float?
+  symptoms          String?           @db.Text
+  triagedById       String?
+  triagedAt         DateTime?
+  
+  // Consultation details (Doctors)
+  clinicalNotes     String?           @db.Text
+  diagnoses         String?           @db.Text
+  consultedById     String?
+  consultedAt       DateTime?
+  
+  // Lab Details
+  labTests          String?           @db.Text // Requested tests
+  labResults        String?           @db.Text // Uploaded/written results
+  labScientistId    String?
+  labCompletedAt    DateTime?
+  
+  // Pharmacy Details
+  prescriptions     String?           @db.Text // Prescribed items
+  pharmacyStatus    String            @default("PENDING") // PENDING, FULFILLED
+  pharmacistId      String?
+  pharmacyFulfilledAt DateTime?
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("clinic_encounters")
+}
+
+model ClinicInventory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  quantity    Int
+  unit        String   @default("tabs")
+  updatedAt   DateTime @updatedAt
+
+  @@map("clinic_inventory")
+}
+
+model SecurityRoster {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  shift        String   // MORNING, AFTERNOON, NIGHT
+  zone         String   // Patrol zone
+  date         DateTime
+  assignedById String
+  createdAt    DateTime @default(now())
+
+  @@map("security_roster")
+}
+
+model SecurityIncident {
+  id            String    @id @default(uuid())
+  reporterId    String?
+  reporter      User?     @relation("IncidentReporter", fields: [reporterId], references: [id])
+  reporterName  String?   // For anonymous/external reports
+  title         String
+  description   String    @db.Text
+  category      String    // THEFT, VANDALISM, MEDICAL_EMERGENCY, ASSAULT, SUSPICIOUS_ACTIVITY, OTHER
+  priority      String    @default("LOW") // HIGH, MEDIUM, LOW
+  location      String    // Campus location pin/name
+  attachmentUrl String?
+  status        String    @default("REPORTED") // REPORTED, DISPATCHED, RESOLVED
+  assignedToId  String?
+  assignedTo    User?     @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("security_incidents")
+}
+
+model ConsolidatedSecurityReport {
+  id                     String   @id @default(uuid())
+  authorId               String
+  author                 User     @relation(fields: [authorId], references: [id])
+  startDate              DateTime
+  endDate                DateTime
+  summary                String   @db.Text
+  totalIncidents         Int
+  highPriorityIncidents  Int
+  recommendations        String   @db.Text
+  createdAt              DateTime @default(now())
+  sentToVc               Boolean  @default(true)
+
+  @@map("consolidated_security_reports")
 }

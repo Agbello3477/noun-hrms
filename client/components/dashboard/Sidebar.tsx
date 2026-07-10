@@ -23,7 +23,9 @@ import {
     ClipboardCheck,
     Mail,
     Archive,
-    Calendar
+    Calendar,
+    HeartPulse,
+    Shield
 } from 'lucide-react';
 
 
@@ -70,6 +72,10 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
 
     // Academic check
     const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isVC || isSuperUser || isAdmin;
+
+    // Clinic & Security Access checks
+    const isClinic = ['CLINIC_NURSE', 'CLINIC_DOCTOR', 'CLINIC_LAB_SCIENTIST', 'CLINIC_PHARMACIST'].includes(role || '') || isAdmin;
+    const isSecurity = ['SECURITY_HEAD', 'SECURITY_OFFICER'].includes(role || '') || isAdmin || isVC;
 
     return (
         <aside className="h-screen w-52 flex-none border-r border-gray-200 bg-white overflow-y-auto">
@@ -157,6 +163,28 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Research" />
                         <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
+                    </>
+                )}
+
+                {/* University Clinic & Security */}
+                {isClinic && (
+                    <>
+                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            University Clinic
+                        </div>
+                        <LinkItem href="/dashboard/clinic" icon={HeartPulse} label="Health Services" />
+                    </>
+                )}
+
+                {isSecurity && (
+                    <>
+                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Campus Security
+                        </div>
+                        <LinkItem href="/dashboard/security" icon={Shield} label="Command Center" />
+                        {(String(role) === 'SECURITY_HEAD' || isVC || isAdmin) && (
+                            <LinkItem href="/dashboard/security/reports" icon={FileText} label="Security Reports" />
+                        )}
                     </>
                 )}
 
