@@ -111,7 +111,7 @@ export const createIncident = async (req: AuthRequest, res: Response) => {
 };
 
 export const updateIncident = async (req: AuthRequest, res: Response) => {
-    const { incidentId, priority, status, assignedToId } = req.body;
+    const { incidentId, priority, status, assignedToId, assignedOfficerIds } = req.body;
 
     try {
         const incident = await prisma.securityIncident.findUnique({
@@ -120,17 +120,45 @@ export const updateIncident = async (req: AuthRequest, res: Response) => {
 
         if (!incident) return res.status(404).json({ message: 'Incident not found' });
 
+        let finalAssignedToId = assignedToId;
+        if (assignedOfficerIds) {
+            const officerIds = assignedOfficerIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+            if (officerIds.length > 0) {
+                finalAssignedToId = officerIds[0];
+            }
+        }
+
         const updated = await prisma.securityIncident.update({
             where: { id: incidentId },
             data: {
                 ...(priority ? { priority } : {}),
                 ...(status ? { status } : {}),
-                ...(assignedToId ? { assignedToId } : {})
+                ...(finalAssignedToId ? { assignedToId: finalAssignedToId } : {}),
+                ...(assignedOfficerIds !== undefined ? { assignedOfficerIds } : {})
             }
         });
 
-        // Notify assigned field officer
-        if (assignedToId && assignedToId !== incident.assignedToId) {
+        // Notify all assigned field officers
+        if (assignedOfficerIds) {
+            const officerIds = assignedOfficerIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+            const oldOfficerIds = incident.assignedOfficerIds 
+                ? incident.assignedOfficerIds.split(',').map((id: string) => id.trim()).filter(Boolean) 
+                : [];
+            
+            const newOfficers = officerIds.filter((id: string) => !oldOfficerIds.includes(id));
+            
+            for (const officerId of newOfficers) {
+                await prisma.notification.create({
+                    data: {
+                        userId: officerId,
+                        title: 'New Security Incident Assignment',
+                        message: `You have been dispatched to investigate: ${incident.title} at ${incident.location}.`,
+                        type: 'WARNING'
+                    }
+                });
+            }
+        } else if (assignedToId && assignedToId !== incident.assignedToId) {
+            // Legacy single officer fallback notification
             await prisma.notification.create({
                 data: {
                     userId: assignedToId,

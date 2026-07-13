@@ -98,6 +98,12 @@ export const submitTriage = async (req: AuthRequest, res: Response) => {
     const nurseId = req.user?.id;
 
     try {
+        // Fetch patient info for the notification message
+        const encounter = await prisma.clinicEncounter.findUnique({
+            where: { id: encounterId },
+            include: { patientFile: true }
+        });
+
         const updated = await prisma.clinicEncounter.update({
             where: { id: encounterId },
             data: {
@@ -110,6 +116,23 @@ export const submitTriage = async (req: AuthRequest, res: Response) => {
                 triagedAt: new Date()
             }
         });
+
+        // Notify all doctors in the system
+        if (encounter) {
+            const doctors = await prisma.user.findMany({
+                where: { role: 'CLINIC_DOCTOR' },
+                select: { id: true }
+            });
+            await prisma.notification.createMany({
+                data: doctors.map(d => ({
+                    userId: d.id,
+                    title: '🩺 New Patient in Consultation Queue',
+                    message: `${encounter.patientFile?.name || 'A patient'}'s vitals have been recorded. Awaiting your consultation.`,
+                    type: 'INFO'
+                }))
+            });
+        }
+
         res.json(updated);
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to record vitals triage data' });
@@ -128,6 +151,12 @@ export const submitConsultation = async (req: AuthRequest, res: Response) => {
             status = 'PHARMACY_REQUESTED';
         }
 
+        // Fetch patient info for notifications
+        const encounter = await prisma.clinicEncounter.findUnique({
+            where: { id: encounterId },
+            include: { patientFile: true }
+        });
+
         const updated = await prisma.clinicEncounter.update({
             where: { id: encounterId },
             data: {
@@ -140,6 +169,42 @@ export const submitConsultation = async (req: AuthRequest, res: Response) => {
                 consultedAt: new Date()
             }
         });
+
+        // Notify the relevant department
+        if (encounter) {
+            const patientName = encounter.patientFile?.name || 'A patient';
+
+            if (status === 'LAB_REQUESTED') {
+                // Notify all lab scientists
+                const labStaff = await prisma.user.findMany({
+                    where: { role: 'CLINIC_LAB_SCIENTIST' },
+                    select: { id: true }
+                });
+                await prisma.notification.createMany({
+                    data: labStaff.map(u => ({
+                        userId: u.id,
+                        title: '🔬 New Lab Test Ordered',
+                        message: `Doctor has ordered lab tests for ${patientName}: ${labTests}`,
+                        type: 'INFO'
+                    }))
+                });
+            } else if (status === 'PHARMACY_REQUESTED') {
+                // Notify all pharmacists
+                const pharmacists = await prisma.user.findMany({
+                    where: { role: 'CLINIC_PHARMACIST' },
+                    select: { id: true }
+                });
+                await prisma.notification.createMany({
+                    data: pharmacists.map(u => ({
+                        userId: u.id,
+                        title: '💊 New Prescription Ready',
+                        message: `Prescription issued for ${patientName}. Please dispense medications.`,
+                        type: 'INFO'
+                    }))
+                });
+            }
+        }
+
         res.json(updated);
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to submit consultation details' });

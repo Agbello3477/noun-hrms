@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { 
@@ -71,30 +71,35 @@ export default function ClinicDashboard() {
   const [triageVitals, setTriageVitals] = useState({ encounterId: '', bp: '', temperature: '', weight: '', symptoms: '' });
   const [consultNotes, setConsultNotes] = useState({ encounterId: '', clinicalNotes: '', diagnoses: '', labTests: '', prescriptions: '' });
   const [labInput, setLabInput] = useState({ encounterId: '', labResults: '' });
+  // Tracks which routing action the doctor explicitly chose
+  const [consultAction, setConsultAction] = useState<'LAB' | 'PHARMACY' | 'CLOSE'>('CLOSE');
   const [selectedEncounter, setSelectedEncounter] = useState<Encounter | null>(null);
   
   // Inventory form
   const [newStock, setNewStock] = useState({ name: '', quantity: '', unit: 'tabs' });
 
-  // Desktop Notifications variables
-  const [prevQueueCount, setPrevQueueCount] = useState<number>(0);
+  // ── Desktop Notifications ─────────────────────────────────────────────────
+  // Use a ref so count changes never cause the effect to restart (infinite-loop fix)
+  const prevQueueCountRef = useRef<number>(-1);
 
-  const sendDesktopNotification = (title: string, body: string) => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+  const sendDesktopNotification = useCallback((title: string, body: string) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/favicon.ico' });
     }
-  };
+  }, []);
 
-  // Poll encounters for active role desktop notifications
+  // Request notification permission once when activeRole is known
   useEffect(() => {
     if (!activeRole) return;
-    
-    // Request permission on mount
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
+  }, [activeRole]);
+
+  // Stable polling effect – deps are ONLY activeRole and activeTab
+  useEffect(() => {
+    if (!activeRole) return;
 
     const poll = async () => {
       try {
@@ -104,27 +109,37 @@ export default function ClinicDashboard() {
         else if (activeRole === 'CLINIC_PHARMACIST') statusFilter = 'PHARMACY_REQUESTED';
         else if (activeRole === 'CLINIC_NURSE') statusFilter = 'TRIAGE';
 
-        const res = await api.get(`/api/clinic/encounters${statusFilter ? `?status=${statusFilter}` : ''}`);
-        const currentCount = res.data.length;
+        const url = statusFilter
+          ? `/api/clinic/encounters?status=${statusFilter}`
+          : '/api/clinic/encounters';
 
-        // If count increased, trigger notification
-        if (currentCount > prevQueueCount) {
-          const newItem = res.data[0];
-          const patientName = newItem?.patientFile?.name || 'A Patient';
-          
+        const res = await api.get(url);
+        const currentCount: number = res.data.length;
+        const prev = prevQueueCountRef.current;
+
+        // Notify only when the queue genuinely grows (skip the very first poll)
+        if (prev !== -1 && currentCount > prev) {
+          const newest = res.data[0];
+          const patientName = newest?.patientFile?.name || 'A Patient';
+
           if (activeRole === 'CLINIC_DOCTOR') {
-            sendDesktopNotification('New Consultation Queue', `${patientName} vitals have been logged and sent to your consultation queue.`);
+            sendDesktopNotification(
+              '🩺 New Patient in Queue',
+              `${patientName}'s vitals have been logged. Awaiting your consultation.`
+            );
           } else if (activeRole === 'CLINIC_LAB_SCIENTIST') {
-            sendDesktopNotification('New Lab Test Request', `Laboratory tests have been requested for ${patientName}.`);
+            sendDesktopNotification('🔬 Lab Test Requested', `Tests have been ordered for ${patientName}.`);
           } else if (activeRole === 'CLINIC_PHARMACIST') {
-            sendDesktopNotification('New Prescription Dispense', `Medication is ready to be dispensed for ${patientName}.`);
+            sendDesktopNotification('💊 New Prescription Ready', `Dispense medication for ${patientName}.`);
           } else if (activeRole === 'CLINIC_NURSE') {
-            sendDesktopNotification('New Patient Visit', `${patientName} has checked in and is ready for triage.`);
+            sendDesktopNotification('🏥 New Patient Check-In', `${patientName} is ready for triage.`);
           }
         }
-        setPrevQueueCount(currentCount);
 
-        // Update local list if the tab matches active role
+        // Always update ref – never causes re-render / effect restart
+        prevQueueCountRef.current = currentCount;
+
+        // Refresh the visible list when the correct tab is active
         if (
           (activeRole === 'CLINIC_DOCTOR' && activeTab === 'consultation') ||
           (activeRole === 'CLINIC_LAB_SCIENTIST' && activeTab === 'laboratory') ||
@@ -134,14 +149,16 @@ export default function ClinicDashboard() {
           setEncounters(res.data);
         }
       } catch (err) {
-        console.error('Error polling encounters:', err);
+        console.error('Polling error:', err);
       }
     };
 
+    // Immediately poll then repeat every 6 s
     poll();
     const interval = setInterval(poll, 6000);
     return () => clearInterval(interval);
-  }, [activeRole, prevQueueCount, activeTab]);
+  // ⚠ prevQueueCountRef intentionally omitted – it's a ref, not state
+  }, [activeRole, activeTab, sendDesktopNotification]);
 
   // Fetch functions
   const fetchPatientFiles = async () => {
@@ -157,8 +174,8 @@ export default function ClinicDashboard() {
     try {
       const res = await api.get(`/api/clinic/encounters${status ? `?status=${status}` : ''}`);
       setEncounters(res.data);
-      // Synchronize queue count tracking to prevent double notifications
-      setPrevQueueCount(res.data.length);
+      // Sync ref so the next poll comparison is accurate (no state update = no effect restart)
+      prevQueueCountRef.current = res.data.length;
     } catch (err) {
       console.error(err);
     }
@@ -215,12 +232,21 @@ export default function ClinicDashboard() {
     }
   };
 
-  const handleSaveConsult = async (e: React.FormEvent) => {
+  const handleSaveConsult = async (e: React.FormEvent, action: 'LAB' | 'PHARMACY' | 'CLOSE') => {
     e.preventDefault();
+    // Build the payload — clear fields that don't apply for the chosen route
+    const payload = {
+      ...consultNotes,
+      labTests: action === 'LAB' ? consultNotes.labTests : '',
+      prescriptions: action === 'PHARMACY' ? consultNotes.prescriptions : '',
+    };
+    const actionLabel = action === 'LAB' ? 'Laboratory' : action === 'PHARMACY' ? 'Pharmacy' : 'Closed';
     try {
-      await api.post('/api/clinic/consultation', consultNotes);
-      setMsg({ type: 'success', text: 'Consultation notes and prescription/lab requests saved!' });
+      await api.post('/api/clinic/consultation', payload);
+      setMsg({ type: 'success', text: `Consultation saved — Patient routed to ${actionLabel}.` });
       setConsultNotes({ encounterId: '', clinicalNotes: '', diagnoses: '', labTests: '', prescriptions: '' });
+      setSelectedEncounter(null);
+      setConsultAction('CLOSE');
       fetchEncounters();
     } catch (err) {
       setMsg({ type: 'error', text: 'Failed to save consultation details' });
@@ -338,7 +364,8 @@ export default function ClinicDashboard() {
           <button
             onClick={() => {
               setActiveTab('consultation');
-              fetchEncounters('AWAITING_DOCTOR');
+              // Fetch all encounters — the queue filter handles AWAITING_DOCTOR | CONSULTATION in JSX
+              fetchEncounters();
             }}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
               activeTab === 'consultation' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -679,7 +706,7 @@ export default function ClinicDashboard() {
                             setSelectedEncounter(e);
                             setConsultNotes(prev => ({ ...prev, encounterId: e.id }));
                           }}
-                          className="bg-indigo-650 text-white font-bold text-xs py-2 px-3 rounded-lg hover:bg-indigo-700"
+                          className="bg-indigo-600 text-white font-bold text-xs py-2 px-3 rounded-lg hover:bg-indigo-700 shadow-sm"
                         >
                           Diagnose
                         </button>
@@ -726,56 +753,154 @@ export default function ClinicDashboard() {
                     )}
 
                     {/* Diagnose Form */}
-                    <form onSubmit={handleSaveConsult} className="space-y-4 text-xs font-semibold text-slate-600">
-                      <div className="grid grid-cols-2 gap-4">
+                    <form className="space-y-4 text-xs font-semibold text-slate-600">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block mb-1">Clinical Diagnoses</label>
+                          <label className="block mb-1">Clinical Diagnoses <span className="text-red-500">*</span></label>
                           <input
                             type="text"
                             required
                             placeholder="e.g. Severe Malaria, Respiratory infection"
-                            className="w-full border rounded-lg p-2.5 outline-none"
+                            className="w-full border rounded-lg p-2.5 outline-none focus:border-indigo-400"
                             value={consultNotes.diagnoses}
                             onChange={(e) => setConsultNotes({ ...consultNotes, diagnoses: e.target.value })}
                           />
                         </div>
                         <div>
-                          <label className="block mb-1">Laboratory Tests Order (Optional)</label>
+                          <label className="block mb-1">Clinical Treatment Notes <span className="text-red-500">*</span></label>
                           <input
-                            type="text"
-                            placeholder="e.g. Malaria Parasite (MP), Widal test"
-                            className="w-full border rounded-lg p-2.5 outline-none"
-                            value={consultNotes.labTests}
-                            onChange={(e) => setConsultNotes({ ...consultNotes, labTests: e.target.value })}
+                            required
+                            placeholder="Log consultation findings, patient guidance..."
+                            className="w-full border rounded-lg p-2.5 outline-none focus:border-indigo-400"
+                            value={consultNotes.clinicalNotes}
+                            onChange={(e) => setConsultNotes({ ...consultNotes, clinicalNotes: e.target.value })}
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="block mb-1">Clinical Treatment Notes</label>
-                        <textarea
-                          required
-                          rows={3}
-                          placeholder="Log consultation findings, patient guidance..."
-                          className="w-full border rounded-lg p-2.5 outline-none"
-                          value={consultNotes.clinicalNotes}
-                          onChange={(e) => setConsultNotes({ ...consultNotes, clinicalNotes: e.target.value })}
-                        />
+
+                      {/* ── Routing Destination ───────────────────────────────────── */}
+                      <div className="border border-dashed border-slate-300 rounded-xl p-4 space-y-3">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Route Patient After Consultation</p>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          {/* Option 1 – Lab */}
+                          <label
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              consultAction === 'LAB'
+                                ? 'border-amber-400 bg-amber-50'
+                                : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/40'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="routeAction"
+                              className="hidden"
+                              checked={consultAction === 'LAB'}
+                              onChange={() => setConsultAction('LAB')}
+                            />
+                            <Beaker size={22} className={consultAction === 'LAB' ? 'text-amber-500' : 'text-slate-400'} />
+                            <span className={`font-bold text-[11px] ${consultAction === 'LAB' ? 'text-amber-700' : 'text-slate-500'}`}>Send to Lab</span>
+                          </label>
+
+                          {/* Option 2 – Pharmacy */}
+                          <label
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              consultAction === 'PHARMACY'
+                                ? 'border-green-400 bg-green-50'
+                                : 'border-slate-200 hover:border-green-300 hover:bg-green-50/40'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="routeAction"
+                              className="hidden"
+                              checked={consultAction === 'PHARMACY'}
+                              onChange={() => setConsultAction('PHARMACY')}
+                            />
+                            <Pill size={22} className={consultAction === 'PHARMACY' ? 'text-green-500' : 'text-slate-400'} />
+                            <span className={`font-bold text-[11px] ${consultAction === 'PHARMACY' ? 'text-green-700' : 'text-slate-500'}`}>Send to Pharmacy</span>
+                          </label>
+
+                          {/* Option 3 – Close */}
+                          <label
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              consultAction === 'CLOSE'
+                                ? 'border-slate-400 bg-slate-100'
+                                : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="routeAction"
+                              className="hidden"
+                              checked={consultAction === 'CLOSE'}
+                              onChange={() => setConsultAction('CLOSE')}
+                            />
+                            <CheckCircle size={22} className={consultAction === 'CLOSE' ? 'text-slate-600' : 'text-slate-400'} />
+                            <span className={`font-bold text-[11px] ${consultAction === 'CLOSE' ? 'text-slate-700' : 'text-slate-500'}`}>Close Encounter</span>
+                          </label>
+                        </div>
+
+                        {/* Contextual input for Lab or Pharmacy */}
+                        {consultAction === 'LAB' && (
+                          <div>
+                            <label className="block mb-1 text-amber-700">Lab Tests to Order <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Malaria Parasite (MP), Full Blood Count, Widal Test"
+                              className="w-full border-2 border-amber-300 rounded-lg p-2.5 outline-none focus:border-amber-500 bg-amber-50/30"
+                              value={consultNotes.labTests}
+                              onChange={(e) => setConsultNotes({ ...consultNotes, labTests: e.target.value })}
+                            />
+                          </div>
+                        )}
+
+                        {consultAction === 'PHARMACY' && (
+                          <div>
+                            <label className="block mb-1 text-green-700">Prescribe Medications <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Paracetamol (10), Amalar (2), Vitamin C (15)"
+                              className="w-full border-2 border-green-300 rounded-lg p-2.5 outline-none focus:border-green-500 bg-green-50/30"
+                              value={consultNotes.prescriptions}
+                              onChange={(e) => setConsultNotes({ ...consultNotes, prescriptions: e.target.value })}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1 font-normal">Format: Drug Name (Quantity) — separate multiple with commas</p>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <label className="block mb-1">Prescribe Medications (format: Drug Name (Quantity))</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Paracetamol (10), Amalar (2), Vitamin C (15)"
-                          className="w-full border rounded-lg p-2.5 outline-none"
-                          value={consultNotes.prescriptions}
-                          onChange={(e) => setConsultNotes({ ...consultNotes, prescriptions: e.target.value })}
-                        />
-                      </div>
+
+                      {/* Submit */}
                       <button
-                        type="submit"
-                        className="bg-indigo-650 text-white font-bold text-xs py-2.5 px-6 rounded-lg hover:bg-indigo-700 flex items-center gap-1.5"
+                        onClick={(e) => {
+                          if (!consultNotes.diagnoses || !consultNotes.clinicalNotes) {
+                            setMsg({ type: 'error', text: 'Clinical Diagnoses and Treatment Notes are required.' });
+                            return;
+                          }
+                          if (consultAction === 'LAB' && !consultNotes.labTests) {
+                            setMsg({ type: 'error', text: 'Please enter lab tests to order before sending to Lab.' });
+                            return;
+                          }
+                          if (consultAction === 'PHARMACY' && !consultNotes.prescriptions) {
+                            setMsg({ type: 'error', text: 'Please enter prescriptions before sending to Pharmacy.' });
+                            return;
+                          }
+                          handleSaveConsult(e as any, consultAction);
+                        }}
+                        className={`w-full text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md ${
+                          consultAction === 'LAB'
+                            ? 'bg-amber-500 hover:bg-amber-600'
+                            : consultAction === 'PHARMACY'
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
                       >
-                        <Save size={14} /> Submit Notes
+                        <Save size={14} />
+                        {consultAction === 'LAB' && '⚗ Save & Send to Laboratory'}
+                        {consultAction === 'PHARMACY' && '💊 Save & Send to Pharmacy'}
+                        {consultAction === 'CLOSE' && '✓ Save & Close Encounter'}
                       </button>
                     </form>
                   </div>

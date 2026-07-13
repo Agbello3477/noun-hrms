@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useMemo } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
-import api from '../../../../lib/api';
+import api, { getImageUrl } from '../../../../lib/api';
 import { Mail, Plus, CheckCircle, Eye, X, Loader2, Calendar, User, MessageSquare, ChevronRight, Paperclip, Download } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
@@ -43,6 +43,9 @@ interface Memo {
     sender: {
         name: string;
         email: string;
+        staffProfile?: {
+            signatureUrl?: string | null;
+        } | null;
     };
     recipientId?: string | null;
     recipient?: {
@@ -76,10 +79,12 @@ function UnitMemosContent() {
     const [content, setContent] = useState('');
     const [allowResponses, setAllowResponses] = useState(true);
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-    const [recipientType, setRecipientType] = useState<'broadcast' | 'selected'>('broadcast');
+    const [recipientType, setRecipientType] = useState<'broadcast' | 'selected' | 'univ_broadcast' | 'selected_managers'>('broadcast');
     const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [staffList, setStaffList] = useState<any[]>([]);
+    const [allUniversityStaff, setAllUniversityStaff] = useState<any[]>([]);
+    const [loadingUnivStaff, setLoadingUnivStaff] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
     // Response states (replying to received memos)
@@ -107,6 +112,23 @@ function UnitMemosContent() {
         }
     };
 
+    const fetchUniversityManagers = async () => {
+        try {
+            setLoadingUnivStaff(true);
+            const res = await api.get('/api/staff');
+            const managers = (res.data || []).filter((s: any) => {
+                const role = s.role || s.staffProfile?.user?.role || (s.staffProfile && s.staffProfile.role);
+                const actualRole = role || s.user?.role;
+                return ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(actualRole);
+            });
+            setAllUniversityStaff(managers);
+        } catch (error) {
+            console.error('Error fetching university managers:', error);
+        } finally {
+            setLoadingUnivStaff(false);
+        }
+    };
+
     const fetchMemoDetails = async (id: string) => {
         try {
             const res = await api.get(`/api/memos/${id}`);
@@ -131,7 +153,7 @@ function UnitMemosContent() {
         setIsSubmitting(true);
         setErrorMessage('');
 
-        if (recipientType === 'selected' && selectedRecipientIds.length === 0) {
+        if ((recipientType === 'selected' || recipientType === 'selected_managers') && selectedRecipientIds.length === 0) {
             setErrorMessage('Please select at least one recipient staff member');
             setIsSubmitting(false);
             return;
@@ -142,7 +164,9 @@ function UnitMemosContent() {
             formData.append('title', title);
             formData.append('content', content);
             formData.append('allowResponses', String(allowResponses));
-            if (recipientType === 'selected') {
+            if (recipientType === 'univ_broadcast') {
+                formData.append('isUniversityBroadcast', 'true');
+            } else if (recipientType === 'selected' || recipientType === 'selected_managers') {
                 formData.append('recipientIds', JSON.stringify(selectedRecipientIds));
             }
             if (attachmentFile) {
@@ -357,6 +381,18 @@ function UnitMemosContent() {
                             {/* Content */}
                             <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
                                 <div dangerouslySetInnerHTML={{ __html: viewMemo.content }} className="prose max-w-none text-sm text-gray-800 leading-relaxed" />
+                                {viewMemo.sender?.staffProfile?.signatureUrl && (
+                                    <div className="mt-6 border-t border-gray-250/50 pt-4 flex flex-col items-end">
+                                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Digitally Signed By</p>
+                                        <img 
+                                            src={getImageUrl(viewMemo.sender.staffProfile.signatureUrl)} 
+                                            alt="Sender Signature"
+                                            className="h-12 object-contain border rounded p-1 bg-white"
+                                        />
+                                        <p className="text-xs font-bold text-gray-800 mt-1">{viewMemo.sender.name}</p>
+                                        <p className="text-[10px] text-gray-500">{viewMemo.sender.email}</p>
+                                    </div>
+                                )}
                                 
                                 {viewMemo.attachmentUrl && (
                                     <div className="mt-4 pt-4 border-t border-gray-200">
@@ -492,7 +528,7 @@ function UnitMemosContent() {
 
                             <div>
                                 <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Recipient Type</label>
-                                <div className="flex gap-4 p-1">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1">
                                     <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
                                         <input
                                             type="radio"
@@ -512,17 +548,52 @@ function UnitMemosContent() {
                                         <input
                                             type="radio"
                                             name="recipientType"
-                                            value="selected"
-                                            checked={recipientType === 'selected'}
-                                            onChange={() => setRecipientType('selected')}
+                                            value="univ_broadcast"
+                                            checked={recipientType === 'univ_broadcast'}
+                                            onChange={() => {
+                                                setRecipientType('univ_broadcast');
+                                                setSelectedRecipientIds([]);
+                                                setSearchQuery('');
+                                            }}
                                             className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
                                         />
-                                        Send to Selected Staff
+                                        Broadcast to All University Staff
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="recipientType"
+                                            value="selected"
+                                            checked={recipientType === 'selected'}
+                                            onChange={() => {
+                                                setRecipientType('selected');
+                                                setSelectedRecipientIds([]);
+                                                setSearchQuery('');
+                                            }}
+                                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        Send to Selected Unit Staff
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="recipientType"
+                                            value="selected_managers"
+                                            checked={recipientType === 'selected_managers'}
+                                            onChange={() => {
+                                                setRecipientType('selected_managers');
+                                                setSelectedRecipientIds([]);
+                                                setSearchQuery('');
+                                                fetchUniversityManagers();
+                                            }}
+                                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        Send to Selected Managers/Deans
                                     </label>
                                 </div>
                             </div>
 
-                            {recipientType === 'selected' && (
+                            {(recipientType === 'selected' || recipientType === 'selected_managers') && (
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">Select Staff Members</label>
                                     <input
@@ -534,7 +605,8 @@ function UnitMemosContent() {
                                     />
                                     
                                     {(() => {
-                                        const filteredStaff = Array.isArray(staffList) ? staffList.filter(staff => {
+                                        const targetList = recipientType === 'selected_managers' ? allUniversityStaff : staffList;
+                                        const filteredStaff = Array.isArray(targetList) ? targetList.filter(staff => {
                                             if (!staff) return false;
                                             // Handle different staff list formats
                                             const u = staff.user || staff;

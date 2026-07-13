@@ -38,6 +38,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         cadre: '',
         level: '',
         step: '',
+        dateOfFirstAppointment: '',
 
         // Organization
         centerId: '',
@@ -45,6 +46,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
 
         // Academic
         programmeId: '',
+        dateOfBirth: '',
     });
 
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
@@ -169,7 +171,18 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">Email (Official/Personal)</label>
                         <input type="email" name="email" required className="w-full border p-1.5 rounded" value={formData.email} onChange={handleChange} />
                     </div>
-                    <div className="col-span-2">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500">Date of Birth</label>
+                        <input
+                            type="date"
+                            name="dateOfBirth"
+                            required
+                            className="w-full border p-1.5 rounded mt-0.5 text-black"
+                            value={formData.dateOfBirth}
+                            onChange={handleChange}
+                        />
+                    </div>
+                    <div>
                         <label className="block text-xs font-medium text-gray-500">Phone</label>
                         <div className="flex rounded border mt-0.5 overflow-hidden">
                             <span className="bg-gray-100 text-gray-500 text-sm px-3 flex items-center border-r select-none">+234</span>
@@ -253,6 +266,13 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             <option value="HR_ADMIN">HR Admin</option>
                             <option value="BURSARY">Bursary</option>
                             <option value="AUDIT">Audit</option>
+                            <option value="CLINIC_HEAD">Head of Clinic</option>
+                            <option value="CLINIC_DOCTOR">Doctor</option>
+                            <option value="CLINIC_NURSE">Nurse</option>
+                            <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
+                            <option value="SECURITY_HEAD">Head of Security</option>
+                            <option value="SECURITY_OFFICER">Officer</option>
+                            <option value="DRIVER">Driver</option>
                         </select>
                     </div>
                     <div>
@@ -263,6 +283,8 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             <option value="NON_ACADEMIC">Non-Academic</option>
                             <option value="SENIOR">Senior</option>
                             <option value="JUNIOR">Junior</option>
+                            <option value="MEDICAL">Medical</option>
+                            <option value="SECURITY">Security</option>
                         </select>
                     </div>
                     <div>
@@ -272,6 +294,17 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                     <div>
                         <label className="block text-xs font-medium text-gray-500">Step (e.g. 2)</label>
                         <input name="step" className="w-full border p-1.5 rounded" value={formData.step} onChange={handleChange} />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-500">Date of First Appointment</label>
+                        <input
+                            type="date"
+                            name="dateOfFirstAppointment"
+                            required
+                            className="w-full border p-1.5 rounded text-black mt-0.5"
+                            value={formData.dateOfFirstAppointment}
+                            onChange={handleChange}
+                        />
                     </div>
                 </div>
             </div>

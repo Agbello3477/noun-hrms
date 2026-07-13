@@ -37,6 +37,7 @@ interface Staff {
         cadre?: string;
         unitId?: string;
         centerId?: string;
+        status?: string;
         unit?: { name: string; type: string };
         studyCenter?: { name: string; code: string };
     };
@@ -59,12 +60,18 @@ export default function StaffPage() {
     const [roleFilter, setRoleFilter] = useState('');
     const [cadreFilter, setCadreFilter] = useState('');
     const [locationFilter, setLocationFilter] = useState(''); // unitId or centerId
+    const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['ACTIVE']);
+    
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pageSize] = useState(12);
 
     const fetchStaffAndOrg = async () => {
         try {
             setLoading(true);
+            const statusParam = selectedStatuses.length > 0 ? selectedStatuses.join(',') : 'ACTIVE';
             const [staffRes, orgRes] = await Promise.all([
-                api.get('/api/staff'),
+                api.get(`/api/staff?status=${statusParam}`),
                 api.get('/api/org/structure')
             ]);
             setStaffList(staffRes.data || []);
@@ -78,9 +85,9 @@ export default function StaffPage() {
 
     useEffect(() => {
         fetchStaffAndOrg();
-    }, []);
+    }, [selectedStatuses]);
 
-    // Statistics helpers
+    // Statistics helpers based on fetched list
     const totalCount = staffList.length;
     const academicCount = staffList.filter(s => s.staffProfile?.cadre === 'ACADEMIC').length;
     const nonAcademicCount = totalCount - academicCount;
@@ -116,6 +123,26 @@ export default function StaffPage() {
 
         return matchesSearch && matchesRole && matchesCadre && matchesLocation;
     });
+
+    const totalPages = Math.ceil(filteredStaff.length / pageSize);
+    const paginatedStaff = filteredStaff.slice((page - 1) * pageSize, page * pageSize);
+
+    useEffect(() => {
+        if (page > totalPages && totalPages > 0) {
+            setPage(totalPages);
+        }
+    }, [filteredStaff, totalPages, page]);
+
+    const getStatusBadgeStyle = (status: string) => {
+        const s = (status || 'ACTIVE').toUpperCase();
+        if (s === 'RETIRED') return 'bg-amber-50 text-amber-700 border-amber-200';
+        if (s === 'DECEASED') return 'bg-gray-50 text-gray-700 border-gray-200';
+        if (s === 'RESIGNED') return 'bg-blue-50 text-blue-700 border-blue-200';
+        if (s === 'FIRED') return 'bg-red-50 text-red-700 border-red-200';
+        if (s === 'ON_LEAVE') return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+        if (s === 'SUSPENDED') return 'bg-rose-50 text-rose-700 border-rose-200';
+        return 'bg-green-50 text-green-700 border-green-200';
+    };
 
     // Avatar Gradient Generator
     const getAvatarGradient = (name: string) => {
@@ -293,6 +320,8 @@ export default function StaffPage() {
                             <option value="ADMINISTRATIVE">Administrative</option>
                             <option value="TECHNICAL">Technical</option>
                             <option value="JUNIOR">Junior</option>
+                            <option value="MEDICAL">Medical</option>
+                            <option value="SECURITY">Security</option>
                         </select>
                     </div>
 
@@ -312,6 +341,39 @@ export default function StaffPage() {
                                 {orgData.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                             </optgroup>
                         </select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-semibold">Status</span>
+                        <div className="flex flex-wrap gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200">
+                            {['ACTIVE', 'RETIRED', 'DECEASED', 'RESIGNED', 'FIRED', 'ON_LEAVE', 'SUSPENDED'].map(st => {
+                                const isSelected = selectedStatuses.includes(st);
+                                return (
+                                    <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => {
+                                            if (isSelected) {
+                                                if (selectedStatuses.length > 1) {
+                                                    setSelectedStatuses(selectedStatuses.filter(s => s !== st));
+                                                }
+                                            } else {
+                                                setSelectedStatuses([...selectedStatuses, st]);
+                                            }
+                                            setPage(1); // Reset to first page
+                                        }}
+                                        className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition ${
+                                            isSelected 
+                                                ? 'bg-blue-600 text-white shadow-sm' 
+                                                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-150'
+                                        }`}
+                                    >
+                                        {st.replace('_', ' ')}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Reset Button */}
@@ -346,7 +408,7 @@ export default function StaffPage() {
             ) : viewMode === 'grid' ? (
                 /* Premium Grid View Layout */
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredStaff.map((staff) => {
+                    {paginatedStaff.map((staff) => {
                         const gradientClass = getAvatarGradient(staff.name);
                         const isAcademic = staff.staffProfile?.cadre === 'ACADEMIC';
                         return (
@@ -355,14 +417,19 @@ export default function StaffPage() {
                                 className="bg-white rounded-3xl border border-gray-150 hover:border-blue-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition duration-300 flex flex-col justify-between overflow-hidden group"
                             >
                                 <div className="p-6 space-y-4">
-                                    {/* Card Header (Avatar + Role Badge) */}
+                                    {/* Card Header (Avatar + Role & Status Badges) */}
                                     <div className="flex justify-between items-start gap-3">
                                         <div className={`h-14 w-14 flex-shrink-0 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-extrabold text-xl shadow-md transform group-hover:scale-105 transition-transform`}>
                                             {staff.name?.charAt(0) || 'U'}
                                         </div>
-                                        <span className={`inline-flex flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
-                                            {getRoleDisplayName(staff)}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1.5">
+                                            <span className={`inline-flex flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
+                                                {getRoleDisplayName(staff)}
+                                            </span>
+                                            <span className={`inline-flex flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(staff.staffProfile?.status || 'ACTIVE')}`}>
+                                                {(staff.staffProfile?.status || 'ACTIVE').replace('_', ' ')}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     {/* Core Bio Info */}
@@ -439,7 +506,7 @@ export default function StaffPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {filteredStaff.map((staff) => {
+                                {paginatedStaff.map((staff) => {
                                     const gradientClass = getAvatarGradient(staff.name);
                                     return (
                                         <tr key={staff.id} className="hover:bg-slate-55/30 transition-colors">
@@ -456,11 +523,16 @@ export default function StaffPage() {
                                                 </div>
                                             </td>
 
-                                            {/* Role Cell */}
+                                            {/* Role & Status Cell */}
                                             <td className="px-6 py-4">
-                                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
-                                                    {getRoleDisplayName(staff)}
-                                                </span>
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
+                                                        {getRoleDisplayName(staff)}
+                                                    </span>
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(staff.staffProfile?.status || 'ACTIVE')}`}>
+                                                        {(staff.staffProfile?.status || 'ACTIVE').replace('_', ' ')}
+                                                    </span>
+                                                </div>
                                             </td>
 
                                             {/* Location Cell */}
@@ -496,6 +568,45 @@ export default function StaffPage() {
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between bg-white px-6 py-4 rounded-2xl border border-gray-150 shadow-sm mt-6">
+                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        Showing <span className="text-gray-800">{Math.min((page - 1) * pageSize + 1, filteredStaff.length)}</span> to{' '}
+                        <span className="text-gray-800">{Math.min(page * pageSize, filteredStaff.length)}</span> of{' '}
+                        <span className="text-gray-800">{filteredStaff.length}</span> members
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={() => setPage(p => Math.max(p - 1, 1))}
+                            disabled={page === 1}
+                            className="px-3 py-1.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                            Prev
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                            <button
+                                key={p}
+                                onClick={() => setPage(p)}
+                                className={`h-8 w-8 rounded-xl text-xs font-bold transition flex items-center justify-center ${
+                                    page === p 
+                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                                        : 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setPage(p => Math.min(p + 1, totalPages))}
+                            disabled={page === totalPages}
+                            className="px-3 py-1.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                            Next
+                        </button>
                     </div>
                 </div>
             )}

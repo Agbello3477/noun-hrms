@@ -1,16 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role } from '@prisma/client';
+import prisma from '../prisma';
 
 interface AuthRequest extends Request {
     user?: {
         id: string;
         role: Role;
+        iat?: number;
     };
 }
 
 
-export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
 
     if (!token) {
@@ -18,7 +20,39 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role };
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role; iat?: number };
+        
+        // ─── Token Revocation Check ─────────────────────────────────────────
+        // If the account was archived (retired/resigned/fired/deceased), the
+        // tokenInvalidatedAt timestamp is set. Any token issued BEFORE that
+        // timestamp is considered revoked, even if it hasn't expired yet.
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { isActive: true, tokenInvalidatedAt: true }
+        });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Account not found' });
+        }
+
+        if (!user.isActive) {
+            return res.status(401).json({ 
+                message: 'Your account has been deactivated. Please contact HR for assistance.',
+                code: 'ACCOUNT_DEACTIVATED'
+            });
+        }
+
+        if (user.tokenInvalidatedAt && decoded.iat) {
+            const invalidatedAt = Math.floor(user.tokenInvalidatedAt.getTime() / 1000);
+            if (decoded.iat < invalidatedAt) {
+                return res.status(401).json({ 
+                    message: 'Your session has been revoked. Please log in again.',
+                    code: 'SESSION_REVOKED'
+                });
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         req.user = decoded;
         next();
     } catch (error) {

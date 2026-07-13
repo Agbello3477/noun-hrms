@@ -21,4 +21,13 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+export const getImageUrl = (url: string | null | undefined): string => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
+    const baseUrl = rawBaseUrl.replace(/"/g, '').replace(/'/g, '').trim();
+    return `${baseUrl}${cleanUrl}`;
+};
+
 export default api;

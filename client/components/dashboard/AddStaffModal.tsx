@@ -151,6 +151,20 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
             } else if (formData.role === 'HEAD_OF_ADMIN') {
                 dbRole = 'UNIT_ADMIN';
                 assignedRank = 'Head of Admin';
+            } else if (formData.role === 'CLINIC_HEAD') {
+                assignedRank = 'Head of Clinic';
+            } else if (formData.role === 'CLINIC_DOCTOR') {
+                assignedRank = 'Medical Doctor';
+            } else if (formData.role === 'CLINIC_NURSE') {
+                assignedRank = 'Nurse';
+            } else if (formData.role === 'CLINIC_LAB_SCIENTIST') {
+                assignedRank = 'Lab Scientist';
+            } else if (formData.role === 'SECURITY_HEAD') {
+                assignedRank = 'Head of Security';
+            } else if (formData.role === 'SECURITY_OFFICER') {
+                assignedRank = 'Security Officer';
+            } else if (formData.role === 'DRIVER') {
+                assignedRank = 'Driver';
             }
 
             let submittedPhone = formData.phone;
@@ -192,22 +206,22 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 overflow-y-auto">
-            <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl my-8">
-                <div className="mb-4 flex items-center justify-between border-b pb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 flex items-center justify-between border-b flex-shrink-0">
                     <h3 className="text-xl font-bold text-gray-900">Add New Staff Member</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 rounded-lg transition-colors">
                         <X size={24} />
                     </button>
                 </div>
 
                 {error && (
-                    <div className="mb-4 rounded bg-red-100 p-3 text-sm text-red-700">
+                    <div className="mx-6 mt-4 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
                         {error}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
 
                     {/* Section 1: Identity */}
                     <div className="space-y-4">
@@ -354,8 +368,8 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                                     <option key={unit.id} value={unit.id}>{unit.name}</option>
                                                 ))}
                                             </optgroup>
-                                            <optgroup label="Directorates & Units">
-                                                {orgData.units.filter(u => u.type === 'DIRECTORATE').map(unit => (
+                                            <optgroup label="Directorates & Departments">
+                                                {orgData.units.filter(u => u.type === 'DIRECTORATE' || u.type === 'DEPARTMENT').map(unit => (
                                                     <option key={unit.id} value={unit.id}>{unit.name}</option>
                                                 ))}
                                             </optgroup>
@@ -380,6 +394,8 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     <option value="NON_ACADEMIC">Non-Academic Staff</option>
                                     <option value="SENIOR">Senior Staff</option>
                                     <option value="JUNIOR">Junior Staff</option>
+                                    <option value="MEDICAL">Medical</option>
+                                    <option value="SECURITY">Security</option>
                                 </select>
                             </div>
                             <div>
@@ -412,6 +428,13 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     <option value="HR_ADMIN">HR Admin</option>
                                     <option value="BURSARY">Bursary</option>
                                     <option value="AUDIT">Audit</option>
+                                    <option value="CLINIC_HEAD">Head of Clinic</option>
+                                    <option value="CLINIC_DOCTOR">Doctor</option>
+                                    <option value="CLINIC_NURSE">Nurse</option>
+                                    <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
+                                    <option value="SECURITY_HEAD">Head of Security</option>
+                                    <option value="SECURITY_OFFICER">Officer</option>
+                                    <option value="DRIVER">Driver</option>
                                 </select>
                             </div>
                         ) : (
@@ -474,11 +497,11 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                         </div>
                     )}
 
-                    <div className="pt-4">
+                    <div className="pt-4 sticky bottom-0 bg-white border-t -mx-6 -mb-6 p-6 flex-shrink-0">
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full rounded-md bg-blue-900 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50"
+                            className="w-full rounded-xl bg-blue-900 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 transition-colors shadow-md shadow-blue-900/10 hover:shadow-lg"
                         >
                             {loading ? 'Creating...' : 'Create Staff Member'}
                         </button>

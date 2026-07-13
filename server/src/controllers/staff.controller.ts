@@ -7,13 +7,120 @@ import path from 'path';
 import { StorageService } from '../services/storage.service';
 import prisma from '../prisma';
 import { sendAccountCreatedNotification } from '../services/email.service';
+import { redisService } from '../services/redis.service';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
+        const { status, page, limit, search, role, cadre, location } = req.query;
+
+        // Redis cache check
+        const cacheKey = `staff:all:${JSON.stringify(req.query)}`;
+        const cached = await redisService.get<any>(cacheKey);
+        if (cached) {
+            res.setHeader('X-Total-Count', cached.total.toString());
+            res.setHeader('X-Total-Pages', cached.pages.toString());
+            res.setHeader('X-Current-Page', cached.page.toString());
+            
+            if (req.query.paginated === 'true') {
+                return res.json({
+                    data: cached.data,
+                    total: cached.total,
+                    page: cached.page,
+                    pages: cached.pages
+                });
+            }
+            return res.json(cached.data);
+        }
+
+        let statuses: string[] = [];
+        if (status) {
+            if (Array.isArray(status)) {
+                statuses = status.map(s => String(s).toUpperCase());
+            } else {
+                statuses = String(status).split(',').map(s => s.trim().toUpperCase());
+            }
+        }
+
+        let whereClause: any = {};
+
+        // Search filter (name, email, staffId)
+        if (search) {
+            whereClause.OR = [
+                { name: { contains: String(search), mode: 'insensitive' } },
+                { email: { contains: String(search), mode: 'insensitive' } },
+                {
+                    staffProfile: {
+                        staffId: { contains: String(search), mode: 'insensitive' }
+                    }
+                }
+            ];
+        }
+
+        let profileFilters: any = {};
+
+        if (statuses.length > 0) {
+            profileFilters.status = { in: statuses as any };
+        } else {
+            // Default to only ACTIVE-like status if none specified
+            whereClause.isActive = true;
+            profileFilters.isDeleted = false;
+        }
+
+        if (cadre) {
+            profileFilters.cadre = cadre as any;
+        }
+
+        if (location) {
+            profileFilters.OR = [
+                { unitId: String(location) },
+                { centerId: String(location) }
+            ];
+        }
+
+        // Only assign staffProfile to whereClause if there are filters inside it
+        if (Object.keys(profileFilters).length > 0) {
+            whereClause.staffProfile = profileFilters;
+        }
+
+        if (role) {
+            // Check custom role mappings or exact match
+            if (role === 'DIRECTOR') {
+                whereClause.role = 'UNIT_HEAD';
+                whereClause.staffProfile = {
+                    ...whereClause.staffProfile,
+                    rank: { equals: 'Director', mode: 'insensitive' }
+                };
+            } else if (role === 'DEAN') {
+                whereClause.role = 'UNIT_HEAD';
+                whereClause.staffProfile = {
+                    ...whereClause.staffProfile,
+                    rank: { equals: 'Dean', mode: 'insensitive' }
+                };
+            } else if (role === 'UNIT_HEAD') {
+                whereClause.role = 'UNIT_HEAD';
+                whereClause.staffProfile = {
+                    ...whereClause.staffProfile,
+                    rank: { notIn: ['Director', 'Dean'] }
+                };
+            } else if (role === 'HEAD_OF_ADMIN') {
+                whereClause.role = 'UNIT_ADMIN';
+                whereClause.staffProfile = {
+                    ...whereClause.staffProfile,
+                    rank: { equals: 'Head of Admin', mode: 'insensitive' }
+                };
+            } else {
+                whereClause.role = role as any;
+            }
+        }
+
+        const total = await prisma.user.count({ where: whereClause });
+
+        const pageNum = page ? parseInt(String(page)) : 1;
+        const limitNum = limit ? parseInt(String(limit)) : 10000; // default large if not paginated
+        const skip = (pageNum - 1) * limitNum;
+
         const staff = await prisma.user.findMany({
-            where: {
-                isActive: true
-            },
+            where: whereClause,
             include: {
                 staffProfile: {
                     include: {
@@ -24,8 +131,38 @@ export const getAllStaff = async (req: Request, res: Response) => {
             },
             orderBy: {
                 createdAt: 'desc',
-            }
+            },
+            skip,
+            take: limitNum
         });
+
+        const totalPages = Math.ceil(total / limitNum);
+
+        // Cache in Redis
+        const cacheData = {
+            data: staff,
+            total,
+            page: pageNum,
+            pages: totalPages
+        };
+        await redisService.set(cacheKey, cacheData, 300); // Cache for 5 mins
+
+        // Set pagination headers for backwards compatibility
+        res.setHeader('X-Total-Count', total.toString());
+        res.setHeader('X-Total-Pages', totalPages.toString());
+        res.setHeader('X-Current-Page', pageNum.toString());
+
+        // Also if client explicitly wants paginated JSON format
+        if (req.query.paginated === 'true') {
+            return res.json({
+                data: staff,
+                total,
+                page: pageNum,
+                pages: totalPages
+            });
+        }
+
+        // Default returns raw array (maintaining compatibility with existing endpoints)
         res.json(staff);
     } catch (error) {
         console.error('Get all staff error:', error);
@@ -250,6 +387,7 @@ export const createStaff = async (req: Request, res: Response) => {
             console.error('Failed to send account creation notification:', err);
         });
 
+        await redisService.clearPattern('staff:all:*');
         res.status(201).json({ message: 'Staff created successfully', user });
 
     } catch (error: any) {
@@ -368,7 +506,8 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         const {
             surname, otherNames, phone, stateOfOrigin, lga, address,
             level, step, cadre, gender,
-            role, unitId, centerId, rank
+            role, unitId, centerId, rank,
+            dateOfBirth, dateOfFirstAppointment, status
         } = req.body;
 
         let resolvedCadre: Cadre | undefined = undefined;
@@ -393,6 +532,52 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        const parseDate = (val: any) => {
+            if (!val || val === 'null' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const dob = parseDate(dateOfBirth);
+        const apptDate = parseDate(dateOfFirstAppointment);
+
+        // Status update logic with archiving cascade
+        let finalStatus = user.staffProfile?.status;
+        let finalIsActive = user.isActive;
+        let finalIsDeleted = user.staffProfile?.isDeleted || false;
+        let finalDeletedAt = user.staffProfile?.deletedAt || null;
+        let finalTokenInvalidatedAt = user.tokenInvalidatedAt;
+
+        if (isAdmin && status) {
+            const upperStatus = status.toUpperCase();
+            if (['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(upperStatus)) {
+                finalStatus = upperStatus as any;
+                if (['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(upperStatus)) {
+                    finalIsActive = false;
+                    finalIsDeleted = true;
+                    finalDeletedAt = new Date();
+                    finalTokenInvalidatedAt = new Date(); // Revokes existing tokens
+                } else {
+                    // Changing back to ACTIVE, ON_LEAVE, SUSPENDED restores user access
+                    finalIsActive = true;
+                    finalIsDeleted = false;
+                    finalDeletedAt = null;
+                }
+            }
+        }
+
+        // Update User isActive and tokenInvalidatedAt if changed
+        if (finalIsActive !== user.isActive || finalTokenInvalidatedAt !== user.tokenInvalidatedAt) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    isActive: finalIsActive,
+                    tokenInvalidatedAt: finalTokenInvalidatedAt
+                }
+            });
+        }
+
+        // Upsert staff profile
         await prisma.staffProfile.upsert({
             where: { userId: user.id },
             create: {
@@ -401,6 +586,11 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 level, step, cadre: resolvedCadre, gender,
                 passportUrl,
                 rank: rank || undefined,
+                dateOfBirth: dob,
+                dateOfFirstAppointment: apptDate,
+                status: finalStatus,
+                isDeleted: finalIsDeleted,
+                deletedAt: finalDeletedAt,
                 unitId: (isAdmin && unitId && unitId !== 'null' && unitId !== '') ? unitId : null,
                 centerId: (isAdmin && centerId && centerId !== 'null' && centerId !== '') ? centerId : null
             },
@@ -408,6 +598,11 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 surname, otherNames, phone, stateOfOrigin, lga, address,
                 level, step, cadre: resolvedCadre, gender,
                 rank: rank !== undefined ? rank : undefined,
+                dateOfBirth: dob !== undefined ? dob : undefined,
+                dateOfFirstAppointment: apptDate !== undefined ? apptDate : undefined,
+                status: finalStatus,
+                isDeleted: finalIsDeleted,
+                deletedAt: finalDeletedAt,
                 ...(passportUrl ? { passportUrl } : {}),
                 ...(isAdmin ? {
                     unitId: unitId !== undefined ? (unitId === '' || unitId === 'null' ? null : unitId) : undefined,
@@ -423,6 +618,21 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        // Log archiving in audit trail
+        if (finalIsDeleted && !(user.staffProfile?.isDeleted)) {
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        userId: updaterId || 'SYSTEM',
+                        action: 'ARCHIVE_STAFF',
+                        resource: 'USER',
+                        details: JSON.stringify({ archivedStaffId: user.id, status: finalStatus }),
+                    }
+                });
+            } catch (e) {}
+        }
+
+        await redisService.clearPattern('staff:all:*');
         res.json({ message: 'Profile updated successfully', passportUrl });
 
     } catch (error) {
@@ -544,3 +754,180 @@ export const uploadSignature = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PROMOTION MONITORING MODULE
+// ─────────────────────────────────────────────────────────────────────────────
+import { runPromotionJob } from '../jobs/promotionCron';
+
+/**
+ * GET /api/staff/promotions/due
+ * Returns paginated list of PromotionLog entries for the current year.
+ * ACCESS: HR_ADMIN, VICE_CHANCELLOR, SUPER_USER
+ */
+export const getDueForPromotion = async (req: Request, res: Response) => {
+    // @ts-ignore
+    const requesterRole = req.user?.role as Role;
+    const allowed: Role[] = [Role.HR_ADMIN, Role.VICE_CHANCELLOR, Role.SUPER_USER, Role.ADMIN];
+    if (!allowed.includes(requesterRole)) {
+        return res.status(403).json({ message: 'Forbidden: Insufficient privileges to view promotion records.' });
+    }
+
+    try {
+        const { search = '', year, page = '1', limit = '20' } = req.query;
+        const calendarYear = year ? parseInt(String(year)) : new Date().getFullYear();
+        const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
+        const take = parseInt(String(limit));
+
+        const where: any = { calendarYear };
+        if (search) {
+            where.staffProfile = {
+                OR: [
+                    { surname:   { contains: String(search), mode: 'insensitive' } },
+                    { otherNames:{ contains: String(search), mode: 'insensitive' } },
+                    { staffId:   { contains: String(search), mode: 'insensitive' } },
+                    { rank:      { contains: String(search), mode: 'insensitive' } },
+                ]
+            };
+        }
+
+        const [logs, total] = await Promise.all([
+            prisma.promotionLog.findMany({
+                where,
+                skip,
+                take,
+                orderBy: { cronExecutedAt: 'desc' },
+                include: {
+                    staffProfile: {
+                        select: {
+                            staffId:       true,
+                            surname:       true,
+                            otherNames:    true,
+                            title:         true,
+                            rank:          true,
+                            level:         true,
+                            step:          true,
+                            cadre:         true,
+                            department:    true,
+                            isDueForPromotion: true,
+                            promotionFlaggedAt: true,
+                            dateOfLastPromotion: true,
+                            unit:          { select: { name: true } },
+                            studyCenter:   { select: { name: true } },
+                            user:          { select: { email: true } },
+                        }
+                    }
+                }
+            }),
+            prisma.promotionLog.count({ where })
+        ]);
+
+        res.json({
+            data: logs,
+            total,
+            page:  parseInt(String(page)),
+            pages: Math.ceil(total / take),
+            year:  calendarYear,
+        });
+    } catch (error) {
+        console.error('getDueForPromotion error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * PUT /api/staff/promotions/flag/:profileId
+ * Toggle isDueForPromotion on a StaffProfile. Also updates currentRank snapshot.
+ * ACCESS: HR_ADMIN, SUPER_USER
+ */
+export const flagForPromotion = async (req: Request, res: Response) => {
+    // @ts-ignore
+    const requesterRole = req.user?.role as Role;
+    // @ts-ignore
+    const requesterId   = req.user?.id as string;
+    const allowed: Role[] = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN];
+    if (!allowed.includes(requesterRole)) {
+        return res.status(403).json({ message: 'Forbidden: Only Registry HR Admins can flag staff for promotion.' });
+    }
+
+    const { profileId } = req.params;
+    const { isDue }: { isDue: boolean } = req.body;
+
+    try {
+        const profile = await prisma.staffProfile.findUnique({
+            where: { id: profileId },
+            select: { id: true, rank: true, staffId: true, surname: true, otherNames: true }
+        });
+        if (!profile) return res.status(404).json({ message: 'Staff profile not found.' });
+
+        const updated = await prisma.staffProfile.update({
+            where: { id: profileId },
+            data: {
+                isDueForPromotion:   isDue,
+                currentRank:         profile.rank || null,
+                promotionFlaggedAt:  isDue ? new Date() : null,
+                promotionFlaggedById: isDue ? requesterId : null,
+            }
+        });
+
+        const staffName = `${profile.surname || ''} ${profile.otherNames || ''}`.trim();
+        const action = isDue ? 'flagged as DUE for promotion' : 'cleared from promotion list';
+        console.log(`[PROMOTION] ${staffName} (${profile.staffId}) was ${action} by user ${requesterId}`);
+
+        res.json({ message: `Staff member ${action} successfully.`, profile: updated });
+    } catch (error) {
+        console.error('flagForPromotion error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * POST /api/staff/promotions/run-cron
+ * Manually triggers the promotion cron (for testing / on-demand runs).
+ * ACCESS: SUPER_USER only
+ */
+export const manualRunPromotionCron = async (req: Request, res: Response) => {
+    // @ts-ignore
+    const requesterRole = req.user?.role as Role;
+    if (requesterRole !== Role.SUPER_USER) {
+        return res.status(403).json({ message: 'Forbidden: SUPER_USER access only.' });
+    }
+
+    try {
+        console.log('[PROMOTION_CRON] Manual execution triggered via API...');
+        const result = await runPromotionJob('MANUAL');
+        res.json({
+            message: 'Promotion job executed successfully.',
+            result,
+        });
+    } catch (error) {
+        console.error('manualRunPromotionCron error:', error);
+        res.status(500).json({ message: 'Failed to run promotion job.' });
+    }
+};
+
+/**
+ * POST /api/staff/retirement/run-cron
+ * Manually triggers the retirement cron (for testing / on-demand runs).
+ * ACCESS: SUPER_USER or HR_ADMIN
+ */
+export const manualRunRetirementCron = async (req: any, res: any) => {
+    const requesterRole = req.user?.role;
+    if (requesterRole !== 'SUPER_USER' && requesterRole !== 'HR_ADMIN') {
+        return res.status(403).json({ message: 'Forbidden: SUPER_USER or HR_ADMIN access only.' });
+    }
+
+    try {
+        const { runRetirementJob } = require('../jobs/retirementCron');
+        console.log('[RETIREMENT_CRON] Manual execution triggered via API...');
+        const result = await runRetirementJob('MANUAL');
+        res.json({
+            message: 'Retirement job executed successfully.',
+            result,
+        });
+    } catch (error) {
+        console.error('manualRunRetirementCron error:', error);
+        res.status(500).json({ message: 'Failed to run retirement job.' });
+    }
+};
+

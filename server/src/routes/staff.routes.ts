@@ -44,6 +44,28 @@ router.get('/academic', requireRole(viewRoles), getAcademicStaff);
 router.get('/unit', requireRole(unitRoles), getUnitStaff);
 router.get('/transferred', requireRole([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.ADMIN]), getTransferredStaff);
 
+// ─── Promotion Monitoring Module ─────────────────────────────────────────────
+// IMPORTANT: These must be registered BEFORE /:id to prevent route shadowing
+import {
+    getDueForPromotion,
+    flagForPromotion,
+    manualRunPromotionCron,
+    manualRunRetirementCron,
+} from '../controllers/staff.controller';
+
+const promotionViewRoles = [Role.HR_ADMIN, Role.VICE_CHANCELLOR, Role.SUPER_USER, Role.ADMIN];
+const promotionManageRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN];
+
+// GET  /api/staff/promotions/due      — paginated due-for-promotion table
+router.get('/promotions/due', requireRole(promotionViewRoles), getDueForPromotion);
+// PUT  /api/staff/promotions/flag/:id — toggle flag on a staff profile
+router.put('/promotions/flag/:profileId', requireRole(promotionManageRoles), flagForPromotion);
+// POST /api/staff/promotions/run-cron — manually fire the cron (SUPER_USER only)
+router.post('/promotions/run-cron', requireRole([Role.SUPER_USER]), manualRunPromotionCron);
+// POST /api/staff/retirement/run-cron — manually fire the retirement cron
+router.post('/retirement/run-cron', requireRole([Role.SUPER_USER, Role.HR_ADMIN]), manualRunRetirementCron);
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Individual staff can view their own profile, usually handled by checking ID vs requested ID in controller or separate /me endpoint.
 // But for generic getById:
 router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);

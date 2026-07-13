@@ -16,6 +16,7 @@ interface ArchivedFile {
   rank: string | null;
   level: string | null;
   deletedAt: string | null;
+  status?: string;
   user: {
     name: string;
     email: string;
@@ -39,6 +40,7 @@ export default function RegistryArchivePage() {
   const [filteredFiles, setFilteredFiles] = useState<ArchivedFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Role restriction check
@@ -62,20 +64,27 @@ export default function RegistryArchivePage() {
     }
   };
 
-  // Handle Search filtering
+  // Handle Search & Status filtering
   useEffect(() => {
     const term = search.toLowerCase().trim();
-    if (!term) {
-      setFilteredFiles(archivedFiles);
-    } else {
-      const filtered = archivedFiles.filter(
+    let filtered = archivedFiles;
+
+    if (term) {
+      filtered = filtered.filter(
         file =>
           file.user.name.toLowerCase().includes(term) ||
           (file.staffId && file.staffId.toLowerCase().includes(term))
       );
-      setFilteredFiles(filtered);
     }
-  }, [search, archivedFiles]);
+
+    if (statusFilter) {
+      filtered = filtered.filter(
+        file => (file.status || 'ACTIVE').toUpperCase() === statusFilter.toUpperCase()
+      );
+    }
+
+    setFilteredFiles(filtered);
+  }, [search, statusFilter, archivedFiles]);
 
   const handleSecuritySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,8 +203,8 @@ export default function RegistryArchivePage() {
         </p>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex gap-4 items-center">
+      {/* Search & Filter Bar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -205,6 +214,22 @@ export default function RegistryArchivePage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
+
+        {/* Status filter selection menu */}
+        <div className="flex items-center gap-2 w-full md:w-auto flex-shrink-0">
+          <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Reason:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none font-medium text-gray-750 bg-white"
+          >
+            <option value="">All Reasons</option>
+            <option value="RETIRED">Retired</option>
+            <option value="DECEASED">Deceased</option>
+            <option value="RESIGNED">Resigned</option>
+            <option value="FIRED">Fired</option>
+          </select>
         </div>
       </div>
 
@@ -250,11 +275,23 @@ export default function RegistryArchivePage() {
                 </div>
 
                 {/* Details list */}
-                <div className="text-xs text-gray-500 space-y-1 mb-4 border-t pt-3 border-gray-100">
+                <div className="text-xs text-gray-500 space-y-1.5 mb-4 border-t pt-3 border-gray-100">
                   <div className="flex justify-between">
                     <span>Placement:</span>
                     <span className="font-medium text-gray-800 truncate max-w-[180px]">
                       {file.unit?.name || file.studyCenter?.name || 'HQ'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Archive Status:</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border uppercase tracking-wider ${
+                      file.status === 'RETIRED' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      file.status === 'DECEASED' ? 'bg-gray-50 text-gray-700 border-gray-200' :
+                      file.status === 'RESIGNED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                      file.status === 'FIRED' ? 'bg-red-50 text-red-700 border-red-200' :
+                      'bg-gray-50 text-gray-650 border-gray-200'
+                    }`}>
+                      {file.status || 'Archived'}
                     </span>
                   </div>
                   {file.deletedAt && (

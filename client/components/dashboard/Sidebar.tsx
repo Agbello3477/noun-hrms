@@ -25,7 +25,8 @@ import {
     Archive,
     Calendar,
     HeartPulse,
-    Shield
+    Shield,
+    TrendingUp
 } from 'lucide-react';
 
 
@@ -103,6 +104,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
                         <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
                         <LinkItem href="/dashboard/registry/memos" icon={Mail} label="Registry Memos" />
+                        {['HR_ADMIN', 'VICE_CHANCELLOR', 'SUPER_USER'].includes(role || '') && (
+                            <LinkItem href="/dashboard/registry/due-for-promotion" icon={TrendingUp} label="Due for Promotion" />
+                        )}
                     </>
                 )}
 
@@ -176,17 +180,19 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     </>
                 )}
 
-                {isSecurity && (
-                    <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Campus Security
-                        </div>
-                        <LinkItem href="/dashboard/security" icon={Shield} label="Command Center" />
-                        {(String(role) === 'SECURITY_HEAD' || isVC || isAdmin) && (
-                            <LinkItem href="/dashboard/security/reports" icon={FileText} label="Security Reports" />
-                        )}
-                    </>
-                )}
+                <>
+                    <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        Campus Security
+                    </div>
+                    <LinkItem 
+                        href="/dashboard/security" 
+                        icon={Shield} 
+                        label={['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role || '') ? "Command Center" : "Report Threat / Incident"} 
+                    />
+                    {(String(role) === 'SECURITY_HEAD' || isVC || isAdmin) && (
+                        <LinkItem href="/dashboard/security/reports" icon={FileText} label="Security Reports" />
+                    )}
+                </>
 
                 {/* System */}
                 {isAdmin && (

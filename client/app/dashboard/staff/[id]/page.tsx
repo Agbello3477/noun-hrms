@@ -42,6 +42,9 @@ interface StaffDetail {
         address: string | null;
         unitId: string | null;
         centerId: string | null;
+        status?: string;
+        dateOfBirth?: string;
+        dateOfFirstAppointment?: string;
         unit?: { name: string; type: string };
         studyCenter?: { name: string; code: string };
     }
@@ -76,6 +79,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     const [editStep, setEditStep] = useState('');
     const [editRank, setEditRank] = useState('');
     const [editGender, setEditGender] = useState('');
+    const [editDateOfBirth, setEditDateOfBirth] = useState('');
+    const [editDateOfFirstAppointment, setEditDateOfFirstAppointment] = useState('');
+    const [editStatus, setEditStatus] = useState('ACTIVE');
 
     const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER'].includes(currentUser?.role || '');
 
@@ -90,6 +96,43 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         );
 
     const canManage = isHrAdmin || isManager;
+
+    const getCalculatedRetirementDate = () => {
+        if (!editDateOfBirth) return null;
+        const dob = new Date(editDateOfBirth);
+        if (isNaN(dob.getTime())) return null;
+
+        const isAcademic = editCadre === 'ACADEMIC';
+        const ageLimit = isAcademic ? 65 : 60;
+        const serviceLimit = isAcademic ? 40 : 35;
+
+        // Age-based retirement
+        const ageRetirementDate = new Date(dob);
+        ageRetirementDate.setFullYear(ageRetirementDate.getFullYear() + ageLimit);
+
+        // Service-based retirement
+        let serviceRetirementDate: Date | null = null;
+        if (editDateOfFirstAppointment) {
+            const appt = new Date(editDateOfFirstAppointment);
+            if (!isNaN(appt.getTime())) {
+                serviceRetirementDate = new Date(appt);
+                serviceRetirementDate.setFullYear(serviceRetirementDate.getFullYear() + serviceLimit);
+            }
+        }
+
+        let retirementDate = ageRetirementDate;
+        let reason = 'Age Limit Reached';
+
+        if (serviceRetirementDate && serviceRetirementDate < ageRetirementDate) {
+            retirementDate = serviceRetirementDate;
+            reason = 'Maximum Service Years Reached';
+        }
+
+        return {
+            date: retirementDate.toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' }),
+            reason
+        };
+    };
 
     const fetchStaffData = async () => {
         try {
@@ -138,6 +181,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditStep(staffData.staffProfile?.step || '');
                 setEditRank(staffData.staffProfile?.rank || '');
                 setEditGender(staffData.staffProfile?.gender || '');
+                setEditDateOfBirth(staffData.staffProfile?.dateOfBirth ? staffData.staffProfile.dateOfBirth.substring(0, 10) : '');
+                setEditDateOfFirstAppointment(staffData.staffProfile?.dateOfFirstAppointment ? staffData.staffProfile.dateOfFirstAppointment.substring(0, 10) : '');
+                setEditStatus(staffData.staffProfile?.status || 'ACTIVE');
             }
         } catch (error) {
             console.error('Failed to fetch profile info:', error);
@@ -173,6 +219,37 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 } else if (editRole === 'STAFF') {
                     dbRole = 'STAFF';
                     dbRank = 'Staff';
+                } else if (editRole === 'CLINIC_HEAD') {
+                    dbRank = 'Head of Clinic';
+                } else if (editRole === 'CLINIC_DOCTOR') {
+                    dbRank = 'Medical Doctor';
+                } else if (editRole === 'CLINIC_NURSE') {
+                    dbRank = 'Nurse';
+                } else if (editRole === 'CLINIC_LAB_SCIENTIST') {
+                    dbRank = 'Lab Scientist';
+                } else if (editRole === 'SECURITY_HEAD') {
+                    dbRank = 'Head of Security';
+                } else if (editRole === 'SECURITY_OFFICER') {
+                    dbRank = 'Security Officer';
+                } else if (editRole === 'DRIVER') {
+                    dbRank = 'Driver';
+                }
+            }
+
+            const isArchivedStatus = ['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(editStatus);
+            const wasActive = !['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(staff?.staffProfile?.status || 'ACTIVE');
+
+            if (isArchivedStatus && wasActive) {
+                const confirmed = confirm(
+                    `WARNING: Changing status to ${editStatus} will immediately:\n` +
+                    `1. Archive this staff member's file.\n` +
+                    `2. Revoke all active login sessions/tokens.\n` +
+                    `3. Disable their portal access.\n\n` +
+                    `Are you sure you want to proceed?`
+                );
+                if (!confirmed) {
+                    setSaving(false);
+                    return;
                 }
             }
 
@@ -188,7 +265,10 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 role: isHrAdmin ? dbRole : staff?.role,
                 rank: dbRank,
                 unitId: isHrAdmin ? (editLocation === 'HQ' ? editUnitId : 'null') : staff?.staffProfile?.unitId,
-                centerId: isHrAdmin ? (editLocation === 'CENTER' ? editCenterId : 'null') : staff?.staffProfile?.centerId
+                centerId: isHrAdmin ? (editLocation === 'CENTER' ? editCenterId : 'null') : staff?.staffProfile?.centerId,
+                dateOfBirth: editDateOfBirth,
+                dateOfFirstAppointment: editDateOfFirstAppointment,
+                status: editStatus
             };
 
             await api.put(`/api/staff/${staff?.id}`, payload);
@@ -425,6 +505,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="ACADEMIC">Academic</option>
                                         <option value="TECHNICAL">Technical</option>
                                         <option value="JUNIOR">Junior</option>
+                                        <option value="MEDICAL">Medical</option>
+                                        <option value="SECURITY">Security</option>
                                     </select>
                                 </div>
                                 {/* Rank */}
@@ -460,6 +542,54 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         placeholder="e.g. 2"
                                     />
                                 </div>
+                                {/* Date of Birth */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Date of Birth</label>
+                                    <input
+                                        type="date"
+                                        value={editDateOfBirth}
+                                        onChange={e => setEditDateOfBirth(e.target.value)}
+                                        disabled={!isHrAdmin}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium disabled:bg-gray-100"
+                                    />
+                                </div>
+                                {/* Date of First Appointment */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Date of First Appointment</label>
+                                    <input
+                                        type="date"
+                                        value={editDateOfFirstAppointment}
+                                        onChange={e => setEditDateOfFirstAppointment(e.target.value)}
+                                        disabled={!isHrAdmin}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium disabled:bg-gray-100"
+                                    />
+                                </div>
+                                {/* Employment Status */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Employment Status</label>
+                                    <select
+                                        value={editStatus}
+                                        onChange={e => setEditStatus(e.target.value)}
+                                        disabled={!isHrAdmin}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium disabled:bg-gray-100"
+                                    >
+                                        <option value="ACTIVE">Active</option>
+                                        <option value="ON_LEAVE">On Leave</option>
+                                        <option value="SUSPENDED">Suspended</option>
+                                        <option value="RETIRED">Retired</option>
+                                        <option value="DECEASED">Deceased</option>
+                                        <option value="RESIGNED">Resigned</option>
+                                        <option value="FIRED">Fired</option>
+                                    </select>
+                                </div>
+                                {/* Calculated Retirement Date */}
+                                {getCalculatedRetirementDate() && (
+                                    <div className="md:col-span-2 p-3 bg-blue-50 border border-blue-150 rounded-xl text-xs text-blue-800 space-y-1">
+                                        <p className="font-bold uppercase tracking-wider text-[10px]">Calculated Retirement Date</p>
+                                        <p className="text-sm font-semibold">{getCalculatedRetirementDate()?.date}</p>
+                                        <p className="text-[11px] text-blue-600">Reason: {getCalculatedRetirementDate()?.reason}</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -494,6 +624,13 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="HR_ADMIN">HR Admin</option>
                                         <option value="BURSARY">Bursary</option>
                                         <option value="AUDIT">Audit</option>
+                                        <option value="CLINIC_HEAD">Head of Clinic</option>
+                                        <option value="CLINIC_DOCTOR">Doctor</option>
+                                        <option value="CLINIC_NURSE">Nurse</option>
+                                        <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
+                                        <option value="SECURITY_HEAD">Head of Security</option>
+                                        <option value="SECURITY_OFFICER">Officer</option>
+                                        <option value="DRIVER">Driver</option>
                                     </select>
                                 </div>
 
@@ -528,8 +665,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                                     <option key={u.id} value={u.id}>{u.name}</option>
                                                 ))}
                                             </optgroup>
-                                            <optgroup label="Directorates">
-                                                {orgData.units.filter(u => u.type === 'DIRECTORATE').map(u => (
+                                            <optgroup label="Directorates & Departments">
+                                                {orgData.units.filter(u => u.type === 'DIRECTORATE' || u.type === 'DEPARTMENT').map(u => (
                                                     <option key={u.id} value={u.id}>{u.name}</option>
                                                 ))}
                                             </optgroup>

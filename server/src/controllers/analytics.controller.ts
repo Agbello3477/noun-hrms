@@ -3,6 +3,130 @@ import { LeaveStatus, LeaveType, Role, AperStatus } from '@prisma/client';
 import { redisService } from '../services/redis.service';
 import prisma from '../prisma';
 
+// --- Shared geo-political zone mapping ---
+const STATE_TO_ZONE: Record<string, string> = {
+    'benue': 'North Central', 'kogi': 'North Central', 'kwara': 'North Central',
+    'nasarawa': 'North Central', 'niger': 'North Central', 'plateau': 'North Central',
+    'fct': 'North Central', 'abuja': 'North Central', 'federal capital territory': 'North Central',
+    'adamawa': 'North East', 'bauchi': 'North East', 'borno': 'North East',
+    'gombe': 'North East', 'taraba': 'North East', 'yobe': 'North East',
+    'jigawa': 'North West', 'kaduna': 'North West', 'kano': 'North West',
+    'katsina': 'North West', 'kebbi': 'North West', 'sokoto': 'North West', 'zamfara': 'North West',
+    'abia': 'South East', 'anambra': 'South East', 'ebonyi': 'South East',
+    'enugu': 'South East', 'imo': 'South East',
+    'akwa ibom': 'South South', 'bayelsa': 'South South', 'cross river': 'South South',
+    'delta': 'South South', 'edo': 'South South', 'rivers': 'South South',
+    'ekiti': 'South West', 'lagos': 'South West', 'ogun': 'South West',
+    'ondo': 'South West', 'osun': 'South West', 'oyo': 'South West'
+};
+
+const ZONE_STATES: Record<string, string[]> = {
+    'North Central': ['benue','kogi','kwara','nasarawa','niger','plateau','fct','abuja','federal capital territory'],
+    'North East': ['adamawa','bauchi','borno','gombe','taraba','yobe'],
+    'North West': ['jigawa','kaduna','kano','katsina','kebbi','sokoto','zamfara'],
+    'South East': ['abia','anambra','ebonyi','enugu','imo'],
+    'South South': ['akwa ibom','bayelsa','cross river','delta','edo','rivers'],
+    'South West': ['ekiti','lagos','ogun','ondo','osun','oyo']
+};
+
+// GET /api/analytics/recruitment
+export const getRecruitmentAnalytics = async (req: Request, res: Response) => {
+    try {
+        const { year, month, gender, zone, region } = req.query as Record<string, string>;
+
+        const currentYear = new Date().getFullYear();
+        const filterYear = year ? parseInt(year) : currentYear;
+
+        // Build date range
+        const startDate = month
+            ? new Date(filterYear, parseInt(month) - 1, 1)
+            : new Date(filterYear, 0, 1);
+        const endDate = month
+            ? new Date(filterYear, parseInt(month), 0, 23, 59, 59)
+            : new Date(filterYear, 11, 31, 23, 59, 59);
+
+        // Build WHERE clause for stateOfOrigin (zone / region filter)
+        let stateFilter: any = undefined;
+        const activeZone = zone || region; // allow either query param
+        if (activeZone && ZONE_STATES[activeZone]) {
+            stateFilter = { in: ZONE_STATES[activeZone].map(s => s) };
+        }
+
+        // Build staff profile WHERE
+        const profileWhere: any = {
+            isDeleted: false,
+            user: {
+                createdAt: { gte: startDate, lte: endDate }
+            }
+        };
+        if (gender) profileWhere.gender = gender;
+        if (stateFilter) profileWhere.stateOfOrigin = stateFilter;
+
+        // Fetch matching staff profiles
+        const staffRecords = await prisma.staffProfile.findMany({
+            where: profileWhere,
+            select: {
+                gender: true,
+                stateOfOrigin: true,
+                cadre: true,
+                user: { select: { createdAt: true, name: true, email: true, role: true } }
+            }
+        });
+
+        // Build monthly breakdown (Jan–Dec)
+        const monthlyMap: Record<number, number> = {};
+        for (let m = 1; m <= 12; m++) monthlyMap[m] = 0;
+
+        staffRecords.forEach(s => {
+            const m = new Date(s.user.createdAt).getMonth() + 1;
+            monthlyMap[m] = (monthlyMap[m] || 0) + 1;
+        });
+
+        const monthlyBreakdown = Object.entries(monthlyMap).map(([m, count]) => ({
+            month: parseInt(m),
+            label: new Date(filterYear, parseInt(m) - 1, 1).toLocaleString('default', { month: 'short' }),
+            count
+        }));
+
+        // Gender summary
+        const genderMap: Record<string, number> = {};
+        staffRecords.forEach(s => {
+            const g = s.gender || 'Not Specified';
+            genderMap[g] = (genderMap[g] || 0) + 1;
+        });
+
+        // Zone summary
+        const zoneMap: Record<string, number> = {};
+        staffRecords.forEach(s => {
+            const state = (s.stateOfOrigin || '').trim().toLowerCase();
+            const z = STATE_TO_ZONE[state] || 'Not Specified';
+            zoneMap[z] = (zoneMap[z] || 0) + 1;
+        });
+
+        // Cadre summary
+        const cadreMap: Record<string, number> = {};
+        staffRecords.forEach(s => {
+            const c = s.cadre || 'Not Specified';
+            cadreMap[c] = (cadreMap[c] || 0) + 1;
+        });
+
+        res.json({
+            total: staffRecords.length,
+            filterYear,
+            filterMonth: month ? parseInt(month) : null,
+            filterGender: gender || null,
+            filterZone: activeZone || null,
+            monthlyBreakdown,
+            byGender: Object.entries(genderMap).map(([label, count]) => ({ label, count })),
+            byZone: Object.entries(zoneMap).map(([zone, count]) => ({ zone, count })),
+            byCadre: Object.entries(cadreMap).map(([label, count]) => ({ label, count }))
+        });
+    } catch (error) {
+        console.error('Recruitment Analytics Error:', error);
+        res.status(500).json({ message: 'Error fetching recruitment analytics' });
+    }
+};
+
 export const getHRAnalytics = async (req: Request, res: Response) => {
     try {
         const CACHE_KEY = 'hr:analytics:dashboard';
@@ -60,22 +184,6 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
         });
 
         // 4. Geo-political Zone Distribution
-        const STATE_TO_ZONE: Record<string, string> = {
-            'benue': 'North Central', 'kogi': 'North Central', 'kwara': 'North Central', 
-            'nasarawa': 'North Central', 'niger': 'North Central', 'plateau': 'North Central', 
-            'fct': 'North Central', 'abuja': 'North Central', 'federal capital territory': 'North Central',
-            'adamawa': 'North East', 'bauchi': 'North East', 'borno': 'North East', 
-            'gombe': 'North East', 'taraba': 'North East', 'yobe': 'North East',
-            'jigawa': 'North West', 'kaduna': 'North West', 'kano': 'North West', 
-            'katsina': 'North West', 'kebbi': 'North West', 'sokoto': 'North West', 
-            'zamfara': 'North West',
-            'abia': 'South East', 'anambra': 'South East', 'ebonyi': 'South East', 
-            'enugu': 'South East', 'imo': 'South East',
-            'akwa ibom': 'South South', 'bayelsa': 'South South', 'cross river': 'South South', 
-            'delta': 'South South', 'edo': 'South South', 'rivers': 'South South',
-            'ekiti': 'South West', 'lagos': 'South West', 'ogun': 'South West', 
-            'ondo': 'South West', 'osun': 'South West', 'oyo': 'South West'
-        };
 
         const stateDist = await prisma.staffProfile.groupBy({
             by: ['stateOfOrigin'],

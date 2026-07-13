@@ -35,7 +35,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
             stateOfOrigin, lga, address,
             role, cadre, level, step,
             centerId, unitId,
-            programmeId, facilitatorInfo
+            programmeId, facilitatorInfo,
+            dateOfBirth, dateOfFirstAppointment
         } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -73,6 +74,15 @@ export const createStaffFile = async (req: Request, res: Response) => {
         // @ts-ignore
         const currentUserId = req.user?.id;
 
+        const parseDate = (val: any) => {
+            if (!val || val === 'null' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const dob = parseDate(dateOfBirth);
+        const apptDate = parseDate(dateOfFirstAppointment);
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
@@ -87,6 +97,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             staffId,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
+                            dateOfBirth: dob,
+                            dateOfFirstAppointment: apptDate,
                             centerId: centerId || undefined,
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,
@@ -129,7 +141,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
-            manualStaffId
+            manualStaffId,
+            dateOfBirth, dateOfFirstAppointment
         } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -173,6 +186,15 @@ export const addExistingFile = async (req: Request, res: Response) => {
         // @ts-ignore
         const currentUserId = req.user?.id;
 
+        const parseDate = (val: any) => {
+            if (!val || val === 'null' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const dob = parseDate(dateOfBirth);
+        const apptDate = parseDate(dateOfFirstAppointment);
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
@@ -187,6 +209,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             staffId,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
+                            dateOfBirth: dob,
+                            dateOfFirstAppointment: apptDate,
                             centerId: centerId || undefined,
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,
@@ -438,7 +462,8 @@ export const restoreStaffFile = async (req: Request, res: Response) => {
                 where: { id: profile!.id },
                 data: {
                     isDeleted: false,
-                    deletedAt: null
+                    deletedAt: null,
+                    status: 'ACTIVE'
                 }
             });
 

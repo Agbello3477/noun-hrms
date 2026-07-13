@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import api from '../../../lib/api';
 import { FileText, Download, Trash2, Plus, Eye, Loader2 } from 'lucide-react';
 import PasswordConfirmationModal from '../../../components/modals/PasswordConfirmationModal';
+import { useAuth } from '../../../hooks/useAuth';
+import UploadDocumentModal from '../../../components/dashboard/UploadDocumentModal';
 
 interface Document {
     id: string;
@@ -15,18 +17,65 @@ interface Document {
 }
 
 export default function MyDocumentsPage() {
+    const { user } = useAuth();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
-    const [uploading, setUploading] = useState(false);
 
     // Upload State
     const [showUpload, setShowUpload] = useState(false);
-    const [file, setFile] = useState<File | null>(null);
-    const [docTitle, setDocTitle] = useState('');
-    const [docType, setDocType] = useState('OTHER');
 
     // Delete State
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [downloadingZip, setDownloadingZip] = useState(false);
+
+    const loadJSZip = async (): Promise<any> => {
+        if ((window as any).JSZip) return (window as any).JSZip;
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+            script.onload = () => resolve((window as any).JSZip);
+            script.onerror = () => reject(new Error('Failed to load JSZip'));
+            document.head.appendChild(script);
+        });
+    };
+
+    const handleDownloadAll = async () => {
+        if (documents.length === 0) return;
+        setDownloadingZip(true);
+        
+        try {
+            const JSZip = await loadJSZip();
+            const zip = new JSZip();
+
+            for (let i = 0; i < documents.length; i++) {
+                const doc = documents[i];
+                const fileUrl = `${process.env.NEXT_PUBLIC_API_URL || ''}${doc.url}`;
+                const response = await api.get(fileUrl, { responseType: 'blob' });
+                const ext = doc.url.split('.').pop() || 'pdf';
+                const filename = `${doc.title.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+                
+                zip.file(filename, response.data);
+            }
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const blobUrl = URL.createObjectURL(content);
+            
+            const link = window.document.createElement('a');
+            link.href = blobUrl;
+            link.download = `My_Digital_Dossier.zip`;
+            
+            window.document.body.appendChild(link);
+            link.click();
+            window.document.body.removeChild(link);
+            
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (err) {
+            console.error('Failed to generate ZIP archive', err);
+            alert('Failed to generate ZIP archive. Please try again.');
+        } finally {
+            setDownloadingZip(false);
+        }
+    };
 
     const fetchDocuments = async () => {
         try {
@@ -43,41 +92,7 @@ export default function MyDocumentsPage() {
         fetchDocuments();
     }, []);
 
-    const handleUpload = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!file || !docTitle) return;
 
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('title', docTitle);
-        formData.append('type', docType);
-
-        try {
-            const me = await api.get('/api/auth/me');
-            const myId = me.data.staffProfile?.id;
-
-            if (!myId) {
-                alert('Profile not found. Cannot upload.');
-                setUploading(false);
-                return;
-            }
-
-            formData.append('staffId', myId);
-
-            await api.post('/api/documents/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            setShowUpload(false);
-            setFile(null);
-            setDocTitle('');
-            fetchDocuments();
-        } catch (error) {
-            alert('Upload failed');
-        } finally {
-            setUploading(false);
-        }
-    };
 
     const handleDelete = async () => {
         if (!deleteId) return;
@@ -94,12 +109,24 @@ export default function MyDocumentsPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800">My Digital Dossier</h1>
-                <button
-                    onClick={() => setShowUpload(true)}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                    <Plus size={18} /> Upload Document
-                </button>
+                <div className="flex gap-2">
+                    {documents.length > 0 && (
+                        <button
+                            onClick={handleDownloadAll}
+                            disabled={downloadingZip}
+                            className="flex items-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
+                        >
+                            <Download size={18} className={downloadingZip ? "animate-bounce" : ""} />
+                            {downloadingZip ? 'Compressing...' : 'Download All (.zip)'}
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setShowUpload(true)}
+                        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-sm"
+                    >
+                        <Plus size={18} /> Upload Document
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -157,50 +184,12 @@ export default function MyDocumentsPage() {
 
             {/* Upload Modal */}
             {showUpload && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4">Upload Document</h3>
-                        <form onSubmit={handleUpload} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Document Title</label>
-                                <input
-                                    type="text" required
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={docTitle}
-                                    onChange={e => setDocTitle(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Category</label>
-                                <select
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={docType}
-                                    onChange={e => setDocType(e.target.value)}
-                                >
-                                    <option value="APPOINTMENT_LETTER">Appointment Letter</option>
-                                    <option value="CREDENTIAL">Credential</option>
-                                    <option value="PROMOTION_LETTER">Promotion Letter</option>
-                                    <option value="QUERY">Query</option>
-                                    <option value="OTHER">Other</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">File</label>
-                                <input
-                                    type="file" required
-                                    className="mt-1 block w-full"
-                                    onChange={e => setFile(e.target.files?.[0] || null)}
-                                />
-                            </div>
-                            <div className="flex gap-2 pt-4">
-                                <button type="button" onClick={() => setShowUpload(false)} className="px-4 py-2 border rounded hover:bg-gray-50">Cancel</button>
-                                <button type="submit" disabled={uploading} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-                                    {uploading ? 'Uploading...' : 'Upload'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <UploadDocumentModal
+                    staffId={user?.staffProfile?.id || ''}
+                    onClose={() => setShowUpload(false)}
+                    onSuccess={fetchDocuments}
+                    endpoint="/api/documents/upload"
+                />
             )}
 
             {/* Delete Confirmation */}

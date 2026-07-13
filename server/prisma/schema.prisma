@@ -19,6 +19,7 @@ model User {
   
   isActive  Boolean  @default(true)
   mustChangePassword Boolean  @default(false)
+  tokenInvalidatedAt DateTime? // Set when account is archived; blocks all existing JWTs
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -92,12 +93,14 @@ enum Role {
   STAFF         // Regular Staff
   ADMIN         // Legacy System Admin (keep for safety)
   VICE_CHANCELLOR // Vice Chancellor
+  CLINIC_HEAD
   CLINIC_NURSE
   CLINIC_DOCTOR
   CLINIC_PHARMACIST
   CLINIC_LAB_SCIENTIST
   SECURITY_HEAD
   SECURITY_OFFICER
+  DRIVER
 }
 
 enum Cadre {
@@ -105,6 +108,8 @@ enum Cadre {
   ADMINISTRATIVE
   TECHNICAL
   JUNIOR
+  MEDICAL
+  SECURITY
 }
 
 enum UnitType {
@@ -210,7 +215,21 @@ model StaffProfile {
   // Phase 13b: APER
   aperForms       AperForm[]
 
-  status      String   @default("ACTIVE") // ACTIVE, ON_LEAVE, SUSPENDED, etc.
+  // Promotion Tracking
+  dateOfLastPromotion   DateTime?
+  currentRank           String?   // Current rank/grade at time of flagging
+  isDueForPromotion     Boolean   @default(false) // Registry-toggled flag
+  promotionFlaggedAt    DateTime? // When Registry flagged this staff
+  promotionFlaggedById  String?   // Who in Registry flagged them
+  promotionLogs         PromotionLog[]
+
+  // Retirement Tracking
+  dateOfBirth              DateTime?
+  dateOfFirstAppointment   DateTime?
+  retirementAlertSentAt    DateTime? // Last time retirement alert was dispatched by cron
+  retirementLogs           RetirementLog[]
+
+  status      StaffStatus @default(ACTIVE)
   signatureUrl String?
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
@@ -224,6 +243,7 @@ model StaffProfile {
   @@index([isDeleted])
   @@index([stateOfOrigin])
   @@index([status])
+  @@index([isDueForPromotion])
 }
 
 model AcademicProgramme {
@@ -306,6 +326,8 @@ enum Department {
   STUDY_CENTER
   ACADEMIC_SCIENCES
   ACADEMIC_ARTS
+  SECURITY_DEPARTMENT
+  UNIVERSITY_CLINIC
 }
 
 enum DocumentType {
@@ -798,10 +820,11 @@ model SecurityIncident {
   location      String    // Campus location pin/name
   attachmentUrl String?
   status        String    @default("REPORTED") // REPORTED, DISPATCHED, RESOLVED
-  assignedToId  String?
-  assignedTo    User?     @relation("IncidentAssignee", fields: [assignedToId], references: [id])
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  assignedToId       String?
+  assignedTo         User?     @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  assignedOfficerIds String?   // Comma-separated list of assigned officer user IDs
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@map("security_incidents")
 }
@@ -820,4 +843,70 @@ model ConsolidatedSecurityReport {
   sentToVc               Boolean  @default(true)
 
   @@map("consolidated_security_reports")
+}
+
+// Promotion Monitoring Module — Audit Log
+model PromotionLog {
+  id                String   @id @default(uuid())
+
+  staffProfileId    String
+  staffProfile      StaffProfile @relation(fields: [staffProfileId], references: [id])
+
+  // Snapshot at time of promotion trigger
+  snapshotRank      String?  // rank when cron ran
+  snapshotLevel     String?  // level/step when cron ran
+  snapshotUnit      String?  // unit name when cron ran
+
+  status            String   @default("DUE_FOR_PROMOTION") // DUE_FOR_PROMOTION, PROMOTED, WITHDRAWN
+  calendarYear      Int      // The year the cron pushed this record (e.g. 2026)
+
+  triggeredBy       String   @default("CRON") // CRON or MANUAL
+  cronExecutedAt    DateTime @default(now())
+
+  notes             String?  // Optional internal notes
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("promotion_logs")
+  @@index([staffProfileId])
+  @@index([calendarYear])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RETIREMENT TRACKING MODULE
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum StaffStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  RETIRED
+  DECEASED
+  RESIGNED
+  FIRED
+}
+
+model RetirementLog {
+  id              String       @id @default(uuid())
+
+  staffProfileId  String
+  staffProfile    StaffProfile @relation(fields: [staffProfileId], references: [id])
+
+  retirementDate  DateTime     // The calculated retirement date
+  reason          String       // AGE_LIMIT | SERVICE_YEARS
+  monthsAway      Int          // Months from alert date to retirement date
+  alertSentAt     DateTime     @default(now())
+
+  // Snapshot at time of alert
+  snapshotName    String?
+  snapshotStaffId String?
+  snapshotUnit    String?
+
+  createdAt       DateTime     @default(now())
+
+  @@map("retirement_logs")
+  @@index([staffProfileId])
+  @@index([retirementDate])
 }

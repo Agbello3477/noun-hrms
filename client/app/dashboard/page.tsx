@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import api from '../../lib/api';
+import api, { getImageUrl } from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
-    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar
+    Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar,
+    Filter, Users, TrendingUp, BarChart2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,6 +25,14 @@ export default function DashboardHome() {
         totalWorkforce: 0,
         activeLeaves: { annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0 }
     });
+
+    // Recruitment Filter States (HR Dashboard)
+    const [recruitYear, setRecruitYear] = useState(new Date().getFullYear().toString());
+    const [recruitMonth, setRecruitMonth] = useState('');
+    const [recruitGender, setRecruitGender] = useState('');
+    const [recruitZone, setRecruitZone] = useState('');
+    const [recruitData, setRecruitData] = useState<any>(null);
+    const [loadingRecruit, setLoadingRecruit] = useState(false);
 
     // Manager Dashboard States
     const [managerStats, setManagerStats] = useState<any>({
@@ -300,6 +309,28 @@ export default function DashboardHome() {
         return () => clearInterval(interval);
     }, [user, isRegistry]);
 
+    // Recruitment analytics fetch
+    useEffect(() => {
+        const fetchRecruitmentData = async () => {
+            if (!isRegistry || !user) return;
+            try {
+                setLoadingRecruit(true);
+                const params = new URLSearchParams();
+                if (recruitYear) params.set('year', recruitYear);
+                if (recruitMonth) params.set('month', recruitMonth);
+                if (recruitGender) params.set('gender', recruitGender);
+                if (recruitZone) params.set('zone', recruitZone);
+                const { data } = await api.get(`/api/analytics/recruitment?${params.toString()}`);
+                setRecruitData(data);
+            } catch (err) {
+                console.error('Failed to fetch recruitment analytics', err);
+            } finally {
+                setLoadingRecruit(false);
+            }
+        };
+        fetchRecruitmentData();
+    }, [user, isRegistry, recruitYear, recruitMonth, recruitGender, recruitZone]);
+
     useEffect(() => {
         const fetchManagerStats = async () => {
             if (!isUnitManager || !user) return;
@@ -358,8 +389,9 @@ export default function DashboardHome() {
 
     // Resumption Date
     let resumptionDateStr = 'N/A';
-    if (activeLeave) {
-        const resDate = new Date(activeLeave.endDate);
+    const targetLeave = activeLeave || leaves.find(l => l.status === 'APPROVED');
+    if (targetLeave) {
+        const resDate = new Date(targetLeave.endDate);
         resDate.setDate(resDate.getDate() + 1);
         resumptionDateStr = resDate.toLocaleDateString('en-US', {
             year: 'numeric',
@@ -470,7 +502,7 @@ export default function DashboardHome() {
                         <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center min-h-[160px] bg-slate-50/50">
                             {currentSigUrl ? (
                                 <div className="text-center space-y-3">
-                                    <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${currentSigUrl}`} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
+                                    <img src={getImageUrl(currentSigUrl)} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
                                     <span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">Active Signature</span>
                                 </div>
                             ) : (
@@ -1105,6 +1137,205 @@ export default function DashboardHome() {
                     <span className="text-sm text-red-600 font-medium">Transfers & Queries</span>
                 </div>
             </div>
+
+            {/* ====== RECRUITMENT FILTER PANEL ====== */}
+            <div className="mt-8 rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-700 to-blue-700 text-white">
+                    <div className="flex items-center gap-3">
+                        <span className="p-2 bg-white/20 rounded-lg"><BarChart2 size={18} /></span>
+                        <div>
+                            <h2 className="font-bold text-base tracking-tight">Staff Recruitment Analytics</h2>
+                            <p className="text-xs text-indigo-200 mt-0.5">Filter recruited staff by period, gender, geopolitical zone</p>
+                        </div>
+                    </div>
+                    {recruitData && (
+                        <div className="text-right">
+                            <p className="text-2xl font-black">{recruitData.total}</p>
+                            <p className="text-xs text-indigo-200">Matching Staff</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Filters Row */}
+                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            <Filter size={13} /> Filters
+                        </span>
+
+                        {/* Year */}
+                        <select
+                            value={recruitYear}
+                            onChange={e => setRecruitYear(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-700"
+                        >
+                            {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+
+                        {/* Month */}
+                        <select
+                            value={recruitMonth}
+                            onChange={e => setRecruitMonth(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-700"
+                        >
+                            <option value="">All Months</option>
+                            {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                                <option key={i+1} value={i+1}>{m}</option>
+                            ))}
+                        </select>
+
+                        {/* Gender */}
+                        <select
+                            value={recruitGender}
+                            onChange={e => setRecruitGender(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-700"
+                        >
+                            <option value="">All Genders</option>
+                            <option value="MALE">Male</option>
+                            <option value="FEMALE">Female</option>
+                        </select>
+
+                        {/* Geopolitical Zone */}
+                        <select
+                            value={recruitZone}
+                            onChange={e => setRecruitZone(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-700"
+                        >
+                            <option value="">All Zones / Regions</option>
+                            <option value="North Central">North Central</option>
+                            <option value="North East">North East</option>
+                            <option value="North West">North West</option>
+                            <option value="South East">South East</option>
+                            <option value="South South">South South</option>
+                            <option value="South West">South West</option>
+                        </select>
+
+                        {(recruitMonth || recruitGender || recruitZone) && (
+                            <button
+                                onClick={() => { setRecruitMonth(''); setRecruitGender(''); setRecruitZone(''); }}
+                                className="text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 rounded-lg px-3 py-1.5 transition-colors"
+                            >
+                                Clear Filters
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Results */}
+                <div className="p-6">
+                    {loadingRecruit ? (
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2 className="animate-spin text-indigo-600" size={28} />
+                        </div>
+                    ) : !recruitData ? null : (
+                        <div className="space-y-6">
+
+                            {/* Monthly Bar Chart */}
+                            <div>
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <TrendingUp size={13} /> Monthly Recruitment — {recruitData.filterYear}
+                                </h3>
+                                <div className="flex items-end gap-1.5 h-28">
+                                    {(recruitData.monthlyBreakdown || []).map((m: any) => {
+                                        const peak = Math.max(...(recruitData.monthlyBreakdown || []).map((x: any) => x.count), 1);
+                                        const pct = Math.round((m.count / peak) * 100);
+                                        const isActive = recruitMonth && parseInt(recruitMonth) === m.month;
+                                        return (
+                                            <div key={m.month} className="flex flex-col items-center flex-1 gap-1">
+                                                <span className="text-[9px] font-bold text-gray-600">{m.count > 0 ? m.count : ''}</span>
+                                                <div
+                                                    style={{ height: `${Math.max(pct, 4)}%` }}
+                                                    className={`w-full rounded-t-sm transition-all ${
+                                                        isActive ? 'bg-indigo-600' : m.count > 0 ? 'bg-indigo-400 hover:bg-indigo-500' : 'bg-gray-100'
+                                                    }`}
+                                                />
+                                                <span className="text-[9px] text-gray-400">{m.label}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Breakdown Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                                {/* By Gender */}
+                                <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                        <Users size={12} /> By Gender
+                                    </h4>
+                                    {recruitData.byGender.length === 0 ? (
+                                        <p className="text-xs text-gray-400">No data</p>
+                                    ) : recruitData.byGender.map((g: any) => (
+                                        <div key={g.label} className="flex items-center justify-between mb-2">
+                                            <span className="text-sm text-gray-700 capitalize">{g.label?.toLowerCase() || 'Unknown'}</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-24 h-2 rounded-full bg-gray-200 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-indigo-500"
+                                                        style={{ width: `${Math.round((g.count / recruitData.total) * 100)}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs font-bold text-gray-800 w-8 text-right">{g.count}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* By Zone */}
+                                <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                        <MapPin size={12} /> By Geopolitical Zone
+                                    </h4>
+                                    {recruitData.byZone.length === 0 ? (
+                                        <p className="text-xs text-gray-400">No data</p>
+                                    ) : recruitData.byZone.sort((a: any, b: any) => b.count - a.count).map((z: any) => (
+                                        <div key={z.zone} className="flex items-center justify-between mb-2">
+                                            <span className="text-xs text-gray-600 truncate max-w-[110px]">{z.zone}</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-20 h-2 rounded-full bg-gray-200 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-green-500"
+                                                        style={{ width: `${Math.round((z.count / recruitData.total) * 100)}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs font-bold text-gray-800 w-6 text-right">{z.count}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* By Cadre */}
+                                <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                        <FileText size={12} /> By Cadre
+                                    </h4>
+                                    {recruitData.byCadre.length === 0 ? (
+                                        <p className="text-xs text-gray-400">No data</p>
+                                    ) : recruitData.byCadre.sort((a: any, b: any) => b.count - a.count).map((c: any) => (
+                                        <div key={c.label} className="flex items-center justify-between mb-2">
+                                            <span className="text-xs text-gray-600 capitalize truncate max-w-[110px]">{(c.label || 'Unknown').replace(/_/g, ' ').toLowerCase()}</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-20 h-2 rounded-full bg-gray-200 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-amber-500"
+                                                        style={{ width: `${Math.round((c.count / recruitData.total) * 100)}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs font-bold text-gray-800 w-6 text-right">{c.count}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* ====== END RECRUITMENT FILTER PANEL ====== */}
 
             <div className="mt-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
                 <h2 className="mb-6 text-lg font-bold text-gray-950 flex items-center gap-2">

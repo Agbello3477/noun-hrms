@@ -199,6 +199,16 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                     <option value="STAFF">Regular Staff</option>
                                     <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
                                     <option value="UNIT_HEAD">Dean / Director / Unit Head</option>
+                                    <option value="HR_ADMIN">HR Admin</option>
+                                    <option value="BURSARY">Bursary</option>
+                                    <option value="AUDIT">Audit</option>
+                                    <option value="CLINIC_HEAD">Head of Clinic</option>
+                                    <option value="CLINIC_DOCTOR">Doctor</option>
+                                    <option value="CLINIC_NURSE">Nurse</option>
+                                    <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
+                                    <option value="SECURITY_HEAD">Head of Security</option>
+                                    <option value="SECURITY_OFFICER">Officer</option>
+                                    <option value="DRIVER">Driver</option>
                                 </select>
                             </div>
                             <div>
@@ -207,6 +217,11 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                     <option value="">Select Cadre</option>
                                     <option value="ACADEMIC">Academic Staff</option>
                                     <option value="NON_ACADEMIC">Non-Academic</option>
+                                    <option value="ADMINISTRATIVE">Administrative</option>
+                                    <option value="TECHNICAL">Technical</option>
+                                    <option value="JUNIOR">Junior</option>
+                                    <option value="MEDICAL">Medical</option>
+                                    <option value="SECURITY">Security</option>
                                 </select>
                             </div>
                         </div>

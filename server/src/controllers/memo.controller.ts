@@ -2,6 +2,23 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { StorageService } from '../services/storage.service';
 
+const formatMemoSenderName = (memo: any) => {
+    if (!memo || !memo.sender) return memo;
+    const role = memo.sender.role;
+    const profile = memo.sender.staffProfile;
+
+    if (['SUPER_USER', 'HR_ADMIN', 'ADMIN'].includes(role)) {
+        memo.sender.name = 'Human Resource Registry';
+    } else if (profile) {
+        if (profile.studyCenter?.name) {
+            memo.sender.name = profile.studyCenter.name;
+        } else if (profile.unit?.name) {
+            memo.sender.name = profile.unit.name;
+        }
+    }
+    return memo;
+};
+
 // Create a new general or targeted memo
 export const createMemo = async (req: Request, res: Response) => {
     try {
@@ -62,31 +79,46 @@ export const createMemo = async (req: Request, res: Response) => {
             }
         }
 
+        const isUnivBroadcast = req.body.isUniversityBroadcast === 'true' || req.body.isUniversityBroadcast === true;
+
         // Enforce boundary checks for Unit Managers
         if (!isHR && managerProfile) {
-            if (parsedRecipientIds.length > 0) {
+            if (isUnivBroadcast) {
+                // University broadcast mode - bypass local unit staff filtering
+                parsedRecipientIds = [];
+            } else if (parsedRecipientIds.length > 0) {
                 // Validate multiple selected recipients
                 const recipientsProfiles = await prisma.staffProfile.findMany({
                     where: {
                         userId: { in: parsedRecipientIds }
                     },
-                    select: { userId: true, unitId: true, centerId: true }
+                    select: { 
+                        userId: true, 
+                        unitId: true, 
+                        centerId: true,
+                        user: { select: { role: true } }
+                    }
                 });
 
                 const invalidRecipient = recipientsProfiles.find(p => {
                     const sameUnit = managerProfile.unitId && p.unitId === managerProfile.unitId;
                     const sameCenter = managerProfile.centerId && p.centerId === managerProfile.centerId;
-                    return !sameUnit && !sameCenter;
+                    const isManagerOrAdmin = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(p.user.role);
+                    return !sameUnit && !sameCenter && !isManagerOrAdmin;
                 });
 
                 if (invalidRecipient || recipientsProfiles.length !== parsedRecipientIds.length) {
-                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center' });
+                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center or to university managers' });
                 }
             } else if (recipientId) {
                 // Validate single recipient
                 const recipientProfile = await prisma.staffProfile.findUnique({
                     where: { userId: recipientId },
-                    select: { unitId: true, centerId: true }
+                    select: { 
+                        unitId: true, 
+                        centerId: true,
+                        user: { select: { role: true } }
+                    }
                 });
 
                 if (!recipientProfile) {
@@ -95,9 +127,10 @@ export const createMemo = async (req: Request, res: Response) => {
 
                 const sameUnit = managerProfile.unitId && recipientProfile.unitId === managerProfile.unitId;
                 const sameCenter = managerProfile.centerId && recipientProfile.centerId === managerProfile.centerId;
+                const isManagerOrAdmin = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(recipientProfile.user.role);
 
-                if (!sameUnit && !sameCenter) {
-                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center' });
+                if (!sameUnit && !sameCenter && !isManagerOrAdmin) {
+                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center or to university managers' });
                 }
             } else {
                 // Broadcast mode: fetch all active users in manager's unit/center
@@ -244,6 +277,19 @@ export const getMemos = async (req: Request, res: Response) => {
         let memos;
         if (isHR) {
             memos = await prisma.memo.findMany({
+                where: {
+                    OR: [
+                        {
+                            sender: {
+                                role: {
+                                    in: ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR']
+                                }
+                            }
+                        },
+                        { recipientId: null },
+                        { recipientId: userId }
+                    ]
+                },
                 orderBy: { createdAt: 'desc' },
                 include: {
                     sender: {
@@ -253,7 +299,9 @@ export const getMemos = async (req: Request, res: Response) => {
                             role: true,
                             staffProfile: {
                                 select: {
-                                    signatureUrl: true
+                                    signatureUrl: true,
+                                    unit: { select: { name: true } },
+                                    studyCenter: { select: { name: true } }
                                 }
                             }
                         }
@@ -292,7 +340,9 @@ export const getMemos = async (req: Request, res: Response) => {
                             role: true,
                             staffProfile: {
                                 select: {
-                                    signatureUrl: true
+                                    signatureUrl: true,
+                                    unit: { select: { name: true } },
+                                    studyCenter: { select: { name: true } }
                                 }
                             }
                         }
@@ -315,7 +365,8 @@ export const getMemos = async (req: Request, res: Response) => {
             });
         }
 
-        res.json(memos);
+        const formatted = memos.map(m => formatMemoSenderName(m));
+        res.json(formatted);
     } catch (error) {
         console.error('Error fetching memos:', error);
         res.status(500).json({ message: 'Failed to fetch memos' });
@@ -362,7 +413,9 @@ export const getMemoById = async (req: Request, res: Response) => {
                             role: true,
                             staffProfile: {
                                 select: {
-                                    signatureUrl: true
+                                    signatureUrl: true,
+                                    unit: { select: { name: true } },
+                                    studyCenter: { select: { name: true } }
                                 }
                             }
                         }
@@ -401,7 +454,7 @@ export const getMemoById = async (req: Request, res: Response) => {
                 }
             });
 
-            res.json(memo);
+            res.json(formatMemoSenderName(memo));
         } else {
             // Staff sees memo + their own response (if any)
             const memo = await prisma.memo.findUnique({
@@ -414,7 +467,9 @@ export const getMemoById = async (req: Request, res: Response) => {
                             role: true,
                             staffProfile: {
                                 select: {
-                                    signatureUrl: true
+                                    signatureUrl: true,
+                                    unit: { select: { name: true } },
+                                    studyCenter: { select: { name: true } }
                                 }
                             }
                         }
@@ -435,7 +490,7 @@ export const getMemoById = async (req: Request, res: Response) => {
                 where: { memoId: id, staffId: userId }
             });
 
-            res.json({ ...memo, myResponse });
+            res.json({ ...formatMemoSenderName(memo), myResponse });
         }
     } catch (error) {
         console.error('Error fetching memo details:', error);

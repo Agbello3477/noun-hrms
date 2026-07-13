@@ -26,6 +26,8 @@ import systemRoutes from './routes/system.routes';
 import clinicRoutes from './routes/clinic.routes';
 import securityRoutes from './routes/security.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
+import { schedulePromotionCron } from './jobs/promotionCron';
+import { scheduleRetirementCron } from './jobs/retirementCron';
 
 
 
@@ -77,4 +79,7 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    // Start background scheduled jobs
+    schedulePromotionCron();
+    scheduleRetirementCron();
 });

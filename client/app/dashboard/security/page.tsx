@@ -21,6 +21,7 @@ interface Incident {
   reporter?: { name: string; email: string };
   assignedTo?: { name: string };
   assignedToId?: string | null;
+  assignedOfficerIds?: string | null;
   createdAt: string;
 }
 
@@ -46,6 +47,14 @@ export default function SecurityDashboard() {
   }, [user]);
 
   const [activeTab, setActiveTab] = useState<'command' | 'roster' | 'report' | 'compile'>('command');
+
+  // Auto-switch non-security roles to report tab
+  useEffect(() => {
+    if (activeRole && !['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
+      setActiveTab('report');
+    }
+  }, [activeRole]);
+
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [msg, setMsg] = useState({ type: '', text: '' });
@@ -57,7 +66,7 @@ export default function SecurityDashboard() {
 
   // Roster Form state
   const [newRoster, setNewRoster] = useState({ userId: '', shift: 'MORNING', zone: '', date: '' });
-  const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]);
+  const [allUsers, setAllUsers] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Consolidated Report Form state
   const [newReport, setNewReport] = useState({ startDate: '', endDate: '', summary: '', recommendations: '' });
@@ -84,16 +93,23 @@ export default function SecurityDashboard() {
   const fetchAllUsers = async () => {
     try {
       const res = await api.get('/api/staff');
-      setAllUsers(res.data.map((s: any) => ({ id: s.user.id, name: s.surname + ' ' + s.otherNames })));
+      setAllUsers(res.data.map((s: any) => {
+        const uId = s.id || (s.user ? s.user.id : '');
+        const profile = s.staffProfile || s;
+        const name = `${profile.title ? profile.title + ' ' : ''}${profile.surname || ''} ${profile.otherNames || ''}`.trim() || s.name || s.email;
+        return { id: uId, name, role: s.role };
+      }));
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    fetchIncidents();
-    fetchRoster();
-    if (['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
+    if (activeRole && ['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
+      fetchIncidents();
+      fetchRoster();
+    }
+    if (activeRole && ['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
       fetchAllUsers();
     }
   }, [activeRole]);
@@ -104,7 +120,9 @@ export default function SecurityDashboard() {
       await api.post('/api/security/incidents', newIncident);
       setMsg({ type: 'success', text: 'Incident reported successfully. Security Head notified.' });
       setNewIncident({ title: '', description: '', category: 'SUSPICIOUS_ACTIVITY', location: '', attachmentUrl: '', isAnonymous: false });
-      fetchIncidents();
+      if (['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
+        fetchIncidents();
+      }
     } catch (err) {
       setMsg({ type: 'error', text: 'Failed to submit incident report' });
     }
@@ -122,7 +140,10 @@ export default function SecurityDashboard() {
     }
   };
 
-  const handleUpdateIncident = async (incidentId: string, updates: { priority?: string, status?: string, assignedToId?: string }) => {
+  const handleUpdateIncident = async (
+    incidentId: string, 
+    updates: { priority?: string; status?: string; assignedToId?: string; assignedOfficerIds?: string }
+  ) => {
     try {
       await api.put('/api/security/incidents', { incidentId, ...updates });
       setMsg({ type: 'success', text: 'Incident status updated.' });
@@ -278,40 +299,89 @@ export default function SecurityDashboard() {
 
                       {/* Command center operations */}
                       {['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
-                        <div className="flex flex-wrap gap-2">
-                          <select
-                            className="border rounded px-2 py-1 bg-slate-50 text-xs font-bold text-slate-700 outline-none"
-                            value={incident.priority}
-                            onChange={(e) => handleUpdateIncident(incident.id, { priority: e.target.value })}
-                          >
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM">Medium</option>
-                            <option value="HIGH">High</option>
-                          </select>
-                          
-                          <select
-                            className="border rounded px-2 py-1 bg-slate-50 text-xs font-bold text-slate-700 outline-none"
-                            value={incident.assignedToId || ''}
-                            onChange={(e) => handleUpdateIncident(incident.id, { assignedToId: e.target.value })}
-                          >
-                            <option value="">Assign Officer...</option>
-                            {allUsers.map((u) => (
-                              <option key={u.id} value={u.id}>{u.name}</option>
-                            ))}
-                          </select>
-
-                          {incident.status !== 'RESOLVED' ? (
-                            <button
-                              onClick={() => handleUpdateIncident(incident.id, { status: 'RESOLVED' })}
-                              className="bg-emerald-600 text-white font-bold px-3 py-1 rounded hover:bg-emerald-700 shadow-sm"
+                        <div className="flex flex-col gap-3 w-full border-t pt-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              className="border rounded px-2.5 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition"
+                              value={incident.priority}
+                              onChange={(e) => handleUpdateIncident(incident.id, { priority: e.target.value })}
                             >
-                              Resolve
-                            </button>
-                          ) : (
-                            <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                              <CheckCircle size={14} /> Resolved
-                            </span>
-                          )}
+                              <option value="LOW">Low Priority</option>
+                              <option value="MEDIUM">Medium Priority</option>
+                              <option value="HIGH">High Priority</option>
+                            </select>
+
+                            {incident.status !== 'RESOLVED' ? (
+                              <button
+                                onClick={() => handleUpdateIncident(incident.id, { status: 'RESOLVED' })}
+                                className="bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-700 shadow-sm transition"
+                              >
+                                Resolve Threat
+                              </button>
+                            ) : (
+                              <span className="text-emerald-600 font-extrabold flex items-center gap-1 text-xs px-2.5 py-1.5">
+                                <CheckCircle size={14} /> Resolved
+                              </span>
+                            )}
+                          </div>
+
+                          {(() => {
+                            const assignedIds = incident.assignedOfficerIds
+                              ? incident.assignedOfficerIds.split(',').map((id: string) => id.trim()).filter(Boolean)
+                              : (incident.assignedToId ? [incident.assignedToId] : []);
+                            
+                            const securityOfficers = allUsers.filter(u => ['SECURITY_HEAD', 'SECURITY_OFFICER'].includes(u.role));
+                            const unassignedOfficers = securityOfficers.filter(u => !assignedIds.includes(u.id));
+
+                            return (
+                              <div className="space-y-1.5">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Dispatched Handlers / Officers</span>
+                                <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+                                  {assignedIds.length === 0 ? (
+                                    <span className="text-xs text-slate-400 italic">No officers dispatched yet.</span>
+                                  ) : (
+                                    assignedIds.map(id => {
+                                      const u = allUsers.find(user => user.id === id);
+                                      const name = u ? u.name : 'Officer';
+                                      return (
+                                        <span key={id} className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-full text-xs transition">
+                                          {name}
+                                          <button
+                                            type="button"
+                                            title="Unassign officer"
+                                            onClick={() => {
+                                              const newIds = assignedIds.filter(x => x !== id);
+                                              handleUpdateIncident(incident.id, { assignedOfficerIds: newIds.join(',') });
+                                            }}
+                                            className="hover:text-red-600 transition-colors text-[10px] ml-1 font-bold font-mono"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                                {unassignedOfficers.length > 0 && (
+                                  <select
+                                    className="border rounded px-2.5 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition w-full max-w-xs mt-1"
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        const newIds = [...assignedIds, e.target.value];
+                                        handleUpdateIncident(incident.id, { assignedOfficerIds: newIds.join(',') });
+                                      }
+                                    }}
+                                  >
+                                    <option value="">➕ Dispatch / Assign Officer...</option>
+                                    {unassignedOfficers.map((u) => (
+                                      <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -431,7 +501,7 @@ export default function SecurityDashboard() {
             </div>
             
             <form onSubmit={handleReportIncident} className="space-y-4 text-xs font-semibold text-slate-600">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1">Incident Headline / Title</label>
                   <input
@@ -460,7 +530,7 @@ export default function SecurityDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1">Campus Location Pin</label>
                   <input
@@ -529,7 +599,7 @@ export default function SecurityDashboard() {
             </div>
 
             <form onSubmit={handleCompileReport} className="space-y-4 text-xs font-semibold text-slate-600">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1">Report Start Date</label>
                   <input

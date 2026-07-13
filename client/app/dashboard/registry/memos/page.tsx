@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import api from '../../../../lib/api';
+import api, { getImageUrl } from '../../../../lib/api';
 import { Mail, Plus, CheckCircle, Eye, X, Loader2, Calendar, User, MessageSquare, ChevronRight, Paperclip, Download } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
@@ -41,6 +41,9 @@ interface Memo {
     sender: {
         name: string;
         email: string;
+        staffProfile?: {
+            signatureUrl?: string | null;
+        } | null;
     };
     recipientId?: string | null;
     recipient?: {
@@ -328,6 +331,18 @@ export default function RegistryMemosPage() {
                                 <div className="text-sm text-gray-800 leading-relaxed">
                                     <div dangerouslySetInnerHTML={{ __html: viewMemo.content }} className="prose max-w-none text-black" />
                                 </div>
+                                {viewMemo.sender?.staffProfile?.signatureUrl && (
+                                    <div className="mt-6 border-t border-gray-100 pt-4 flex flex-col items-end">
+                                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Digitally Signed By</p>
+                                         <img 
+                                             src={getImageUrl(viewMemo.sender.staffProfile.signatureUrl)} 
+                                             alt="Sender Signature"
+                                             className="h-12 object-contain border rounded p-1 bg-white"
+                                         />
+                                        <p className="text-xs font-bold text-gray-800 mt-1">{viewMemo.sender.name}</p>
+                                        <p className="text-[10px] text-gray-500">{viewMemo.sender.email}</p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Attachment Section */}
