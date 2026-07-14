@@ -198,3 +198,61 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+export const exportSystemAuditReport = async (req: Request, res: Response) => {
+    try {
+        // 1. Gather User details for access audits
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                isActive: true,
+                createdAt: true
+            }
+        });
+
+        // 2. Count Audit log events
+        const totalLogs = await prisma.auditLog.count();
+        const manualOverridesCount = await prisma.auditLog.count({
+            where: { action: 'MANUAL_OVERRIDE' }
+        });
+
+        // 3. Count registered push token devices
+        const totalPushDevices = await prisma.fcmToken.count();
+
+        // 4. Build CSV data rows
+        let csvContent = '';
+        csvContent += '--- SYSTEM SECURITY ACCESS & DATA PROTECTION METRICS REPORT ---\n';
+        csvContent += `Report Generated At,${new Date().toISOString()}\n`;
+        csvContent += `Total System Users,${users.length}\n`;
+        csvContent += `Total System Audit Log entries,${totalLogs}\n`;
+        csvContent += `Total Manual Overrides Recorded,${manualOverridesCount}\n`;
+        csvContent += `Total Active Push Devices (FCM),${totalPushDevices}\n\n`;
+
+        csvContent += '--- USER LIST AND SYSTEM SECURITY ACCESS ---\n';
+        csvContent += 'User ID,Email,Role,Is Active,Created At\n';
+        for (const u of users) {
+            csvContent += `"${u.id}","${u.email}","${u.role}",${u.isActive},"${u.createdAt.toISOString()}"\n`;
+        }
+
+        csvContent += '\n--- SYSTEM LOG FORENSICS SUMMARY ---\n';
+        const overrideLogs = await prisma.auditLog.findMany({
+            where: { action: 'MANUAL_OVERRIDE' },
+            take: 100,
+            include: { user: { select: { email: true } } }
+        });
+        csvContent += 'Audit ID,Admin Email,Action,Resource,Timestamp,Override Details\n';
+        for (const l of overrideLogs) {
+            csvContent += `"${l.id}","${l.user.email}","${l.action}","${l.resource}","${l.createdAt.toISOString()}","${(l.details || '').replace(/"/g, '""')}"\n`;
+        }
+
+        // Set response headers to force CSV download file
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=noun_hrms_compliance_report.csv');
+        res.status(200).send(csvContent);
+    } catch (error) {
+        console.error('Error exporting system audit report:', error);
+        res.status(500).json({ message: 'Error compiling and exporting compliance audit spreadsheet' });
+    }
+};

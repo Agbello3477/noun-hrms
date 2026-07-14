@@ -632,6 +632,40 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             } catch (e) {}
         }
 
+        // System Override Control Log (Phase 3 compliance requirement)
+        if (isAdmin) {
+            const profile = user.staffProfile;
+            const overrides: any = {};
+            
+            if (rank !== undefined && rank !== profile?.rank) overrides.rank = { old: profile?.rank, new: rank };
+            if (finalStatus !== undefined && finalStatus !== profile?.status) overrides.status = { old: profile?.status, new: finalStatus };
+            if (level !== undefined && level !== profile?.level) overrides.level = { old: profile?.level, new: level };
+            if (step !== undefined && step !== profile?.step) overrides.step = { old: profile?.step, new: step };
+            if (dob && dob.getTime() !== profile?.dateOfBirth?.getTime()) overrides.dateOfBirth = { old: profile?.dateOfBirth, new: dob };
+            if (apptDate && apptDate.getTime() !== profile?.dateOfFirstAppointment?.getTime()) overrides.dateOfFirstAppointment = { old: profile?.dateOfFirstAppointment, new: apptDate };
+            
+            if (Object.keys(overrides).length > 0) {
+                try {
+                    const reason = req.body.overrideReason || 'Manual Administrator profile modification override';
+                    await prisma.auditLog.create({
+                        data: {
+                            userId: updaterId || 'SYSTEM',
+                            action: 'MANUAL_OVERRIDE',
+                            resource: 'STAFF_PROFILE',
+                            details: JSON.stringify({
+                                targetUserId: user.id,
+                                overrides,
+                                reason
+                            }),
+                            ipAddress: req.ip
+                        }
+                    });
+                } catch (e) {
+                    console.error('Failed to write override audit log:', e);
+                }
+            }
+        }
+
         await redisService.clearPattern('staff:all:*');
         res.json({ message: 'Profile updated successfully', passportUrl });
 

@@ -112,6 +112,22 @@ export default function ActivityLogsPage() {
         }
     };
 
+    const handleExportCSV = async () => {
+        try {
+            const res = await api.get('/api/system/audit/export', { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'noun_hrms_compliance_report.csv');
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode?.removeChild(link);
+        } catch (error) {
+            console.error('Failed to export compliance logs:', error);
+            alert('Failed to export compliance logs');
+        }
+    };
+
     useEffect(() => {
         fetchLogs();
     }, [currentPage, actionFilter, resourceFilter, limitFilter]);
@@ -167,13 +183,21 @@ export default function ActivityLogsPage() {
                     </h1>
                     <p className="text-slate-300 text-sm mt-1">Audit trail and security logs tracking administrative changes and user access.</p>
                 </div>
-                <button
-                    onClick={fetchLogs}
-                    disabled={loading}
-                    className="flex items-center gap-2 bg-slate-700/60 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition border border-slate-600 disabled:opacity-50 active:scale-95 duration-100"
-                >
-                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleExportCSV}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm active:scale-95 duration-100"
+                    >
+                        Export Compliance Report (CSV)
+                    </button>
+                    <button
+                        onClick={fetchLogs}
+                        disabled={loading}
+                        className="flex items-center gap-2 bg-slate-700/60 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition border border-slate-600 disabled:opacity-50 active:scale-95 duration-100"
+                    >
+                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Filter Bar */}
