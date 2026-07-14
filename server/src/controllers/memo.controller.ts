@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { StorageService } from '../services/storage.service';
+import { sendPushNotification } from '../services/fcm.service';
 
 const formatMemoSenderName = (memo: any) => {
     if (!memo || !memo.sender) return memo;
@@ -199,6 +200,13 @@ export const createMemo = async (req: Request, res: Response) => {
                 }))
             });
 
+            sendPushNotification(
+                createdMemos.map(m => m.recipientId!),
+                'New Private Memo',
+                title,
+                `/dashboard/memos?id=${createdMemos[0].id}`
+            ).catch(err => console.error('FCM push failed:', err));
+
             return res.status(201).json(createdMemos[0]);
         }
 
@@ -235,6 +243,13 @@ export const createMemo = async (req: Request, res: Response) => {
                     link: `/dashboard/memos?id=${memo.id}`
                 }
             });
+
+            sendPushNotification(
+                [recipientId],
+                'New Private Memo',
+                title,
+                `/dashboard/memos?id=${memo.id}`
+            ).catch(err => console.error('FCM push failed:', err));
         } else {
             // Fetch all active users to notify
             const activeUsers = await prisma.user.findMany({
@@ -255,6 +270,13 @@ export const createMemo = async (req: Request, res: Response) => {
                 await prisma.notification.createMany({
                     data: notificationsData
                 });
+
+                sendPushNotification(
+                    activeUsers.map(u => u.id),
+                    'New Memo Broadcast',
+                    title,
+                    `/dashboard/memos?id=${memo.id}`
+                ).catch(err => console.error('FCM push failed:', err));
             }
         }
 

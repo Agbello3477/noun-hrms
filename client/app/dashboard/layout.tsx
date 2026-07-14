@@ -198,6 +198,15 @@ export default function DashboardLayout({
     useEffect(() => {
         if (!isLoading && !user) {
             router.push('/');
+        } else if (user && !user.mustChangePassword) {
+            // Register FCM Push Notifications dynamically on the client side
+            import('../../lib/firebase')
+                .then(({ requestPushNotificationsPermission }) => {
+                    requestPushNotificationsPermission();
+                })
+                .catch(err => {
+                    console.error('[FCM] Failed to load Firebase init library:', err);
+                });
         }
     }, [user, isLoading, router]);
 

@@ -62,6 +62,7 @@ model User {
   reportedIncidents  SecurityIncident[] @relation("IncidentReporter")
   assignedIncidents  SecurityIncident[] @relation("IncidentAssignee")
   securityReports    ConsolidatedSecurityReport[]
+  fcmTokens          FcmToken[]
 
   @@map("users")
 }
@@ -909,4 +910,15 @@ model RetirementLog {
   @@map("retirement_logs")
   @@index([staffProfileId])
   @@index([retirementDate])
+}
+
+model FcmToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("fcm_tokens")
+  @@index([userId])
 }
