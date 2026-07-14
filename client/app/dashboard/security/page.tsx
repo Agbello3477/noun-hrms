@@ -46,7 +46,7 @@ export default function SecurityDashboard() {
     }
   }, [user]);
 
-  const [activeTab, setActiveTab] = useState<'command' | 'roster' | 'report' | 'compile'>('command');
+  const [activeTab, setActiveTab] = useState<'command' | 'roster' | 'report' | 'compile' | 'inventory'>('command');
 
   // Auto-switch non-security roles to report tab
   useEffect(() => {
@@ -70,6 +70,18 @@ export default function SecurityDashboard() {
 
   // Consolidated Report Form state
   const [newReport, setNewReport] = useState({ startDate: '', endDate: '', summary: '', recommendations: '' });
+
+  // Inventory & Gear Store state
+  const [gearList, setGearList] = useState<any[]>([]);
+  const [loans, setLoans] = useState<any[]>([]);
+  const [loadingGear, setLoadingGear] = useState(true);
+  const [loadingLoans, setLoadingLoans] = useState(true);
+
+  const [isAddGearModalOpen, setIsAddGearModalOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
+
+  const [gearForm, setGearForm] = useState({ name: '', totalQty: '', unit: 'pcs' });
+  const [loanForm, setLoanForm] = useState({ gearId: '', officerId: '', quantity: '1' });
 
   // Fetch Functions
   const fetchIncidents = async () => {
@@ -113,6 +125,76 @@ export default function SecurityDashboard() {
       fetchAllUsers();
     }
   }, [activeRole]);
+
+  const fetchGear = async () => {
+    try {
+      setLoadingGear(true);
+      const res = await api.get('/api/security/gear');
+      setGearList(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingGear(false);
+    }
+  };
+
+  const fetchLoans = async () => {
+    try {
+      setLoadingLoans(true);
+      const res = await api.get('/api/security/gear/loans');
+      setLoans(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLoans(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'inventory') {
+      fetchGear();
+      fetchLoans();
+      fetchAllUsers();
+    }
+  }, [activeTab]);
+
+  const handleAddGear = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/api/security/gear', gearForm);
+      setMsg({ type: 'success', text: 'Gear item added/updated successfully!' });
+      setGearForm({ name: '', totalQty: '', unit: 'pcs' });
+      setIsAddGearModalOpen(false);
+      fetchGear();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to add gear item' });
+    }
+  };
+
+  const handleLoanGear = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/api/security/gear/loans', loanForm);
+      setMsg({ type: 'success', text: 'Equipment checked out to officer successfully!' });
+      setLoanForm({ gearId: '', officerId: '', quantity: '1' });
+      setIsLoanModalOpen(false);
+      fetchGear();
+      fetchLoans();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to checkout gear item' });
+    }
+  };
+
+  const handleReturnGear = async (loanId: string) => {
+    try {
+      await api.put(`/api/security/gear/loans/${loanId}/return`);
+      setMsg({ type: 'success', text: 'Equipment check-in registered successfully!' });
+      fetchGear();
+      fetchLoans();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to process equipment return' });
+    }
+  };
 
   const handleReportIncident = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -244,6 +326,17 @@ export default function SecurityDashboard() {
             }`}
           >
             <FileText size={16} /> Compile VC Report
+          </button>
+        )}
+
+        {['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
+              activeTab === 'inventory' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <PlusCircle size={16} /> Inventory & Gear Store
           </button>
         )}
       </div>
@@ -650,6 +743,253 @@ export default function SecurityDashboard() {
                 <Send size={15} /> Transmit Consolidated Report to VC
               </button>
             </form>
+          </div>
+        )}
+
+        {activeTab === 'inventory' && (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            {/* Gear Inventory Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Tactical Gear & Assets Store</h2>
+                <p className="text-xs text-slate-500">Track and dispatch patrol gear (vehicles, communication radios, uniforms) to officers.</p>
+              </div>
+              {['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsAddGearModalOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
+                  >
+                    <PlusCircle size={14} /> Add Inventory
+                  </button>
+                  <button
+                    onClick={() => setIsLoanModalOpen(true)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
+                  >
+                    <Send size={14} /> Dispatch Equipment
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Gear Items Grid */}
+            {loadingGear ? (
+              <div className="flex justify-center py-6">
+                <RefreshCw className="animate-spin text-blue-600 w-6 h-6" />
+              </div>
+            ) : gearList.length === 0 ? (
+              <div className="text-center p-8 border rounded-xl bg-slate-50/50 text-slate-400 text-xs font-semibold">
+                No inventory assets registered yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {gearList.map((g) => (
+                  <div key={g.id} className="border p-4 rounded-xl shadow-sm space-y-3 bg-slate-50/30">
+                    <div className="flex justify-between items-start">
+                      <strong className="text-slate-800 text-sm block">{g.name}</strong>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                        g.availableQty < 5 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
+                      }`}>
+                        {g.availableQty < 5 ? 'Low Stock' : 'Good Stock'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                      <div>
+                        <span className="block text-[9px] text-slate-400 uppercase">Available</span>
+                        <strong className="text-sm text-slate-800">{g.availableQty} {g.unit}</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-slate-400 uppercase">Total Pool</span>
+                        <strong className="text-sm text-slate-600">{g.totalQty} {g.unit}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Loans log section */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Active Patrol Dispatches & Loans</h3>
+              {loadingLoans ? (
+                <div className="flex justify-center py-6">
+                  <RefreshCw className="animate-spin text-blue-600 w-6 h-6" />
+                </div>
+              ) : loans.length === 0 ? (
+                <div className="text-center p-8 border rounded-xl bg-slate-50/50 text-slate-400 text-xs font-semibold">
+                  No active gear dispatches logged.
+                </div>
+              ) : (
+                <div className="border rounded-xl overflow-hidden shadow-sm bg-white">
+                  <table className="w-full text-left text-xs font-semibold text-slate-700">
+                    <thead className="bg-slate-50 uppercase text-[10px] text-slate-400 tracking-wider">
+                      <tr>
+                        <th className="p-3">Gear Item</th>
+                        <th className="p-3">Officer</th>
+                        <th className="p-3">Quantity</th>
+                        <th className="p-3">Loaned At</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {loans.map((l) => (
+                        <tr key={l.id} className="hover:bg-slate-50/30">
+                          <td className="p-3 font-bold text-slate-800">{l.gear.name}</td>
+                          <td className="p-3">
+                            <div>{l.officer.name || 'Unknown Officer'}</div>
+                            <div className="text-[10px] text-gray-400">{l.officer.email}</div>
+                          </td>
+                          <td className="p-3 text-slate-600 font-bold">{l.quantity} {l.gear.unit}</td>
+                          <td className="p-3 text-slate-500">{new Date(l.loanedAt).toLocaleString()}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              l.status === 'RETURNED' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {l.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            {l.status === 'LOANED' && ['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+                              <button
+                                onClick={() => handleReturnGear(l.id)}
+                                className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-[10px] font-bold hover:bg-blue-100"
+                              >
+                                Mark Returned
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* MODALS */}
+            {isAddGearModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="bg-white rounded-xl p-5 w-full max-w-sm shadow-xl space-y-4">
+                  <h3 className="text-base font-bold text-slate-800">Add/Update Gear Asset</h3>
+                  <form onSubmit={handleAddGear} className="space-y-3 text-xs font-semibold text-slate-500 font-bold">
+                    <div>
+                      <label className="block mb-1">Asset Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Walkie-Talkie Motorola"
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        value={gearForm.name}
+                        onChange={(e) => setGearForm({ ...gearForm, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block mb-1">Total Quantity</label>
+                        <input
+                          type="number"
+                          required
+                          placeholder="e.g. 50"
+                          className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                          value={gearForm.totalQty}
+                          onChange={(e) => setGearForm({ ...gearForm, totalQty: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1">Unit</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="pcs"
+                          className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                          value={gearForm.unit}
+                          onChange={(e) => setGearForm({ ...gearForm, unit: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddGearModalOpen(false)}
+                        className="border px-3.5 py-2 rounded-lg font-bold text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-lg">
+                        Save Asset
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {isLoanModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="bg-white rounded-xl p-5 w-full max-w-sm shadow-xl space-y-4">
+                  <h3 className="text-base font-bold text-slate-800">Dispatch Gear to Patrol Officer</h3>
+                  <form onSubmit={handleLoanGear} className="space-y-3 text-xs font-semibold text-slate-500">
+                    <div>
+                      <label className="block mb-1 font-bold">Select Equipment</label>
+                      <select
+                        required
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        value={loanForm.gearId}
+                        onChange={(e) => setLoanForm({ ...loanForm, gearId: e.target.value })}
+                      >
+                        <option value="">-- Choose Gear --</option>
+                        {gearList.map(g => (
+                          <option key={g.id} value={g.id} disabled={g.availableQty <= 0}>
+                            {g.name} ({g.availableQty} available)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block mb-1 font-bold">Select Patrol Officer</label>
+                      <select
+                        required
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        value={loanForm.officerId}
+                        onChange={(e) => setLoanForm({ ...loanForm, officerId: e.target.value })}
+                      >
+                        <option value="">-- Choose Officer --</option>
+                        {allUsers.filter(u => ['SECURITY_HEAD', 'SECURITY_OFFICER', 'STAFF'].includes(u.role)).map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.role.replace(/_/g, ' ')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block mb-1 font-bold">Quantity</label>
+                      <input
+                        type="number"
+                        required
+                        min={1}
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        value={loanForm.quantity}
+                        onChange={(e) => setLoanForm({ ...loanForm, quantity: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsLoanModalOpen(false)}
+                        className="border px-3.5 py-2 rounded-lg font-bold text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="bg-indigo-600 text-white font-bold px-3.5 py-2 rounded-lg">
+                        Dispatch
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

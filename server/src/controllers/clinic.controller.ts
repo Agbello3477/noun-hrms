@@ -3,6 +3,7 @@ import { prisma } from '../prisma-replica';
 import { encrypt, decrypt } from '../services/encryption';
 import { Role } from '@prisma/client';
 import { sendPushNotification } from '../services/fcm.service';
+import { notifyUser } from './notification.controller';
 
 interface AuthRequest extends Request {
     user?: {
@@ -291,12 +292,32 @@ export const dispensePrescription = async (req: AuthRequest, res: Response) => {
                 where: { name: item.name }
             });
             if (stock) {
+                const newQty = Math.max(0, stock.quantity - item.quantity);
                 await prisma.clinicInventory.update({
                     where: { name: item.name },
                     data: {
-                        quantity: Math.max(0, stock.quantity - item.quantity)
+                        quantity: newQty
                     }
                 });
+
+                if (newQty < 20) {
+                    const clinicStaff = await prisma.user.findMany({
+                        where: {
+                            role: { in: ['CLINIC_HEAD', 'CLINIC_PHARMACIST'] },
+                            isActive: true
+                        },
+                        select: { id: true }
+                    });
+                    for (const staff of clinicStaff) {
+                        await notifyUser(
+                            staff.id,
+                            '⚠️ LOW STOCK ALERT: Medication Depot',
+                            `Medication "${stock.name}" stock level has dropped to ${newQty} ${stock.unit}. Please order replenishment.`,
+                            'WARNING',
+                            '/dashboard/clinic'
+                        );
+                    }
+                }
             }
         }
 

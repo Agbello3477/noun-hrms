@@ -26,6 +26,7 @@ import systemRoutes from './routes/system.routes';
 import clinicRoutes from './routes/clinic.routes';
 import securityRoutes from './routes/security.routes';
 import voucherRoutes from './routes/voucher.routes';
+import gearRoutes from './routes/gear.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
@@ -74,6 +75,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/clinic', clinicRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
+app.use('/api/security/gear', gearRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });

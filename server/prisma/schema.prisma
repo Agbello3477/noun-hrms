@@ -64,6 +64,7 @@ model User {
   securityReports    ConsolidatedSecurityReport[]
   fcmTokens          FcmToken[]
   paymentVouchers    PaymentVoucher[] @relation("PVCreator")
+  securityGearLoans  SecurityGearLoan[]
 
   @@map("users")
 }
@@ -943,5 +944,34 @@ model PaymentVoucher {
   updatedAt       DateTime @updatedAt
 
   @@map("payment_vouchers")
+  @@index([status])
+}
+
+model SecurityGear {
+  id           String             @id @default(uuid())
+  name         String             @unique
+  totalQty     Int
+  availableQty Int
+  unit         String             @default("pcs")
+  updatedAt    DateTime           @updatedAt
+  loans        SecurityGearLoan[]
+
+  @@map("security_gear")
+}
+
+model SecurityGearLoan {
+  id         String       @id @default(uuid())
+  gearId     String
+  gear       SecurityGear @relation(fields: [gearId], references: [id], onDelete: Cascade)
+  officerId  String
+  officer    User         @relation(fields: [officerId], references: [id], onDelete: Cascade)
+  quantity   Int          @default(1)
+  status     String       @default("LOANED") // LOANED, RETURNED
+  loanedAt   DateTime     @default(now())
+  returnedAt DateTime?
+
+  @@map("security_gear_loans")
+  @@index([gearId])
+  @@index([officerId])
   @@index([status])
 }
