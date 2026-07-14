@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../prisma-replica';
 import { Role } from '@prisma/client';
+import { sendPushNotification } from '../services/fcm.service';
 
 interface AuthRequest extends Request {
     user?: {
@@ -104,6 +105,13 @@ export const createIncident = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        sendPushNotification(
+            securityHeads.map(h => h.id),
+            `New Incident Reported: ${category}`,
+            `An incident has been reported at ${location}. Priority needs evaluation.`,
+            `/dashboard/security/command`
+        ).catch(err => console.error('FCM push failed:', err));
+
         res.status(201).json(incident);
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to record incident report' });
@@ -157,6 +165,15 @@ export const updateIncident = async (req: AuthRequest, res: Response) => {
                     }
                 });
             }
+
+            if (newOfficers.length > 0) {
+                sendPushNotification(
+                    newOfficers,
+                    'New Security Incident Assignment',
+                    `You have been dispatched to investigate: ${incident.title} at ${incident.location}.`,
+                    `/dashboard/security/command`
+                ).catch(err => console.error('FCM push failed:', err));
+            }
         } else if (assignedToId && assignedToId !== incident.assignedToId) {
             // Legacy single officer fallback notification
             await prisma.notification.create({
@@ -167,6 +184,13 @@ export const updateIncident = async (req: AuthRequest, res: Response) => {
                     type: 'WARNING'
                 }
             });
+
+            sendPushNotification(
+                [assignedToId],
+                'New Security Incident Assignment',
+                `You have been dispatched to investigate: ${incident.title} at ${incident.location}.`,
+                `/dashboard/security/command`
+            ).catch(err => console.error('FCM push failed:', err));
         }
 
         // Alert Security Head on high priority updates
@@ -184,6 +208,13 @@ export const updateIncident = async (req: AuthRequest, res: Response) => {
                     }
                 });
             }
+
+            sendPushNotification(
+                securityHeads.map(h => h.id),
+                '⚠️ CRITICAL: Threat Priority Escalation',
+                `Incident ${incident.title} at ${incident.location} has been raised to HIGH priority.`,
+                `/dashboard/security/command`
+            ).catch(err => console.error('FCM push failed:', err));
         }
 
         res.json(updated);
@@ -245,6 +276,13 @@ export const createConsolidatedReport = async (req: AuthRequest, res: Response) 
                 }
             });
         }
+
+        sendPushNotification(
+            vcUsers.map(v => v.id),
+            'New Consolidated Security Report',
+            `Security Head has submitted the latest consolidated security intelligence report.`,
+            `/dashboard/security/reports`
+        ).catch(err => console.error('FCM push failed:', err));
 
         res.status(201).json(report);
     } catch (error: any) {

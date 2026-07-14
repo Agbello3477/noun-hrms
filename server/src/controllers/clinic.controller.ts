@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma-replica';
 import { encrypt, decrypt } from '../services/encryption';
 import { Role } from '@prisma/client';
+import { sendPushNotification } from '../services/fcm.service';
 
 interface AuthRequest extends Request {
     user?: {
@@ -131,6 +132,13 @@ export const submitTriage = async (req: AuthRequest, res: Response) => {
                     type: 'INFO'
                 }))
             });
+
+            sendPushNotification(
+                doctors.map(d => d.id),
+                '🩺 New Patient in Consultation Queue',
+                `${encounter.patientFile?.name || 'A patient'}'s vitals have been recorded. Awaiting your consultation.`,
+                `/dashboard/clinic`
+            ).catch(err => console.error('FCM push failed:', err));
         }
 
         res.json(updated);
@@ -188,6 +196,13 @@ export const submitConsultation = async (req: AuthRequest, res: Response) => {
                         type: 'INFO'
                     }))
                 });
+
+                sendPushNotification(
+                    labStaff.map(u => u.id),
+                    '🔬 New Lab Test Ordered',
+                    `Doctor has ordered lab tests for ${patientName}: ${labTests}`,
+                    `/dashboard/clinic`
+                ).catch(err => console.error('FCM push failed:', err));
             } else if (status === 'PHARMACY_REQUESTED') {
                 // Notify all pharmacists
                 const pharmacists = await prisma.user.findMany({
@@ -202,6 +217,13 @@ export const submitConsultation = async (req: AuthRequest, res: Response) => {
                         type: 'INFO'
                     }))
                 });
+
+                sendPushNotification(
+                    pharmacists.map(u => u.id),
+                    '💊 New Prescription Ready',
+                    `Prescription issued for ${patientName}. Please dispense medications.`,
+                    `/dashboard/clinic`
+                ).catch(err => console.error('FCM push failed:', err));
             }
         }
 
@@ -243,6 +265,13 @@ export const submitLabResults = async (req: AuthRequest, res: Response) => {
                     type: 'SUCCESS'
                 }
             });
+
+            sendPushNotification(
+                [encounter.consultedById],
+                'Laboratory Test Results Completed',
+                `Lab results are ready for patient ${encounter.patientFile.name}.`,
+                `/dashboard/clinic`
+            ).catch(err => console.error('FCM push failed:', err));
         }
 
         res.json(updated);
