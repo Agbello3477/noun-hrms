@@ -63,6 +63,7 @@ model User {
   assignedIncidents  SecurityIncident[] @relation("IncidentAssignee")
   securityReports    ConsolidatedSecurityReport[]
   fcmTokens          FcmToken[]
+  paymentVouchers    PaymentVoucher[] @relation("PVCreator")
 
   @@map("users")
 }
@@ -921,4 +922,26 @@ model FcmToken {
 
   @@map("fcm_tokens")
   @@index([userId])
+}
+
+model PaymentVoucher {
+  id              String   @id @default(uuid())
+  title           String
+  amount          Float
+  description     String
+  category        String   // ALLOWANCE, TRAVEL, FUNDING, OTHER
+  status          String   @default("PENDING") // PENDING, RECOMMENDED_BY_HEAD, AUDITED_BY_BURSARY, APPROVED, REJECTED
+  unitId          String?  
+  
+  // Relationships
+  createdByUserId String
+  createdByUser   User     @relation("PVCreator", fields: [createdByUserId], references: [id])
+  
+  auditComment    String?  
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("payment_vouchers")
+  @@index([status])
 }

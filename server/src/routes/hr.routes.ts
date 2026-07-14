@@ -1,7 +1,7 @@
 
 import { Router } from 'express';
 import { clockIn, clockOut, getAttendanceLogs } from '../controllers/attendance.controller';
-import { runPayroll, getMyPayslips, getPayrollStats, approvePayrollRun, getPayrollRecords, exportIPPISData, getPendingPayroll } from '../controllers/payroll.controller';
+import { runPayroll, getMyPayslips, getPayrollStats, approvePayrollRun, getPayrollRecords, exportIPPISData, getPendingPayroll, getAuditReconciliation } from '../controllers/payroll.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -30,6 +30,7 @@ payrollRouter.get('/records', requireRole(payrollGenRoles), getPayrollRecords);
 const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN];
 
 payrollRouter.get('/pending', requireRole(auditRoles), getPendingPayroll);
+payrollRouter.get('/reconciliation', requireRole(auditRoles), getAuditReconciliation);
 
 // Audit Workflow
 // Pending/Approve: Audit, Super User

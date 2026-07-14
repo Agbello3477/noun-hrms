@@ -151,3 +151,128 @@ export const approvePayrollRun = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: 'Error approving payroll' });
     }
 };
+
+export const getAuditReconciliation = async (req: AuthRequest, res: Response) => {
+    const { month, year } = req.query;
+
+    try {
+        if (!month || !year) {
+            return res.status(400).json({ message: 'Month and Year are required' });
+        }
+
+        const m = String(month);
+        const y = Number(year);
+
+        // Fetch all pending payroll records for that month
+        const pendingRecords = await prisma.payroll.findMany({
+            where: { month: m, year: y, status: 'PENDING' },
+            include: {
+                user: {
+                    include: {
+                        staffProfile: true
+                    }
+                }
+            }
+        });
+
+        const reconciliationReports = [];
+
+        // Define start and end dates for query matches
+        const monthNames = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+        const monthIndex = monthNames.indexOf(m);
+        const startOfMonth = new Date(y, monthIndex !== -1 ? monthIndex : 0, 1);
+        const endOfMonth = new Date(y, monthIndex !== -1 ? monthIndex + 1 : 1, 0, 23, 59, 59, 999);
+
+        for (const record of pendingRecords) {
+            const user = record.user;
+            const profile = user.staffProfile;
+            const flags = [];
+
+            if (profile) {
+                // 1. Retirement/Status checks
+                if (profile.status !== 'ACTIVE') {
+                    flags.push({
+                        level: 'CRITICAL',
+                        type: 'RETIREMENT_STATUS',
+                        message: `Staff status is marked as "${profile.status}" in registry database. Payment should be withheld.`
+                    });
+                }
+
+                // 2. Active Leave checks
+                const overlappingLeaves = await prisma.leaveRequest.findMany({
+                    where: {
+                        staffId: profile.id,
+                        status: 'APPROVED',
+                        OR: [
+                            {
+                                startDate: { lte: endOfMonth },
+                                endDate: { gte: startOfMonth }
+                            }
+                        ]
+                    }
+                });
+
+                for (const leave of overlappingLeaves) {
+                    flags.push({
+                        level: 'WARNING',
+                        type: 'ACTIVE_LEAVE',
+                        message: `Staff has approved "${leave.type}" leave from ${new Date(leave.startDate).toLocaleDateString()} to ${new Date(leave.endDate).toLocaleDateString()}.`
+                    });
+                }
+            } else {
+                flags.push({
+                    level: 'CRITICAL',
+                    type: 'MISSING_PROFILE',
+                    message: 'Staff profile records are missing or incomplete.'
+                });
+            }
+
+            // 3. Attendance checks
+            const attendanceCount = await prisma.attendance.count({
+                where: {
+                    userId: user.id,
+                    status: 'PRESENT',
+                    clockIn: {
+                        gte: startOfMonth,
+                        lte: endOfMonth
+                    }
+                }
+            });
+
+            if (attendanceCount < 10) {
+                flags.push({
+                    level: 'WARNING',
+                    type: 'LOW_ATTENDANCE',
+                    message: `Low attendance. Staff clocked in only ${attendanceCount} times this month (threshold: 10).`
+                });
+            }
+
+            if (flags.length > 0) {
+                reconciliationReports.push({
+                    payrollRecordId: record.id,
+                    userId: user.id,
+                    name: user.name || 'Unknown',
+                    email: user.email,
+                    staffId: profile?.staffId || 'N/A',
+                    grossPay: record.grossPay,
+                    netPay: record.netPay,
+                    flags
+                });
+            }
+        }
+
+        res.json({
+            month: m,
+            year: y,
+            scannedRecords: pendingRecords.length,
+            flaggedCount: reconciliationReports.length,
+            reports: reconciliationReports
+        });
+    } catch (error) {
+        console.error('Audit Reconciliation Error:', error);
+        res.status(500).json({ message: 'Error running audit reconciliation scan' });
+    }
+};

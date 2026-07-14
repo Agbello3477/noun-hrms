@@ -137,6 +137,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                             Bursary
                         </div>
                         <LinkItem href="/dashboard/payroll" icon={DollarSign} label="Payroll" />
+                        <LinkItem href="/dashboard/bursary" icon={Layers} label="Bursary Command" />
                         {isAudit && <LinkItem href="/dashboard/bursary/audit" icon={Layers} label="Audit Logs" />}
                     </>
                 )}
