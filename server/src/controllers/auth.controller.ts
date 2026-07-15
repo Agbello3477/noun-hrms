@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import { Role, Cadre } from '@prisma/client';
 import { redisService } from '../services/redis.service';
 import prisma from '../prisma';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
 
 // Memory fallback for lockouts and failure counts if Redis is offline
 const memoryLockoutStore = new Map<string, number>(); // email -> lockedUntil timestamp
@@ -314,7 +316,27 @@ export const login = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Log Login Event (Phase 3 Requirement)
+        // Check if 2FA is required
+        const ENFORCED_2FA_ROLES = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.HR_ADMIN, Role.BURSARY, Role.ADMIN];
+        const is2FAEnforced = ENFORCED_2FA_ROLES.includes(updatedUser.role);
+        
+        if (updatedUser.isTwoFactorEnabled || is2FAEnforced) {
+            // Generate a temporary 10-minute token just for 2FA verification/setup
+            const tempToken = jwt.sign(
+                { id: updatedUser.id, role: updatedUser.role, isTemp2FA: true },
+                process.env.JWT_SECRET as string,
+                { expiresIn: '10m' }
+            );
+
+            return res.json({
+                message: updatedUser.isTwoFactorEnabled ? '2FA required' : '2FA setup required',
+                requires2FA: updatedUser.isTwoFactorEnabled,
+                requires2FASetup: !updatedUser.isTwoFactorEnabled,
+                tempToken
+            });
+        }
+
+        // Log Login Event (Phase 3 Requirement) - Only log if fully logged in (no 2FA)
         try {
             await prisma.auditLog.create({
                 data: {
@@ -329,7 +351,7 @@ export const login = async (req: Request, res: Response) => {
             console.error('Failed to log login event:', e);
         }
 
-        // Generate token
+        // Generate final token
         const token = jwt.sign(
             { id: updatedUser.id, role: updatedUser.role },
             process.env.JWT_SECRET as string,
@@ -346,11 +368,167 @@ export const login = async (req: Request, res: Response) => {
                 role: updatedUser.role,
                 isActive: updatedUser.isActive,
                 mustChangePassword: updatedUser.mustChangePassword,
+                isTwoFactorEnabled: updatedUser.isTwoFactorEnabled,
                 staffProfile: updatedUser.staffProfile
             },
         });
     } catch (error) {
         console.error('Login error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const verify2FALogin = async (req: Request, res: Response) => {
+    try {
+        const { tempToken, code } = req.body;
+        if (!tempToken || !code) return res.status(400).json({ message: 'Temp token and code are required' });
+
+        const decoded = jwt.verify(tempToken, process.env.JWT_SECRET as string) as any;
+        if (!decoded.isTemp2FA) return res.status(400).json({ message: 'Invalid token type' });
+
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            include: { staffProfile: true }
+        });
+
+        if (!user || !user.isTwoFactorEnabled || !user.twoFactorSecret) {
+            return res.status(400).json({ message: '2FA is not set up for this user' });
+        }
+
+        const isValid = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: code,
+            window: 1 // Allow 30 seconds drift before/after
+        });
+
+        if (!isValid) return res.status(401).json({ message: 'Invalid 2FA code' });
+
+        // Generate final token
+        const token = jwt.sign(
+            { id: user.id, role: user.role },
+            process.env.JWT_SECRET as string,
+            { expiresIn: '1d' }
+        );
+
+        // Audit Log
+        await prisma.auditLog.create({
+            data: {
+                userId: user.id,
+                action: 'LOGIN_2FA',
+                resource: 'AUTH',
+                details: JSON.stringify({ ip: req.ip, userAgent: req.headers['user-agent'] }),
+                ipAddress: req.ip || '0.0.0.0'
+            }
+        });
+
+        res.json({
+            message: 'Login successful',
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                isActive: user.isActive,
+                mustChangePassword: user.mustChangePassword,
+                isTwoFactorEnabled: user.isTwoFactorEnabled,
+                staffProfile: user.staffProfile
+            },
+        });
+    } catch (error) {
+        console.error('2FA Verify Error:', error);
+        res.status(401).json({ message: 'Invalid or expired temporary token' });
+    }
+};
+
+export const setup2FA = async (req: Request, res: Response) => {
+    try {
+        // Allow using tempToken if forced during login, or req.user if already logged in
+        let userId = (req as any).user?.id;
+        
+        if (!userId && req.body.tempToken) {
+            const decoded = jwt.verify(req.body.tempToken, process.env.JWT_SECRET as string) as any;
+            if (decoded.isTemp2FA) userId = decoded.id;
+        }
+
+        if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        const secret = speakeasy.generateSecret({
+            name: \`NOUN HRMS (\${user.email})\`
+        });
+
+        const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
+
+        // Save secret temporarily (we won't enable 2FA until they verify it)
+        await prisma.user.update({
+            where: { id: userId },
+            data: { twoFactorSecret: secret.base32 }
+        });
+
+        res.json({ qrCodeUrl, secret: secret.base32 });
+    } catch (error) {
+        console.error('Setup 2FA Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const verifyAndEnable2FA = async (req: Request, res: Response) => {
+    try {
+        let userId = (req as any).user?.id;
+        const { code, tempToken } = req.body;
+
+        if (!userId && tempToken) {
+            const decoded = jwt.verify(tempToken, process.env.JWT_SECRET as string) as any;
+            if (decoded.isTemp2FA) userId = decoded.id;
+        }
+
+        if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user || !user.twoFactorSecret) return res.status(400).json({ message: '2FA setup not initiated' });
+
+        const isValid = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: code,
+            window: 1
+        });
+
+        if (!isValid) return res.status(400).json({ message: 'Invalid 2FA code' });
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { isTwoFactorEnabled: true }
+        });
+
+        // Audit
+        await prisma.auditLog.create({
+            data: {
+                userId,
+                action: 'ENABLE_2FA',
+                resource: 'AUTH',
+                details: 'User enabled Two-Factor Authentication',
+                ipAddress: req.ip || '0.0.0.0'
+            }
+        });
+
+        // If they used a temp token during login intercept, automatically log them in now
+        if (tempToken) {
+            const token = jwt.sign(
+                { id: user.id, role: user.role },
+                process.env.JWT_SECRET as string,
+                { expiresIn: '1d' }
+            );
+            return res.json({ message: '2FA Enabled and Login Successful', token, user });
+        }
+
+        res.json({ message: '2FA Enabled successfully' });
+    } catch (error) {
+        console.error('Verify Enable 2FA Error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

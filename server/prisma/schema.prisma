@@ -21,6 +21,10 @@ model User {
   mustChangePassword Boolean  @default(false)
   tokenInvalidatedAt DateTime? // Set when account is archived; blocks all existing JWTs
   
+  // Phase 15: 2FA
+  twoFactorSecret    String?
+  isTwoFactorEnabled Boolean  @default(false)
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   

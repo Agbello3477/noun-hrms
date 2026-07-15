@@ -20,7 +20,11 @@ export const verifyToken = async (req: AuthRequest, res: Response, next: NextFun
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role; iat?: number };
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role; iat?: number; isTemp2FA?: boolean };
+        
+        if (decoded.isTemp2FA) {
+            return res.status(403).json({ message: 'Temporary tokens cannot be used for standard API access' });
+        }
         
         // ─── Token Revocation Check ─────────────────────────────────────────
         // If the account was archived (retired/resigned/fired/deceased), the

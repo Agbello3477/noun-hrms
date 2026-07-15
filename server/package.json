@@ -27,6 +27,7 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
     "firebase-admin": "^13.10.0",
     "helmet": "^7.1.0",
     "ioredis": "^5.9.2",
@@ -35,7 +36,10 @@
     "multer": "^2.0.2",
     "node-cron": "^4.6.0",
     "nodemailer": "^7.0.12",
+    "qrcode": "^1.5.4",
+    "rate-limit-redis": "^5.0.0",
     "resend": "^6.17.2",
+    "speakeasy": "^2.0.0",
     "twilio": "^6.0.2",
     "typescript": "^5.9.3",
     "zod": "^3.22.4"
@@ -44,6 +48,8 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@types/speakeasy": "^2.0.10",
     "@types/ws": "^8.18.1",
     "prisma": "^5.10.2",
     "ts-node": "^10.9.2",

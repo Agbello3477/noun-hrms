@@ -1,0 +1,11 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[3903],{9682:function(e,t,n){Promise.resolve().then(n.bind(n,5014))},5014:function(e,t,n){"use strict";n.r(t),n.d(t,{default:function(){return a}});var r=n(984),s=n(346),i=n(7431),d=n(4601);function a(){return(0,r.jsxs)("div",{className:"flex h-[calc(100vh-10rem)] flex-col items-center justify-center bg-white border border-gray-150 rounded-2xl p-8 text-center shadow-sm animate-in fade-in zoom-in-95 duration-300",children:[(0,r.jsx)("div",{className:"w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mb-6",children:(0,r.jsx)(i.Z,{size:36})}),(0,r.jsx)("h1",{className:"text-2xl font-bold text-gray-900 mb-2",children:"Access Denied"}),(0,r.jsx)("p",{className:"text-gray-500 max-w-md mb-8 leading-relaxed",children:"You do not have the required permissions to access this module. Please contact the administrator if you believe this is an error."}),(0,r.jsxs)(s.default,{href:"/dashboard",className:"inline-flex items-center gap-2 bg-nounGreen text-white px-6 py-3 rounded-full font-bold shadow-md hover:bg-green-800 transition hover:-translate-y-0.5",children:[(0,r.jsx)(d.Z,{size:16})," Return to Dashboard"]})]})}},4601:function(e,t,n){"use strict";n.d(t,{Z:function(){return r}});/**
+ * @license lucide-react v0.330.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let r=(0,n(2690).Z)("ArrowLeft",[["path",{d:"m12 19-7-7 7-7",key:"1l729n"}],["path",{d:"M19 12H5",key:"x3x0zl"}]])},7431:function(e,t,n){"use strict";n.d(t,{Z:function(){return r}});/**
+ * @license lucide-react v0.330.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let r=(0,n(2690).Z)("ShieldAlert",[["path",{d:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10",key:"1irkt0"}],["path",{d:"M12 8v4",key:"1got3b"}],["path",{d:"M12 16h.01",key:"1drbdi"}]])}},function(e){e.O(0,[124,7115,9069,1744],function(){return e(e.s=9682)}),_N_E=e.O()}]);
