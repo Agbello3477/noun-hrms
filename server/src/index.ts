@@ -34,6 +34,7 @@ import { scheduleRetirementCron } from './jobs/retirementCron';
 
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (Render load balancer) to ensure req.ip is correct for rate limiting
 const PORT = process.env.PORT || 5000;
 
 app.use(helmet());
