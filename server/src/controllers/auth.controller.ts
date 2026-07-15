@@ -317,7 +317,7 @@ export const login = async (req: Request, res: Response) => {
         }
 
         // Check if 2FA is required
-        const ENFORCED_2FA_ROLES = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.HR_ADMIN, Role.BURSARY, Role.ADMIN];
+        const ENFORCED_2FA_ROLES: Role[] = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.HR_ADMIN, Role.BURSARY, Role.ADMIN];
         const is2FAEnforced = ENFORCED_2FA_ROLES.includes(updatedUser.role);
         
         if (updatedUser.isTwoFactorEnabled || is2FAEnforced) {
@@ -458,7 +458,7 @@ export const setup2FA = async (req: Request, res: Response) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         const secret = speakeasy.generateSecret({
-            name: \`NOUN HRMS (\${user.email})\`
+            name: `NOUN HRMS (${user.email})`
         });
 
         const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
