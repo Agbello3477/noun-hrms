@@ -4,7 +4,7 @@ import prisma from '../prisma';
 const projectId = process.env.FCM_PROJECT_ID;
 const clientEmail = process.env.FCM_CLIENT_EMAIL;
 // Handle newlines in private key if it comes from env
-const privateKey = process.env.FCM_PRIVATE_KEY ? process.env.FCM_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined;
+const privateKey = process.env.FCM_PRIVATE_KEY ? process.env.FCM_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/^["']|["']$/g, '') : undefined;
 
 let isFcmInitialized = false;
 
