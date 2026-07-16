@@ -47,7 +47,7 @@
     "@types/speakeasy": "^2.0.10"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "npx --yes ts-node prisma/seed.ts"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
