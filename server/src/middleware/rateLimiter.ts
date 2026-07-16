@@ -7,13 +7,7 @@ const isRedisActive = (redisService as any).isEnabled && (redisService as any).c
 
 // Function to create a new store instance for each limiter
 const createStore = (prefix: string) => {
-    if (isRedisActive) {
-        return new RedisStore({
-            sendCommand: (...args: string[]) => (redisService as any).client.call(...args),
-            prefix
-        });
-    }
-    return undefined; // Fallback to memory store if Redis is unavailable
+    return undefined; // Temporarily force memory store to debug Redis hangs
 };
 
 // 1. Strict Auth Limiter (For Login / 2FA endpoints)
