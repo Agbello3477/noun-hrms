@@ -9,6 +9,10 @@
         "lint": "next lint"
     },
     "dependencies": {
+        "@tiptap/extension-collaboration": "^3.28.0",
+        "@tiptap/extension-collaboration-cursor": "^2.26.2",
+        "@tiptap/react": "^3.28.0",
+        "@tiptap/starter-kit": "^3.28.0",
         "axios": "^1.13.2",
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.1.0",
@@ -17,7 +21,10 @@
         "next": "14.1.0",
         "react": "^18",
         "react-dom": "^18",
-        "tailwind-merge": "^2.2.1"
+        "socket.io-client": "^4.8.3",
+        "tailwind-merge": "^2.2.1",
+        "y-websocket": "^3.0.0",
+        "yjs": "^13.6.31"
     },
     "devDependencies": {
         "@types/node": "^20",

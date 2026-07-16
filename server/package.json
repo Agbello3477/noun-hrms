@@ -21,6 +21,8 @@
     "@types/node": "^20.19.30",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/speakeasy": "^2.0.10",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -39,12 +41,13 @@
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^5.0.0",
     "resend": "^6.17.2",
+    "socket.io": "^4.8.3",
     "speakeasy": "^2.0.0",
     "twilio": "^6.0.2",
     "typescript": "^5.9.3",
-    "zod": "^3.22.4",
-    "@types/qrcode": "^1.5.6",
-    "@types/speakeasy": "^2.0.10"
+    "y-websocket": "^1.5.0",
+    "yjs": "^13.6.31",
+    "zod": "^3.22.4"
   },
   "prisma": {
     "seed": "npx --yes ts-node prisma/seed.ts"

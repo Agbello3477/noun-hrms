@@ -56,6 +56,12 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
           login(response.data.token, response.data.user);
       }
     } catch (err: any) {
+      console.error('Login Error Object:', err);
+      console.error('Network Error Details:', {
+          message: err.message,
+          code: err.code,
+          response: err.response?.data
+      });
       const errorMessage = err.response?.data?.message || 
         (err.code === 'ECONNABORTED' || !err.response 
           ? 'Cannot connect to the server. Please verify your internet connection.'

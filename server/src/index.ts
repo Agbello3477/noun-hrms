@@ -6,6 +6,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import { WebSocketServer } from 'ws';
+import { setupChatSocket } from './sockets/chat.socket';
+import { authenticateDocSocket, setupDocSocket } from './sockets/doc.socket';
 
 import authRoutes from './routes/auth.routes';
 import staffRoutes from './routes/staff.routes';
@@ -27,6 +32,7 @@ import clinicRoutes from './routes/clinic.routes';
 import securityRoutes from './routes/security.routes';
 import voucherRoutes from './routes/voucher.routes';
 import gearRoutes from './routes/gear.routes';
+import researchRoutes from './routes/research.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
@@ -34,7 +40,7 @@ import { scheduleRetirementCron } from './jobs/retirementCron';
 
 
 const app = express();
-app.set('trust proxy', 1); // Trust first proxy (Render load balancer) to ensure req.ip is correct for rate limiting
+app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
 const PORT = process.env.PORT || 5000;
 
 app.use(helmet());
@@ -77,12 +83,53 @@ app.use('/api/clinic', clinicRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/security/gear', gearRoutes);
+app.use('/api/research', researchRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });
 });
 
-app.listen(PORT, () => {
+// Create HTTP Server
+const server = http.createServer(app);
+
+// Setup Socket.io for Chat
+const io = new SocketIOServer(server, {
+    cors: {
+        origin: process.env.CLIENT_URL || 'http://localhost:3000',
+        credentials: true
+    }
+});
+setupChatSocket(io);
+
+// Setup WebSockets for Yjs Document Collaboration
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', async (request, socket, head) => {
+    // Only intercept requests for the collaboration endpoints
+    const pathname = request.url ? new URL(request.url, `http://${request.headers.host}`).pathname : '';
+    
+    if (pathname === '/api/collaboration/doc') {
+        // Authenticate via token in query string
+        const isAuthenticated = await authenticateDocSocket(request);
+        
+        if (!isAuthenticated) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+            socket.destroy();
+            return;
+        }
+
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    } else if (!pathname.startsWith('/socket.io/')) {
+        // Let other upgrade requests (if any) fall through or destroy
+        socket.destroy();
+    }
+});
+
+wss.on('connection', setupDocSocket);
+
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     // Start background scheduled jobs
     schedulePromotionCron();

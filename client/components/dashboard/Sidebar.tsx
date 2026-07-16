@@ -166,7 +166,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                             Academic
                         </div>
-                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Research" />
+                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
+                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
                         <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
                     </>
                 )}

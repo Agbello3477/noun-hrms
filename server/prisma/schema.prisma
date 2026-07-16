@@ -70,6 +70,11 @@ model User {
   paymentVouchers    PaymentVoucher[] @relation("PVCreator")
   securityGearLoans  SecurityGearLoan[]
 
+  // Phase 16: Research Forum
+  sentInvites        ProjectInvite[] @relation("Inviter")
+  receivedInvites    ProjectInvite[] @relation("Invitee")
+  projectMessages    ProjectMessage[]
+
   @@map("users")
 }
 
@@ -240,6 +245,11 @@ model StaffProfile {
   signatureUrl String?
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
+
+  // Phase 16: Research Forum Module
+  ownedProjects ResearchProject[] @relation("ProjectOwner")
+  projectMemberships ProjectMember[]
+  projectFiles UploadedProjectFile[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -978,4 +988,121 @@ model SecurityGearLoan {
   @@index([gearId])
   @@index([officerId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RESEARCH FORUM MODULE (COLLABORATIVE RESEARCH)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ResearchProject {
+  id          String   @id @default(uuid())
+  title       String
+  abstract    String?  @db.Text
+  domain      String?
+  status      String   @default("DRAFT") // DRAFT, ONGOING, COMPLETED
+  
+  ownerId     String
+  owner       StaffProfile @relation("ProjectOwner", fields: [ownerId], references: [id])
+  
+  members     ProjectMember[]
+  invites     ProjectInvite[]
+  documents   ProjectDocument[]
+  messages    ProjectMessage[]
+  files       UploadedProjectFile[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("research_projects")
+  @@index([ownerId])
+  @@index([status])
+}
+
+model ProjectMember {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  staffId     String
+  staff       StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  
+  role        String   @default("EDITOR") // OWNER, EDITOR, VIEWER
+  
+  joinedAt    DateTime @default(now())
+
+  @@map("project_members")
+  @@index([projectId])
+  @@index([staffId])
+  @@unique([projectId, staffId])
+}
+
+model ProjectInvite {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  inviterId   String
+  inviter     User     @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  
+  inviteeId   String
+  invitee     User     @relation("Invitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  
+  status      String   @default("PENDING") // PENDING, ACCEPTED, DECLINED
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("project_invites")
+  @@index([projectId])
+  @@index([inviteeId])
+}
+
+model ProjectDocument {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  title       String   @default("Untitled Document")
+  content     Bytes?   // Yjs State Update binary blob
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("project_documents")
+  @@index([projectId])
+}
+
+model ProjectMessage {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  senderId    String
+  sender      User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
+  text        String   @db.Text
+  
+  createdAt   DateTime @default(now())
+
+  @@map("project_messages")
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model UploadedProjectFile {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  uploaderId  String
+  uploader    StaffProfile @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  
+  fileName    String
+  fileUrl     String
+  mimeType    String
+  
+  uploadedAt  DateTime @default(now())
+
+  @@map("project_files")
+  @@index([projectId])
 }
