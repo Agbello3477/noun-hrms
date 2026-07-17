@@ -724,7 +724,7 @@ export default function DashboardHome() {
                             Manager Portal
                         </span>
                         <h1 className="text-3xl font-bold tracking-tight mb-2">
-                            Welcome back, {user?.name?.split(' ')[0]}!
+                            Welcome back, {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name?.split(' ')[0]}` : user?.name?.split(' ')[0]}!
                         </h1>
                         <p className="text-blue-100 max-w-lg text-sm opacity-90 leading-relaxed">
                             Overview for <span className="font-bold underline">{user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Your Managed Unit'}</span>. Track active staff, recommendation pipelines, and appraise performance.
@@ -943,7 +943,7 @@ export default function DashboardHome() {
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-nounGreen to-green-800 p-8 text-white shadow-xl">
                     <div className="relative z-10">
                         <h1 className="text-3xl font-bold tracking-tight mb-2">
-                            Welcome back, {user?.name?.split(' ')[0]}!
+                            Welcome back, {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name?.split(' ')[0]}` : user?.name?.split(' ')[0]}!
                         </h1>
                         <p className="text-green-100 max-w-lg">
                             Access your digital dossier, download payslips, apply for leave, and manage your academic profile all in one secure location.

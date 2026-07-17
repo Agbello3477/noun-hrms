@@ -125,7 +125,9 @@ export default function ProfilePage() {
                                 user.name.charAt(0)
                             )}
                         </div>
-                        <h2 className="text-xl font-bold text-gray-800">{user.name}</h2>
+                        <h2 className="text-xl font-bold text-gray-800">
+                            {user.staffProfile?.title ? `${user.staffProfile.title}. ${user.name}` : user.name}
+                        </h2>
                         <p className="text-sm text-blue-600 font-medium mb-4">{user.role.replace(/_/g, ' ')}</p>
 
                         <div className="border-t pt-4 text-left space-y-3">

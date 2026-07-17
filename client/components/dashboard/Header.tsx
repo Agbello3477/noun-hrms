@@ -211,7 +211,9 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                 {/* User Profile */}
                 <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
                     <div className="text-right hidden sm:block">
-                        <p className="text-sm font-bold text-gray-900">{user?.name}</p>
+                        <p className="text-sm font-bold text-gray-900">
+                            {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name}` : user?.name}
+                        </p>
                         <p className="text-xs text-gray-500 truncate max-w-[150px]">
                             {user?.staffProfile?.rank || user?.role?.replace(/_/g, ' ')}
                         </p>
