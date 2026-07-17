@@ -82,6 +82,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     const [editDateOfBirth, setEditDateOfBirth] = useState('');
     const [editDateOfFirstAppointment, setEditDateOfFirstAppointment] = useState('');
     const [editStatus, setEditStatus] = useState('ACTIVE');
+    const [editTitle, setEditTitle] = useState('');
 
     const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER'].includes(currentUser?.role || '');
 
@@ -172,6 +173,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 }
 
                 // Initialize new state variables
+                setEditTitle(staffData.staffProfile?.title || '');
                 setEditSurname(staffData.staffProfile?.surname || '');
                 setEditOtherNames(staffData.staffProfile?.otherNames || '');
                 setEditPhone(staffData.staffProfile?.phone || '');
@@ -254,6 +256,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             }
 
             const payload = {
+                title: editTitle,
                 surname: editSurname,
                 otherNames: editOtherNames,
                 phone: editPhone,
@@ -433,7 +436,27 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                             <h3 className="text-sm font-extrabold text-blue-700 uppercase tracking-wider border-b border-blue-50 pb-2">
                                 1. Bio-Data & Career Configuration
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                                {/* Title */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Title</label>
+                                    <select
+                                        value={editTitle}
+                                        onChange={e => setEditTitle(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
+                                    >
+                                        <option value="">Select Title</option>
+                                        <option value="Mr">Mr</option>
+                                        <option value="Mrs">Mrs</option>
+                                        <option value="Ms">Ms</option>
+                                        <option value="Miss">Miss</option>
+                                        <option value="Dr">Dr.</option>
+                                        <option value="Assoc. Prof">Assoc. Prof</option>
+                                        <option value="Prof">Prof.</option>
+                                        <option value="Engr">Engr.</option>
+                                        <option value="Barr">Barr.</option>
+                                    </select>
+                                </div>
                                 {/* Surname */}
                                 <div className="space-y-1">
                                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Surname</label>
@@ -464,7 +487,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                     <select
                                         value={editGender}
                                         onChange={e => setEditGender(e.target.value)}
-                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-550/20 focus:border-blue-500 outline-none bg-white font-medium"
                                     >
                                         <option value="">Select Gender</option>
                                         <option value="Male">Male</option>

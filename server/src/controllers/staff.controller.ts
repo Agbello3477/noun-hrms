@@ -508,7 +508,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         }
 
         const {
-            surname, otherNames, phone, stateOfOrigin, lga, address,
+            surname, otherNames, title, phone, stateOfOrigin, lga, address,
             level, step, cadre, gender,
             role, unitId, centerId, rank,
             dateOfBirth, dateOfFirstAppointment, status
@@ -586,7 +586,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             where: { userId: user.id },
             create: {
                 userId: user.id,
-                surname, otherNames, phone, stateOfOrigin, lga, address,
+                surname, otherNames, title, phone, stateOfOrigin, lga, address,
                 level, step, cadre: resolvedCadre, gender,
                 passportUrl,
                 rank: rank || undefined,
@@ -599,7 +599,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 centerId: (isAdmin && centerId && centerId !== 'null' && centerId !== '') ? centerId : null
             },
             update: {
-                surname, otherNames, phone, stateOfOrigin, lga, address,
+                surname, otherNames, title: title !== undefined ? title : undefined, phone, stateOfOrigin, lga, address,
                 level, step, cadre: resolvedCadre, gender,
                 rank: rank !== undefined ? rank : undefined,
                 dateOfBirth: dob !== undefined ? dob : undefined,
