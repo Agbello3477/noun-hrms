@@ -455,6 +455,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="Prof">Prof.</option>
                                         <option value="Engr">Engr.</option>
                                         <option value="Barr">Barr.</option>
+                                        <option value="Pharm">Pharm.</option>
+                                        <option value="Nurse">Nurse</option>
+                                        <option value="MLS">MLS</option>
                                     </select>
                                 </div>
                                 {/* Surname */}
