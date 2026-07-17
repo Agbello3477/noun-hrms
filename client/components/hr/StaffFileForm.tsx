@@ -148,8 +148,12 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             <option value="">Select</option>
                             <option value="Mr">Mr</option>
                             <option value="Mrs">Mrs</option>
+                            <option value="Ms">Ms</option>
                             <option value="Dr">Dr</option>
                             <option value="Prof">Prof</option>
+                            <option value="Pharm">Pharm.</option>
+                            <option value="Nurse">Nurse</option>
+                            <option value="MLS">MLS</option>
                         </select>
                     </div>
                     <div>

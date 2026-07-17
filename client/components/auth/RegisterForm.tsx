@@ -154,7 +154,15 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                             <div>
                                 <label className="block text-xs font-semibold text-gray-600 mb-1">Title</label>
                                 <select name="title" className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.title} onChange={handleChange}>
-                                    <option value="">Select</option><option value="Mr">Mr</option><option value="Mrs">Mrs</option><option value="Ms">Ms</option><option value="Dr">Dr</option><option value="Prof">Prof</option>
+                                    <option value="">Select</option>
+                                    <option value="Mr">Mr</option>
+                                    <option value="Mrs">Mrs</option>
+                                    <option value="Ms">Ms</option>
+                                    <option value="Dr">Dr</option>
+                                    <option value="Prof">Prof</option>
+                                    <option value="Pharm">Pharm.</option>
+                                    <option value="Nurse">Nurse</option>
+                                    <option value="MLS">MLS</option>
                                 </select>
                             </div>
                             <div className="md:col-span-2">
