@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: noun-hrms-server
+    runtime: node
+    rootDir: server
+    # Build: generate Prisma client (no DB connection needed) then compile TypeScript
+    buildCommand: npm install && npx prisma generate && npm run build
+    # Start: run migrations (DB must be awake at this point) then start the server
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
