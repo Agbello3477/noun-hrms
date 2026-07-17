@@ -231,3 +231,75 @@ export const uploadFile = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+// 7. Get Project Document (creates a default document if none exists)
+export const getDocument = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        let doc = await prisma.projectDocument.findFirst({ where: { projectId: id } });
+        if (!doc) {
+            doc = await prisma.projectDocument.create({
+                data: { projectId: id, title: project.title, contentHtml: '' }
+            });
+        }
+
+        res.json({ id: doc.id, title: doc.title, contentHtml: doc.contentHtml || '', updatedAt: doc.updatedAt });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 8. Save Project Document content
+export const saveDocument = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { contentHtml } = req.body;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const member = project.members.find(m => m.staffId === staffProfile.id);
+            if (!member) return res.status(403).json({ message: 'Forbidden' });
+            if (member.role === 'VIEWER') return res.status(403).json({ message: 'Viewers cannot edit the document' });
+        }
+
+        // Find existing doc or prepare to create
+        const existing = await prisma.projectDocument.findFirst({ where: { projectId: id } });
+
+        const doc = existing
+            ? await prisma.projectDocument.update({
+                where: { id: existing.id },
+                data: { contentHtml: contentHtml ?? '' }
+            })
+            : await prisma.projectDocument.create({
+                data: { projectId: id, title: project.title, contentHtml: contentHtml ?? '' }
+            });
+
+        res.json({ message: 'Saved', updatedAt: doc.updatedAt });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+

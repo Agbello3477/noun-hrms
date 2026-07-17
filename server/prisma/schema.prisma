@@ -1063,7 +1063,7 @@ model ProjectDocument {
   project     ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
   title       String   @default("Untitled Document")
-  content     Bytes?   // Yjs State Update binary blob
+  contentHtml String?  @db.Text  // Rich text HTML saved by TipTap editor
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

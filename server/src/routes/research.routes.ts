@@ -7,7 +7,9 @@ import {
     sendInvite, 
     acceptInvite, 
     uploadFile,
-    upload
+    upload,
+    getDocument,
+    saveDocument
 } from '../controllers/research.controller';
 
 const router = Router();
@@ -25,5 +27,9 @@ router.post('/invite/:inviteId/accept', acceptInvite);
 
 // Files
 router.post('/:id/files', upload.single('file'), uploadFile);
+
+// Document (rich-text editor content via REST)
+router.get('/:id/document', getDocument);
+router.put('/:id/document', saveDocument);
 
 export default router;
