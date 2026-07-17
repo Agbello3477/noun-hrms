@@ -28,7 +28,7 @@ export const setupChatSocket = (io: SocketIOServer) => {
         socket.on('join-project', async (projectId: string) => {
             try {
                 const staffProfile = await prisma.staffProfile.findUnique({
-                    where: { userId: user.userId }
+                    where: { userId: user.id }
                 });
 
                 if (!staffProfile) {
@@ -47,7 +47,7 @@ export const setupChatSocket = (io: SocketIOServer) => {
 
                 if (membership || user.role === 'SUPER_USER') {
                     socket.join(`project_${projectId}`);
-                    console.log(`[Chat Socket] User ${user.userId} joined project_${projectId}`);
+                    console.log(`[Chat Socket] User ${user.id} joined project_${projectId}`);
                     socket.emit('joined', projectId);
                 } else {
                     socket.emit('error', 'Unauthorized to join this project');
@@ -67,7 +67,7 @@ export const setupChatSocket = (io: SocketIOServer) => {
                 const message = await prisma.projectMessage.create({
                     data: {
                         projectId,
-                        senderId: user.userId,
+                        senderId: user.id,
                         text
                     },
                     include: {

@@ -31,7 +31,7 @@ export const createProject = async (req: Request, res: Response) => {
         const { title, abstract, domain } = req.body;
         const user = (req as any).user;
 
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         if (!staffProfile) return res.status(404).json({ message: 'Staff profile not found' });
 
         const project = await prisma.researchProject.create({
@@ -60,7 +60,7 @@ export const createProject = async (req: Request, res: Response) => {
 export const getMyProjects = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         if (!staffProfile && user.role !== 'SUPER_USER') {
              return res.status(200).json([]); // Non-staff maybe
         }
@@ -93,7 +93,7 @@ export const getProjectDetails = async (req: Request, res: Response) => {
         const { id } = req.params;
         const user = (req as any).user;
         
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         
         const project = await prisma.researchProject.findUnique({
             where: { id },
@@ -147,7 +147,7 @@ export const sendInvite = async (req: Request, res: Response) => {
         const invite = await prisma.projectInvite.create({
             data: {
                 projectId: id,
-                inviterId: user.userId,
+                inviterId: user.id,
                 inviteeId
             }
         });
@@ -166,11 +166,11 @@ export const acceptInvite = async (req: Request, res: Response) => {
         const user = (req as any).user;
 
         const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
-        if (!invite || invite.inviteeId !== user.userId) {
+        if (!invite || invite.inviteeId !== user.id) {
             return res.status(403).json({ message: 'Forbidden' });
         }
 
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         if (!staffProfile) return res.status(404).json({ message: 'Staff profile required' });
 
         await prisma.$transaction([
@@ -203,7 +203,7 @@ export const uploadFile = async (req: Request, res: Response) => {
 
         if (!file) return res.status(400).json({ message: 'No file uploaded' });
 
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         if (!staffProfile) return res.status(403).json({ message: 'Forbidden' });
 
         // RBAC
