@@ -99,7 +99,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
                         <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="Performance (APER)" />
-                        <LinkItem href="/dashboard/staff" icon={Users} label="Staff/Users" />
+                        <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
                         <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
