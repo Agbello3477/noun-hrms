@@ -19,72 +19,93 @@ const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
 export default function CollaborativeEditor({ projectId, userName, userColor = getRandomColor() }: CollaborativeEditorProps) {
     const [status, setStatus] = useState('connecting');
+    // Key fix: store provider in state so editor re-mounts when provider is ready
+    const [provider, setProvider] = useState<WebsocketProvider | null>(null);
     const ydocRef = useRef<Y.Doc>(new Y.Doc());
-    const providerRef = useRef<WebsocketProvider | null>(null);
 
     useEffect(() => {
-        // We retrieve the token to authenticate with the WS server
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        // Extract base URL to construct ws:// or wss:// URL
         const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
         const wsBaseUrl = rawBaseUrl.replace(/^http/, 'ws');
-        
-        // Connect to the custom Doc WebSocket we exposed on the backend
-        const provider = new WebsocketProvider(
-            wsBaseUrl, 
-            `/api/collaboration/doc?projectId=${projectId}&token=${token}`, 
+
+        const wsProvider = new WebsocketProvider(
+            wsBaseUrl,
+            `/api/collaboration/doc?projectId=${projectId}&token=${token}`,
             ydocRef.current
         );
 
-        provider.on('status', (event: { status: string }) => {
-            setStatus(event.status); // 'connecting', 'connected', 'disconnected'
+        wsProvider.on('status', (event: { status: string }) => {
+            setStatus(event.status);
         });
 
-        providerRef.current = provider;
+        // Set provider in state — this triggers editor to mount with a valid reference
+        setProvider(wsProvider);
 
         return () => {
-            provider.disconnect();
+            wsProvider.disconnect();
+            setProvider(null);
             ydocRef.current.destroy();
+            ydocRef.current = new Y.Doc();
         };
     }, [projectId]);
 
-    const editor = useEditor({
-        extensions: [
-            StarterKit.configure({
-                // History handled by Yjs
-            }),
-            Collaboration.configure({
-                document: ydocRef.current,
-            }),
-            CollaborationCursor.configure({
-                provider: providerRef.current,
-                user: {
-                    name: userName,
-                    color: userColor,
+    const editor = useEditor(
+        {
+            extensions: [
+                StarterKit.configure({
+                    // History is handled by Yjs
+                    history: false,
+                }),
+                Collaboration.configure({
+                    document: ydocRef.current,
+                }),
+                // Only mount the cursor extension when the provider is ready (non-null)
+                ...(provider
+                    ? [
+                          CollaborationCursor.configure({
+                              provider,
+                              user: {
+                                  name: userName,
+                                  color: userColor,
+                              },
+                          }),
+                      ]
+                    : []),
+            ],
+            editorProps: {
+                attributes: {
+                    class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 bg-white dark:bg-gray-900 rounded-xl shadow border border-gray-100 dark:border-gray-800',
                 },
-            }),
-        ],
-        editorProps: {
-            attributes: {
-                class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 bg-white dark:bg-gray-900 rounded-xl shadow border border-gray-100 dark:border-gray-800'
-            }
-        }
-    });
+            },
+        },
+        // Re-create the editor when the provider changes from null → ready
+        [provider]
+    );
 
     return (
         <div className="flex flex-col h-full w-full">
             <div className="flex justify-between items-center mb-4 px-2">
                 <h2 className="text-xl font-bold">Research Document</h2>
                 <div className="flex items-center space-x-2 text-sm">
-                    <span className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    <span
+                        className={`w-2 h-2 rounded-full ${
+                            status === 'connected' ? 'bg-green-500' : 'bg-red-500'
+                        }`}
+                    ></span>
                     <span className="text-gray-500 capitalize">{status}</span>
                 </div>
             </div>
-            
+
             <div className="flex-grow overflow-auto editor-container">
-                <EditorContent editor={editor} />
+                {provider ? (
+                    <EditorContent editor={editor} />
+                ) : (
+                    <div className="flex items-center justify-center min-h-[500px] text-gray-400 text-sm">
+                        Connecting to collaboration server...
+                    </div>
+                )}
             </div>
 
             {/* Injected CSS to handle remote cursors */}
