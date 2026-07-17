@@ -49,17 +49,26 @@ export const requestPushNotificationsPermission = async (): Promise<void> => {
             return;
         }
 
-        // Fetch registration token from FCM gateway
-        const token = await getToken(messaging, {
-            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-        });
+        // Register Service Worker manually for FCM in Next.js
+        if ('serviceWorker' in navigator) {
+            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+            console.log('[Service Worker] Registered successfully with scope:', registration.scope);
 
-        if (token) {
-            console.log('[FIREBASE] FCM Registration Token generated successfully');
-            // Send token to the backend
-            await api.post('/api/notifications/fcm-token', { fcmToken: token });
+            // Fetch registration token from FCM gateway
+            const token = await getToken(messaging, {
+                vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+                serviceWorkerRegistration: registration
+            });
+
+            if (token) {
+                console.log('[FIREBASE] FCM Registration Token generated successfully');
+                // Send token to the backend
+                await api.post('/api/notifications/fcm-token', { fcmToken: token });
+            } else {
+                console.warn('[FIREBASE] No registration token received from FCM gateway.');
+            }
         } else {
-            console.warn('[FIREBASE] No registration token received from FCM gateway.');
+            console.warn('[FIREBASE] Service worker is not supported in this browser.');
         }
     } catch (error) {
         console.error('[FIREBASE] Error requesting notification permission:', error);

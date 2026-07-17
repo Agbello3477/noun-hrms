@@ -13,7 +13,7 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
         bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
         text: 'text-indigo-700 dark:text-indigo-300',
         border: 'border-indigo-100 dark:border-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700',
-        gradient: 'from-indigo-650 via-blue-700 to-indigo-900',
+        gradient: 'from-indigo-600 via-blue-700 to-indigo-900',
         preview: 'bg-gradient-to-r from-indigo-500 to-blue-600',
         name: 'Indigo Blueprint'
     },
@@ -21,7 +21,7 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
         bg: 'bg-emerald-50/50 dark:bg-emerald-950/10',
         text: 'text-emerald-700 dark:text-emerald-300',
         border: 'border-emerald-100 dark:border-emerald-900/40 hover:border-emerald-300 dark:hover:border-emerald-700',
-        gradient: 'from-emerald-650 via-teal-700 to-emerald-900',
+        gradient: 'from-emerald-600 via-teal-700 to-emerald-900',
         preview: 'bg-gradient-to-r from-emerald-500 to-teal-600',
         name: 'Emerald Research'
     },
@@ -29,7 +29,7 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
         bg: 'bg-rose-50/50 dark:bg-rose-950/10',
         text: 'text-rose-700 dark:text-rose-300',
         border: 'border-rose-100 dark:border-rose-900/40 hover:border-rose-300 dark:hover:border-rose-700',
-        gradient: 'from-rose-650 via-pink-700 to-rose-900',
+        gradient: 'from-rose-600 via-pink-700 to-rose-900',
         preview: 'bg-gradient-to-r from-rose-500 to-pink-600',
         name: 'Rose Humanity'
     },
@@ -37,7 +37,7 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
         bg: 'bg-amber-50/50 dark:bg-amber-950/10',
         text: 'text-amber-700 dark:text-amber-300',
         border: 'border-amber-100 dark:border-amber-900/40 hover:border-amber-300 dark:hover:border-amber-700',
-        gradient: 'from-amber-650 via-orange-700 to-amber-900',
+        gradient: 'from-amber-600 via-orange-700 to-amber-900',
         preview: 'bg-gradient-to-r from-amber-500 to-orange-600',
         name: 'Amber Discovery'
     },
@@ -45,7 +45,7 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
         bg: 'bg-violet-50/50 dark:bg-violet-950/10',
         text: 'text-violet-700 dark:text-violet-300',
         border: 'border-violet-100 dark:border-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700',
-        gradient: 'from-violet-650 via-purple-700 to-violet-900',
+        gradient: 'from-violet-600 via-purple-700 to-violet-900',
         preview: 'bg-gradient-to-r from-violet-500 to-purple-600',
         name: 'Violet Tech'
     }

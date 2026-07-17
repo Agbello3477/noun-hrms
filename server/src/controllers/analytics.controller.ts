@@ -212,11 +212,46 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             count
         }));
 
+        // Get detailed list of active leaves
+        const activeLeavesList = await prisma.leaveRequest.findMany({
+            where: {
+                status: LeaveStatus.APPROVED,
+                endDate: { gte: today }
+            },
+            include: {
+                staff: {
+                    include: {
+                        unit: true,
+                        studyCenter: true
+                    }
+                }
+            },
+            orderBy: {
+                endDate: 'asc'
+            }
+        });
+
         const result = {
             totalWorkforce: totalStaff,
             activeLeaves: leaveStats,
             genderDistribution: genderDist,
-            zoneDistribution
+            zoneDistribution,
+            activeLeavesList: activeLeavesList.map(l => ({
+                id: l.id,
+                type: l.type,
+                startDate: l.startDate,
+                endDate: l.endDate,
+                durationDays: l.durationDays,
+                staff: l.staff ? {
+                    id: l.staff.id,
+                    title: l.staff.title,
+                    surname: l.staff.surname,
+                    otherNames: l.staff.otherNames,
+                    unitName: l.staff.unit?.name,
+                    unitType: l.staff.unit?.type,
+                    studyCenterName: l.staff.studyCenter?.name
+                } : null
+            }))
         };
 
         await redisService.set(CACHE_KEY, result, 30); // 30 seconds cache for better real-time feel

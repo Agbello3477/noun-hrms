@@ -22,7 +22,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         extensions: [StarterKit.configure({})],
         editorProps: {
             attributes: {
-                class: 'prose max-w-none focus:outline-none min-h-[500px] p-8 text-gray-800 leading-relaxed',
+                class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 text-gray-855 dark:text-gray-150 leading-relaxed bg-white dark:bg-gray-900',
             },
         },
         onUpdate: ({ editor }) => {
@@ -76,7 +76,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
 
     if (loadStatus === 'loading') {
         return (
-            <div className="flex items-center justify-center min-h-[500px] gap-3 text-gray-400">
+            <div className="flex items-center justify-center min-h-[500px] gap-3 text-gray-400 dark:text-gray-500">
                 <Loader2 className="animate-spin" size={22} />
                 <span className="text-sm font-medium">Loading document…</span>
             </div>
@@ -85,7 +85,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
 
     if (loadStatus === 'error') {
         return (
-            <div className="flex items-center justify-center min-h-[500px] gap-3 text-red-400">
+            <div className="flex items-center justify-center min-h-[500px] gap-3 text-red-400 dark:text-red-500">
                 <AlertCircle size={22} />
                 <span className="text-sm font-medium">Failed to load document. Please refresh.</span>
             </div>
@@ -93,9 +93,9 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-full w-full rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-col h-full w-full rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center gap-1 px-4 py-2.5 border-b border-gray-100 bg-gray-50/70 flex-wrap">
+            <div className="flex items-center gap-1 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/70 flex-wrap">
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBold().run()}
                     active={editor?.isActive('bold')}
@@ -110,7 +110,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Italic size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-gray-200 mx-1" />
+                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
                     active={editor?.isActive('heading', { level: 2 })}
@@ -125,7 +125,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Heading3 size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-gray-200 mx-1" />
+                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBulletList().run()}
                     active={editor?.isActive('bulletList')}
@@ -147,7 +147,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Quote size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-gray-200 mx-1" />
+                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().undo().run()}
                     active={false}
@@ -166,29 +166,29 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 {/* Spacer + Save button */}
                 <div className="ml-auto flex items-center gap-3">
                     {lastSaved && saveStatus === 'idle' && (
-                        <span className="text-[11px] text-gray-400 font-medium hidden sm:inline">
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium hidden sm:inline">
                             Saved at {lastSaved}
                         </span>
                     )}
                     {saveStatus === 'saving' && (
-                        <span className="text-[11px] text-blue-500 font-semibold flex items-center gap-1">
+                        <span className="text-[11px] text-blue-500 dark:text-blue-400 font-semibold flex items-center gap-1">
                             <Loader2 size={12} className="animate-spin" /> Saving…
                         </span>
                     )}
                     {saveStatus === 'saved' && (
-                        <span className="text-[11px] text-green-600 font-semibold flex items-center gap-1">
+                        <span className="text-[11px] text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
                             <CheckCircle2 size={12} /> Saved
                         </span>
                     )}
                     {saveStatus === 'error' && (
-                        <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
+                        <span className="text-[11px] text-red-500 dark:text-red-400 font-semibold flex items-center gap-1">
                             <AlertCircle size={12} /> Save failed
                         </span>
                     )}
                     <button
                         onClick={() => handleSave()}
                         disabled={saveStatus === 'saving'}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-900 text-white text-xs font-bold hover:bg-blue-800 disabled:opacity-60 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-900 dark:bg-blue-800 text-white text-xs font-bold hover:bg-blue-850 dark:hover:bg-blue-750 disabled:opacity-60 transition-colors shadow-sm"
                         title="Save (Ctrl+S)"
                     >
                         <Save size={13} />
@@ -240,8 +240,8 @@ function ToolbarButton({
             title={title}
             className={`p-1.5 rounded-md transition-colors ${
                 active
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+                    ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
         >
             {children}

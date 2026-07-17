@@ -23,7 +23,8 @@ export default function DashboardHome() {
     const [pendingActionsCount, setPendingActionsCount] = useState(0);
     const [analytics, setAnalytics] = useState<any>({
         totalWorkforce: 0,
-        activeLeaves: { annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0 }
+        activeLeaves: { annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0 },
+        activeLeavesList: []
     });
 
     // Recruitment Filter States (HR Dashboard)
@@ -1135,6 +1136,82 @@ export default function DashboardHome() {
                         {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : pendingActionsCount}
                     </p>
                     <span className="text-sm text-red-600 font-medium">Transfers & Queries</span>
+                </div>
+            </div>
+
+            {/* ====== ACTIVE LEAVES DIRECTORY ====== */}
+            <div className="mt-8 rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white">
+                    <div className="flex items-center gap-3">
+                        <span className="p-2 bg-white/20 rounded-lg"><Calendar size={18} /></span>
+                        <div>
+                            <h2 className="font-bold text-base tracking-tight">Active Leaves Directory</h2>
+                            <p className="text-xs text-blue-200 mt-0.5">List of all university staff currently on approved leave</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6">
+                    {loadingActivities ? (
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2 className="animate-spin text-blue-900" size={28} />
+                        </div>
+                    ) : !analytics.activeLeavesList || analytics.activeLeavesList.length === 0 ? (
+                        <div className="text-center py-10 text-gray-500 text-sm italic">
+                            No staff members are currently on approved leave.
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider">
+                                        <th className="py-3 px-4">Staff Member</th>
+                                        <th className="py-3 px-4">Leave Type</th>
+                                        <th className="py-3 px-4">Assignment / Location</th>
+                                        <th className="py-3 px-4">Duration</th>
+                                        <th className="py-3 px-4">Dates</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {analytics.activeLeavesList.map((leave: any) => {
+                                        const staff = leave.staff;
+                                        const name = staff 
+                                            ? `${staff.title ? staff.title + ' ' : ''}${staff.surname} ${staff.otherNames}`
+                                            : 'Unknown Staff';
+                                        
+                                        // Format organizational location
+                                        let locationStr = 'Not Assigned';
+                                        if (staff) {
+                                            if (staff.studyCenterName) {
+                                                locationStr = `${staff.studyCenterName} (Study Center)`;
+                                            } else if (staff.unitName) {
+                                                const unitTypeLabel = staff.unitType 
+                                                    ? staff.unitType.replace(/_/g, ' ').toLowerCase()
+                                                    : 'unit';
+                                                locationStr = `${staff.unitName} (${unitTypeLabel})`;
+                                            }
+                                        }
+
+                                        return (
+                                            <tr key={leave.id} className="hover:bg-gray-50/50 transition">
+                                                <td className="py-3 px-4 font-bold text-gray-900">{name}</td>
+                                                <td className="py-3 px-4">
+                                                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold uppercase tracking-wider text-[10px]">
+                                                        {leave.type.replace(/_/g, ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4 text-gray-600 capitalize">{locationStr}</td>
+                                                <td className="py-3 px-4 text-gray-900 font-semibold">{leave.durationDays || '—'} Days</td>
+                                                <td className="py-3 px-4 text-gray-500">
+                                                    {new Date(leave.startDate).toLocaleDateString()} to {new Date(leave.endDate).toLocaleDateString()}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
 
