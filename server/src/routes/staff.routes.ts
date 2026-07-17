@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { getAllStaff, createStaff, getStaffById, getUnitStaff, getAcademicStaff, getTransferredStaff } from '../controllers/staff.controller';
+import { getAllStaff, createStaff, getStaffById, getUnitStaff, getAcademicStaff, getTransferredStaff, deleteStaffNoId } from '../controllers/staff.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -81,5 +81,8 @@ router.put('/:id', upload.single('passport'), updateStaff);
 
 // Upload VC Signature
 router.post('/signature', upload.single('file'), uploadSignature);
+
+// Administrative: Delete all staff that do not have an ID number
+router.post('/admin/delete-no-id', requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN]), deleteStaffNoId);
 
 export default router;

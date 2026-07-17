@@ -969,3 +969,176 @@ export const manualRunRetirementCron = async (req: any, res: any) => {
     }
 };
 
+/**
+ * Delete all staff that do not have an ID number.
+ * ACCESS: SUPER_USER only
+ */
+export const deleteStaffNoId = async (req: Request, res: Response) => {
+    try {
+        const requesterRole = req.user?.role;
+        if (![Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN].includes(requesterRole as any)) {
+            return res.status(403).json({ message: 'Forbidden: Administrative access only.' });
+        }
+
+        // Find staff profiles with null or empty staffId
+        const profilesNoId = await prisma.staffProfile.findMany({
+            where: {
+                OR: [
+                    { staffId: null },
+                    { staffId: '' }
+                ]
+            },
+            select: {
+                id: true,
+                userId: true,
+                surname: true,
+                otherNames: true
+            }
+        });
+
+        // Find users with role STAFF who have no staffProfile at all
+        const staffUsersNoProfile = await prisma.user.findMany({
+            where: {
+                role: Role.STAFF,
+                staffProfile: null
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true
+            }
+        });
+
+        const profileIds = profilesNoId.map(p => p.id);
+        const userIds = [
+            ...profilesNoId.map(p => p.userId),
+            ...staffUsersNoProfile.map(u => u.id)
+        ];
+
+        const details = {
+            profilesFound: profilesNoId.map(p => ({ id: p.id, name: `${p.surname} ${p.otherNames}` })),
+            usersFound: staffUsersNoProfile.map(u => ({ id: u.id, name: u.name, email: u.email })),
+        };
+
+        if (profileIds.length === 0 && userIds.length === 0) {
+            return res.json({ message: 'No staff members found without an ID number.', details });
+        }
+
+        // Run deletion queries for all relations
+        await prisma.$transaction([
+            // 1. ProjectMembers
+            prisma.projectMember.deleteMany({ where: { staffId: { in: profileIds } } }),
+            
+            // 2. ProjectMessage
+            prisma.projectMessage.deleteMany({ where: { senderId: { in: userIds } } }),
+            
+            // 3. UploadedProjectFile
+            prisma.uploadedProjectFile.deleteMany({ where: { uploaderId: { in: profileIds } } }),
+            
+            // 4. DocumentTrail
+            prisma.documentTrail.deleteMany({
+                where: {
+                    document: {
+                        OR: [
+                            { staffId: { in: profileIds } },
+                            { uploaderId: { in: profileIds } }
+                        ]
+                    }
+                }
+            }),
+
+            // 5. Document
+            prisma.document.deleteMany({
+                where: {
+                    OR: [
+                        { staffId: { in: profileIds } },
+                        { uploaderId: { in: profileIds } }
+                    ]
+                }
+            }),
+
+            // 6. LeaveRequest
+            prisma.leaveRequest.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 7. StaffQuery
+            prisma.staffQuery.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 8. TransferLog
+            prisma.transferLog.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 9. AperForm
+            prisma.aperForm.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 10. Publication
+            prisma.publication.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 11. TeachingAllocation
+            prisma.teachingAllocation.deleteMany({ where: { staffId: { in: profileIds } } }),
+
+            // 12. PromotionLog
+            prisma.promotionLog.deleteMany({ where: { staffProfileId: { in: profileIds } } }),
+
+            // 13. RetirementLog
+            prisma.retirementLog.deleteMany({ where: { staffProfileId: { in: profileIds } } }),
+
+            // 14. MemoResponse
+            prisma.memoResponse.deleteMany({ where: { staffId: { in: userIds } } }),
+
+            // 15. Memo
+            prisma.memo.deleteMany({
+                where: {
+                    OR: [
+                        { senderId: { in: userIds } },
+                        { recipientId: { in: userIds } }
+                    ]
+                }
+            }),
+
+            // 16. Attendance
+            prisma.attendance.deleteMany({ where: { userId: { in: userIds } } }),
+
+            // 17. Notification
+            prisma.notification.deleteMany({ where: { userId: { in: userIds } } }),
+
+            // 18. FcmToken
+            prisma.fcmToken.deleteMany({ where: { userId: { in: userIds } } }),
+
+            // 19. SecurityGearLoan
+            prisma.securityGearLoan.deleteMany({ where: { officerId: { in: userIds } } }),
+
+            // 20. SecurityRoster
+            prisma.securityRoster.deleteMany({ where: { userId: { in: userIds } } }),
+
+            // 21. SecurityIncident
+            prisma.securityIncident.deleteMany({
+                where: {
+                    OR: [
+                        { reporterId: { in: userIds } },
+                        { assignedToId: { in: userIds } }
+                    ]
+                }
+            }),
+
+            // 22. ClinicPatientFile
+            prisma.clinicPatientFile.deleteMany({ where: { userId: { in: userIds } } }),
+
+            // 23. StaffProfile
+            prisma.staffProfile.deleteMany({ where: { id: { in: profileIds } } }),
+
+            // 24. User
+            prisma.user.deleteMany({ where: { id: { in: userIds } } })
+        ]);
+
+        // Invalidate Redis caches
+        await redisService.del('staff:all:*');
+
+        res.json({
+            message: `Successfully deleted ${profileIds.length} profiles and ${userIds.length} users with no staff ID number.`,
+            details
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Failed to delete staff with no ID', error: err.message });
+    }
+};
+
