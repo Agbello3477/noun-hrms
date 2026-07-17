@@ -420,6 +420,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     onChange={handleChange}
                                 >
                                     <option value="STAFF">Regular Staff</option>
+                                    <option value="SUPER_USER">Super User / System Admin</option>
                                     <option value="DIRECTOR">Director (HQ/Directorate)</option>
                                     <option value="DEAN">Dean (Faculty)</option>
                                     <option value="UNIT_HEAD">Head of Unit / HOD</option>
