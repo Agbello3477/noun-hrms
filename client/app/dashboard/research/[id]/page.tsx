@@ -205,11 +205,11 @@ export default function ResearchWorkspace() {
                                 {project.members.map((m: any) => (
                                     <div key={m.id} className="flex items-center gap-2.5">
                                         <div className="w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-100/50">
-                                            {m.staff.surname?.[0] || 'U'}
+                                            {m.staff?.surname?.[0] || 'U'}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                                {m.staff.surname} {m.staff.otherNames}
+                                                {m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Deleted Staff'}
                                             </p>
                                             <p className="text-[10px] text-gray-400 font-semibold uppercase">{m.role}</p>
                                         </div>

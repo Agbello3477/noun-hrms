@@ -101,7 +101,7 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                             <div key={msg.id || idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`flex max-w-[80%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                                     <div className={`flex-shrink-0 ${isMe ? 'ml-2' : 'mr-2'} mt-1`}>
-                                        {msg.sender.staffProfile?.passportUrl ? (
+                                        {msg.sender?.staffProfile?.passportUrl ? (
                                             <img src={msg.sender.staffProfile.passportUrl} alt="avatar" className="w-8 h-8 rounded-full object-cover shadow" />
                                         ) : (
                                             <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center shadow">
@@ -110,7 +110,7 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                                         )}
                                     </div>
                                     <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                        <span className="text-[10px] text-gray-500 mb-1">{isMe ? 'You' : msg.sender.name}</span>
+                                        <span className="text-[10px] text-gray-500 mb-1">{isMe ? 'You' : (msg.sender?.name || 'Unknown User')}</span>
                                         <div className={`p-3 rounded-2xl shadow-sm text-sm ${
                                             isMe 
                                                 ? 'bg-blue-600 text-white rounded-tr-sm' 
