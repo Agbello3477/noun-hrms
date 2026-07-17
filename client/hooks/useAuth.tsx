@@ -17,6 +17,7 @@ interface User {
     staffProfile?: {
         id: string;
         staffId: string | null;
+        title?: string | null;
         department: string | null; // Legacy
 
         // Expanded Organization
