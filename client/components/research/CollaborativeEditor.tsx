@@ -54,10 +54,7 @@ export default function CollaborativeEditor({ projectId, userName, userColor = g
     const editor = useEditor(
         {
             extensions: [
-                StarterKit.configure({
-                    // History is handled by Yjs
-                    history: false,
-                }),
+                StarterKit.configure({}),
                 Collaboration.configure({
                     document: ydocRef.current,
                 }),
