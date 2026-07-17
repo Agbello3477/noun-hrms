@@ -254,8 +254,8 @@ export default function ResearchWorkspace() {
                 <div className="w-2/4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-150 dark:border-gray-700/50 flex flex-col min-h-0 overflow-hidden">
                     <CollaborativeEditor 
                         projectId={id as string} 
-                        userName={currentUser?.name || 'Anonymous'} 
                     />
+
                 </div>
 
                 {/* COLUMN 3: Real-Time Team Chat (Width: 25%) */}
