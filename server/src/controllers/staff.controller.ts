@@ -975,6 +975,7 @@ export const manualRunRetirementCron = async (req: any, res: any) => {
  */
 export const deleteStaffNoId = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
         const requesterRole = req.user?.role;
         if (![Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN].includes(requesterRole as any)) {
             return res.status(403).json({ message: 'Forbidden: Administrative access only.' });
@@ -1035,13 +1036,13 @@ export const deleteStaffNoId = async (req: Request, res: Response) => {
             // 3. UploadedProjectFile
             prisma.uploadedProjectFile.deleteMany({ where: { uploaderId: { in: profileIds } } }),
             
-            // 4. DocumentTrail
+            // 4. DocumentTrail — delete trails for docs owned by or uploaded by these profiles
             prisma.documentTrail.deleteMany({
                 where: {
                     document: {
                         OR: [
-                            { staffId: { in: profileIds } },
-                            { uploaderId: { in: profileIds } }
+                            { ownerId: { in: profileIds } },
+                            { uploadedById: { in: profileIds } }
                         ]
                     }
                 }
@@ -1051,8 +1052,8 @@ export const deleteStaffNoId = async (req: Request, res: Response) => {
             prisma.document.deleteMany({
                 where: {
                     OR: [
-                        { staffId: { in: profileIds } },
-                        { uploaderId: { in: profileIds } }
+                        { ownerId: { in: profileIds } },
+                        { uploadedById: { in: profileIds } }
                     ]
                 }
             }),
