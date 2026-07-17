@@ -41,7 +41,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         api.get(`/api/research/${projectId}/document`)
             .then((res) => {
                 const html = res.data.contentHtml || '';
-                editor.commands.setContent(html, false); // false = no history entry
+                editor.commands.setContent(html); // Load the content into editor
                 if (res.data.updatedAt) {
                     setLastSaved(new Date(res.data.updatedAt).toLocaleTimeString());
                 }
