@@ -257,12 +257,17 @@ export const createStaff = async (req: Request, res: Response) => {
             programmeId, facilitatorInfo
         } = req.body;
 
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required.' });
+        }
+        const normalizedEmail = email.trim().toLowerCase();
+
         if (!stateOfOrigin || !lga) {
             return res.status(400).json({ message: 'State of Origin and LGA are required.' });
         }
 
         // 1. Check duplicate email
-        const existingEmail = await prisma.user.findUnique({ where: { email } });
+        const existingEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existingEmail) {
             return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
         }
@@ -331,11 +336,11 @@ export const createStaff = async (req: Request, res: Response) => {
             finalCenterId = headProfile.centerId || undefined;
         }
 
-        console.log('Creating staff Phase 3:', { email, staffId, resolvedRole, finalUnitId, finalCenterId });
+        console.log('Creating staff Phase 3:', { email: normalizedEmail, staffId, resolvedRole, finalUnitId, finalCenterId });
 
         const user = await prisma.user.create({
             data: {
-                email,
+                email: normalizedEmail,
                 password: hashedPassword,
                 name: fullName,
                 role: resolvedRole,
@@ -355,7 +360,6 @@ export const createStaff = async (req: Request, res: Response) => {
                         // Link either Unit OR Center (or both if applicable, but usually mutually exclusive)
                         unitId: finalUnitId || undefined,
                         centerId: finalCenterId || undefined,
-
                         // Phase 9: Academic & Facilitator
                         programmeId: programmeId || undefined,
                         facilitatorInfo: facilitatorInfo || undefined
@@ -383,7 +387,7 @@ export const createStaff = async (req: Request, res: Response) => {
         } catch (e) { }
 
         // Send Notification asynchronously
-        sendAccountCreatedNotification(email, phone || null, fullName, staffId).catch(err => {
+        sendAccountCreatedNotification(normalizedEmail, phone || null, fullName, staffId).catch(err => {
             console.error('Failed to send account creation notification:', err);
         });
 

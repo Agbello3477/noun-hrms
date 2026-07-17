@@ -251,8 +251,8 @@ export const login = async (req: Request, res: Response) => {
         const user = await prisma.user.findFirst({
             where: {
                 OR: [
-                    { email: email },
-                    { staffProfile: { staffId: email } }
+                    { email: { equals: identifier, mode: 'insensitive' } },
+                    { staffProfile: { staffId: { equals: email.trim(), mode: 'insensitive' } } }
                 ]
             },
             include: {

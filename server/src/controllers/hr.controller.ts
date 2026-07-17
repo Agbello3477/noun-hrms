@@ -145,7 +145,10 @@ export const addExistingFile = async (req: Request, res: Response) => {
             dateOfBirth, dateOfFirstAppointment
         } = req.body;
 
-        const existing = await prisma.user.findUnique({ where: { email } });
+        if (!email) return res.status(400).json({ message: 'Email is required' });
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
 
         if (!stateOfOrigin || !lga) {
@@ -198,7 +201,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
-                    email,
+                    email: normalizedEmail,
                     password: hashedPassword,
                     name,
                     role: resolvedRole,
@@ -233,7 +236,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
         });
 
         // Send Notification asynchronously
-        sendAccountCreatedNotification(email, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
+        sendAccountCreatedNotification(normalizedEmail, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
             console.error('Failed to send account creation notification:', err);
         });
 
