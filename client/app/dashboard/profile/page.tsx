@@ -7,7 +7,7 @@ import {
     User, Mail, Briefcase, MapPin, Phone, Building, Edit2,
     PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2
 } from 'lucide-react';
-import api from '../../../lib/api';
+import api, { getImageUrl } from '../../../lib/api';
 
 // Roles that are authorized to have an official signature
 const SIGNATURE_ROLES = [
@@ -161,7 +161,7 @@ export default function ProfilePage() {
                                 <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center min-h-[90px] relative overflow-hidden">
                                     {currentSigUrl ? (
                                         <img
-                                            src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${currentSigUrl}`}
+                                            src={getImageUrl(currentSigUrl)}
                                             alt="Your signature"
                                             className="max-h-[80px] max-w-full object-contain p-2"
                                         />

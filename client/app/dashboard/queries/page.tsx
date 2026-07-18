@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import api from '../../../lib/api';
+import api, { getImageUrl } from '../../../lib/api';
 import { AlertTriangle, Clock, Paperclip, Send, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -189,7 +189,7 @@ export default function MyQueriesPage() {
                                         <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wide">Resolved &amp; signed by:</span>
                                         <span className="text-[10px] text-gray-700 font-extrabold">{query.issuedBy.name}</span>
                                         <img
-                                            src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${query.issuedBy.staffProfile.signatureUrl}`}
+                                            src={getImageUrl(query.issuedBy.staffProfile.signatureUrl)}
                                             alt="Signature"
                                             className="max-h-[28px] object-contain border bg-white rounded p-0.5"
                                         />

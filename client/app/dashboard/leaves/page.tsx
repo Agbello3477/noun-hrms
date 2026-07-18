@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import api from '../../../lib/api';
+import api, { getImageUrl } from '../../../lib/api';
 import Link from 'next/link';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus, FileText } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
@@ -205,7 +205,7 @@ function LeavesContent() {
                                                                 {leave.approvedBy.name}
                                                             </div>
                                                             <img
-                                                                src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}${leave.approvedBy.staffProfile.signatureUrl}`}
+                                                                src={getImageUrl(leave.approvedBy.staffProfile.signatureUrl)}
                                                                 alt="Signature"
                                                                 className="max-h-[26px] object-contain border bg-white rounded p-0.5"
                                                             />

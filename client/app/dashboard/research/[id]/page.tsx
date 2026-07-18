@@ -97,7 +97,14 @@ export default function ResearchWorkspace() {
     const fetchStaff = async () => {
         try {
             const res = await api.get('/api/staff');
-            setAllStaff(res.data.staff || []);
+            const dataArray = Array.isArray(res.data) ? res.data : (res.data.staff || []);
+            const mappedStaff = dataArray.map((s: any) => ({
+                userId: s.id,
+                surname: s.staffProfile?.surname || s.name || '',
+                otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : '',
+                cadre: s.staffProfile?.cadre || s.role || ''
+            }));
+            setAllStaff(mappedStaff);
         } catch (err) {
             console.error(err);
         }
