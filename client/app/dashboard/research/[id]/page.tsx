@@ -150,33 +150,31 @@ export default function ResearchWorkspace() {
 
     return (
         <div className="h-[calc(100vh-90px)] flex flex-col space-y-6 animate-in fade-in duration-500">
-            {/* Top Workspace Header */}
-            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${theme.gradient} px-8 py-5 text-white shadow-lg flex-shrink-0 flex items-center justify-between`}>
+            {/* Top Workspace Header (White theme for legibility and visual continuity) */}
+            <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 px-8 py-5 border border-gray-150 dark:border-gray-700/50 shadow-sm flex-shrink-0 flex items-center justify-between">
                 <div className="relative z-10 space-y-1">
                     <div className="flex items-center gap-3">
-                        <Link href="/dashboard/research" className="p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/10">
-                            <ArrowLeft size={16} />
+                        <Link href="/dashboard/research" className="p-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-150 dark:border-gray-700">
+                            <ArrowLeft size={15} className="text-gray-500 dark:text-gray-400" />
                         </Link>
-                        <span className="bg-white/25 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
                             {domainName}
                         </span>
-                        <span className="bg-white/15 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-gray-100 dark:border-gray-700">
                             {project.status}
                         </span>
                     </div>
-                    <h1 className="text-xl font-black tracking-tight mt-1">{project.title}</h1>
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-1.5">{project.title}</h1>
                 </div>
                 <div className="relative z-10 flex items-center gap-3">
                     <button 
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/25 text-white rounded-xl text-xs font-bold shadow-md transition duration-150"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-sm transition duration-150"
                     >
                         <UserPlus size={14} />
                         <span>Invite Peer</span>
                     </button>
                 </div>
-                {/* Visual Highlights */}
-                <div className="absolute -right-20 -top-20 h-48 w-48 rounded-full bg-white/10 blur-3xl"></div>
             </div>
 
             {/* Bottom 3-Column Split View */}

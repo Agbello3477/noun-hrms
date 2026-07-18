@@ -22,7 +22,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         extensions: [StarterKit.configure({})],
         editorProps: {
             attributes: {
-                class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 text-gray-855 dark:text-gray-150 leading-relaxed bg-white dark:bg-gray-900',
+                class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 text-gray-900 dark:text-gray-100 leading-relaxed bg-white dark:bg-gray-900',
             },
         },
         onUpdate: ({ editor }) => {
