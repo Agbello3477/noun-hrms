@@ -98,36 +98,36 @@ export default function ResearchDashboard() {
 
     return (
         <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-            {/* Header Banner */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            {/* Header Banner — NOUN brand gradient */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-primary via-primary-dark to-slate-900 p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                 <div className="relative z-10 max-w-xl space-y-2">
-                    <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
+                    <span className="bg-secondary/20 text-secondary border border-secondary/30 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
                         Academic Workspace
                     </span>
                     <h1 className="text-3xl font-black tracking-tight leading-tight">Research Forum</h1>
-                    <p className="text-slate-300 text-sm leading-relaxed">
+                    <p className="text-white/75 text-sm leading-relaxed">
                         Collaborate on cutting-edge research, share dynamic documents, co-author files, and exchange real-time feedback with peers across the university.
                     </p>
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center justify-center space-x-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 z-10 flex-shrink-0"
+                    className="flex items-center justify-center space-x-2 px-5 py-3 bg-secondary hover:bg-yellow-400 text-slate-900 font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 z-10 flex-shrink-0"
                 >
                     <Plus size={20} />
                     <span>Create Research Workspace</span>
                 </button>
                 {/* Visual Highlights */}
-                <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl"></div>
-                <div className="absolute -bottom-16 left-1/3 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl"></div>
+                <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-secondary/10 blur-3xl"></div>
+                <div className="absolute -bottom-16 left-1/3 h-48 w-48 rounded-full bg-white/5 blur-3xl"></div>
             </div>
 
             {loading ? (
                 <div className="flex justify-center items-center py-24">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-                </div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            </div>
             ) : projects.length === 0 ? (
                 <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700/50 shadow-sm p-16 text-center max-w-2xl mx-auto space-y-6 animate-in zoom-in-95 duration-300">
-                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                    <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                         <FolderOpen size={32} />
                     </div>
                     <div className="space-y-2">
@@ -138,7 +138,7 @@ export default function ResearchDashboard() {
                     </div>
                     <button
                         onClick={() => setShowCreate(true)}
-                        className="px-6 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-2xl transition duration-200"
+                        className="px-6 py-3 bg-primary/10 hover:bg-primary/20 text-primary font-bold rounded-2xl transition duration-200"
                     >
                         Initialize First Project
                     </button>
@@ -149,7 +149,7 @@ export default function ResearchDashboard() {
                         const { theme, name, colorKey } = getProjectTheme(project.domain);
                         return (
                             <Link key={project.id} href={`/dashboard/research/${project.id}`}>
-                                <div className={`bg-white dark:bg-gray-800 rounded-3xl border ${theme.border} p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full group relative overflow-hidden`}>
+                                <div className={`bg-white dark:bg-gray-800 rounded-3xl border ${theme.border} p-6 shadow-sm hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full group relative overflow-hidden`}>
                                     
                                     {/* Top Accent Gradient Bar */}
                                     <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${theme.gradient}`}></div>
@@ -167,7 +167,7 @@ export default function ResearchDashboard() {
                                         </span>
                                     </div>
                                     
-                                    <h3 className="text-lg font-black text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition line-clamp-2 mb-3 leading-snug">
+                                    <h3 className="text-lg font-black text-gray-900 dark:text-white group-hover:text-primary dark:group-hover:text-primary transition line-clamp-2 mb-3 leading-snug">
                                         {project.title}
                                     </h3>
                                     
@@ -217,7 +217,7 @@ export default function ResearchDashboard() {
                                     required
                                     type="text"
                                     placeholder="e.g. Impact Analysis of E-Learning Protocols"
-                                    className="w-full p-3 text-sm border border-gray-200 rounded-xl dark:bg-gray-750 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    className="w-full p-3 text-sm border border-gray-200 rounded-xl dark:bg-gray-750 dark:border-gray-600 focus:ring-2 focus:ring-primary/30 focus:border-primary focus:outline-none"
                                     value={formData.title}
                                     onChange={e => setFormData({ ...formData, title: e.target.value })}
                                 />
@@ -230,7 +230,7 @@ export default function ResearchDashboard() {
                                         required
                                         type="text"
                                         placeholder="e.g. Computer Science"
-                                        className="w-full p-3 text-sm border border-gray-200 rounded-xl dark:bg-gray-750 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        className="w-full p-3 text-sm border border-gray-200 rounded-xl dark:bg-gray-750 dark:border-gray-600 focus:ring-2 focus:ring-primary/30 focus:border-primary focus:outline-none"
                                         value={formData.domain}
                                         onChange={e => setFormData({ ...formData, domain: e.target.value })}
                                     />
@@ -281,7 +281,7 @@ export default function ResearchDashboard() {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg transition duration-150"
+                                    className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg transition duration-150"
                                 >
                                     Create Project
                                 </button>

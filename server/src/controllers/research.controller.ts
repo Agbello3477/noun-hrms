@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import multer from 'multer';
 import path from 'path';
+import { sendEmail } from '../services/email.service';
 
 // Multer Config for Safe Uploads
 const storage = multer.diskStorage({
@@ -149,6 +150,76 @@ export const sendInvite = async (req: Request, res: Response) => {
                 inviteeId
             }
         });
+
+        // ── Send Email Notification to Invitee ────────────────────────────────
+        try {
+            const [inviteeUser, project] = await Promise.all([
+                prisma.user.findUnique({
+                    where: { id: inviteeId },
+                    include: { staffProfile: { select: { surname: true, otherNames: true } } }
+                }),
+                prisma.researchProject.findUnique({
+                    where: { id },
+                    select: { title: true }
+                })
+            ]);
+
+            if (inviteeUser?.email && project) {
+                const inviteeName = inviteeUser.staffProfile
+                    ? `${inviteeUser.staffProfile.surname} ${inviteeUser.staffProfile.otherNames}`.trim()
+                    : inviteeUser.email;
+                const portalUrl = `${process.env.CLIENT_URL || 'https://nounhrms.web.app'}/dashboard/research`;
+                const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" />
+<style>
+  body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 0; }
+  .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 10px; border: 1px solid #e0e0e0; overflow: hidden; }
+  .header { background: linear-gradient(135deg, #006533, #004d26); padding: 28px 32px; text-align: center; }
+  .header h1 { color: #FFCD00; margin: 0; font-size: 20px; letter-spacing: 1px; }
+  .header p { color: #ffffff; margin: 6px 0 0; font-size: 13px; opacity: 0.85; }
+  .body { padding: 32px; color: #1f2937; line-height: 1.7; }
+  .badge { display: inline-block; background: #f0fdf4; color: #166534; border: 1px solid #86efac; border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: bold; margin-bottom: 20px; }
+  .project-box { background: #f9fafb; border-left: 4px solid #006533; padding: 16px 20px; border-radius: 6px; margin: 20px 0; }
+  .project-box p { margin: 0; font-size: 15px; color: #006533; font-weight: bold; }
+  .cta-btn { display: inline-block; margin: 20px 0; background: #006533; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; }
+  .footer { background: #f5f5f5; padding: 16px 32px; font-size: 12px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; }
+  p { margin: 0 0 14px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎓 National Open University of Nigeria</h1>
+      <p>Human Resource Management System — Research Forum</p>
+    </div>
+    <div class="body">
+      <span class="badge">📨 Research Collaboration Invite</span>
+      <p>Dear <strong>${inviteeName}</strong>,</p>
+      <p>You have been invited to collaborate on a research project in the NOUN Research Forum. The project owner has selected you as a peer researcher and granted you collaborator access.</p>
+      <div class="project-box">
+        <p>📁 ${project.title}</p>
+      </div>
+      <p>Click the button below to log in to the NOUN HRMS portal and accept or review your invitation:</p>
+      <a href="${portalUrl}" class="cta-btn">Open Research Forum →</a>
+      <p style="font-size: 13px; color: #6b7280;">If you were not expecting this invitation, you may safely ignore this email. No action is required on your part unless you wish to accept the collaboration.</p>
+      <br />
+      <p>Regards,</p>
+      <p><strong>NOUN Research Office</strong><br />Human Resource Management System</p>
+    </div>
+    <div class="footer">
+      This is an automatically generated notification. Please do not reply to this email.<br />
+      National Open University of Nigeria &mdash; NOUN HRMS
+    </div>
+  </div>
+</body>
+</html>`;
+                await sendEmail(inviteeUser.email, `Research Collaboration Invite: ${project.title}`, html);
+            }
+        } catch (emailErr) {
+            console.error('[RESEARCH] Failed to send invite email (non-fatal):', emailErr);
+        }
 
         res.json({ message: 'Invite sent', invite });
     } catch (err) {

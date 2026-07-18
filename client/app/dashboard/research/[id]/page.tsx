@@ -99,12 +99,14 @@ export default function ResearchWorkspace() {
         try {
             const res = await api.get('/api/staff');
             const dataArray = Array.isArray(res.data) ? res.data : (res.data.staff || []);
-            const mappedStaff = dataArray.map((s: any) => ({
-                userId: s.id,
-                surname: s.staffProfile?.surname || s.name || '',
-                otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : '',
-                cadre: s.staffProfile?.cadre || s.role || ''
-            }));
+            const mappedStaff = dataArray
+                .map((s: any) => ({
+                    userId: s.id,
+                    surname: s.staffProfile?.surname || s.name || '',
+                    otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : '',
+                    cadre: s.staffProfile?.cadre || s.role || ''
+                }))
+                .filter((s: any) => s.cadre === 'ACADEMIC'); // Only show academic staff in research invites
             setAllStaff(mappedStaff);
         } catch (err) {
             console.error(err);
@@ -288,17 +290,17 @@ export default function ResearchWorkspace() {
                         
                         <form onSubmit={handleInvite} className="space-y-4">
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Staff Profile List</label>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Academic Staff</label>
                                 <select 
                                     required
                                     value={inviteeId}
                                     onChange={(e) => setInviteeId(e.target.value)}
                                     className="w-full p-2.5 border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
                                 >
-                                    <option value="">Select researcher...</option>
+                                    <option value="">Select academic staff member...</option>
                                     {allStaff.map(s => (
                                         <option key={s.userId} value={s.userId}>
-                                            {s.surname} {s.otherNames} ({s.cadre || 'Staff'})
+                                            {s.surname} {s.otherNames} ({s.cadre})
                                         </option>
                                     ))}
                                 </select>
