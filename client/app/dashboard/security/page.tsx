@@ -546,7 +546,7 @@ export default function SecurityDashboard() {
                     </div>
                     <button
                       type="submit"
-                      className="w-full bg-blue-600 text-white font-bold text-xs py-2.5 rounded-lg hover:bg-blue-700"
+                      className="w-full bg-primary text-white font-bold text-xs py-2.5 rounded-lg hover:bg-primary-dark"
                     >
                       Publish Roster Entry
                     </button>
@@ -738,7 +738,7 @@ export default function SecurityDashboard() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center gap-1.5"
+                className="w-full bg-primary text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center gap-1.5"
               >
                 <Send size={15} /> Transmit Consolidated Report to VC
               </button>
@@ -758,13 +758,13 @@ export default function SecurityDashboard() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setIsAddGearModalOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
+                    className="bg-primary hover:bg-primary-dark text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
                   >
                     <PlusCircle size={14} /> Add Inventory
                   </button>
                   <button
                     onClick={() => setIsLoanModalOpen(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
+                    className="bg-primary hover:bg-primary-dark text-white font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1 shadow-sm"
                   >
                     <Send size={14} /> Dispatch Equipment
                   </button>
@@ -853,7 +853,7 @@ export default function SecurityDashboard() {
                             {l.status === 'LOANED' && ['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
                               <button
                                 onClick={() => handleReturnGear(l.id)}
-                                className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-[10px] font-bold hover:bg-blue-100"
+                                className="bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded text-[10px] font-bold hover:bg-primary/20"
                               >
                                 Mark Returned
                               </button>
@@ -916,7 +916,7 @@ export default function SecurityDashboard() {
                       >
                         Cancel
                       </button>
-                      <button type="submit" className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-lg">
+                      <button type="submit" className="bg-primary text-white font-bold px-3.5 py-2 rounded-lg">
                         Save Asset
                       </button>
                     </div>
@@ -950,7 +950,7 @@ export default function SecurityDashboard() {
                       <label className="block mb-1 font-bold">Select Patrol Officer</label>
                       <select
                         required
-                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-primary"
                         value={loanForm.officerId}
                         onChange={(e) => setLoanForm({ ...loanForm, officerId: e.target.value })}
                       >
@@ -968,7 +968,7 @@ export default function SecurityDashboard() {
                         type="number"
                         required
                         min={1}
-                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-blue-500"
+                        className="w-full border rounded-lg p-2.5 outline-none text-slate-700 font-bold focus:border-primary"
                         value={loanForm.quantity}
                         onChange={(e) => setLoanForm({ ...loanForm, quantity: e.target.value })}
                       />
@@ -981,7 +981,7 @@ export default function SecurityDashboard() {
                       >
                         Cancel
                       </button>
-                      <button type="submit" className="bg-indigo-600 text-white font-bold px-3.5 py-2 rounded-lg">
+                      <button type="submit" className="bg-primary text-white font-bold px-3.5 py-2 rounded-lg">
                         Dispatch
                       </button>
                     </div>

@@ -8,12 +8,24 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                nounGreen: '#006533', // Official Dark Green
-                nounRed: '#E31B23',   // Official Red
-                nounGold: '#FFCD00',  // Official Yellow/Gold
-                // Map to semantic names for easier use
-                primary: '#006533',
-                secondary: '#E31B23',
+                // CSS variable mapping for dynamic design token configuration
+                primary: {
+                    DEFAULT: 'var(--color-primary, #006533)',
+                    light: 'var(--color-primary-light, #008040)',
+                    dark: 'var(--color-primary-dark, #004d26)',
+                },
+                secondary: {
+                    DEFAULT: 'var(--color-secondary, #FFCD00)',
+                    light: 'var(--color-secondary-light, #FFE066)',
+                    dark: 'var(--color-secondary-dark, #CC9E00)',
+                },
+                accent: {
+                    DEFAULT: 'var(--color-accent, #E31B23)',
+                },
+                surface: {
+                    DEFAULT: 'var(--color-surface, #FFFFFF)',
+                    alt: 'var(--color-surface-alt, #F8FAFC)',
+                }
             },
         },
     },

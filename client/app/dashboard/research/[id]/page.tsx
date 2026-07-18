@@ -10,12 +10,12 @@ import Link from 'next/link';
 
 const THEMES: Record<string, { bg: string; text: string; border: string; gradient: string; preview: string; name: string }> = {
     indigo: {
-        bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
-        text: 'text-indigo-700 dark:text-indigo-300',
-        border: 'border-indigo-100 dark:border-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700',
-        gradient: 'from-indigo-600 via-blue-700 to-indigo-900',
-        preview: 'bg-gradient-to-r from-indigo-500 to-blue-600',
-        name: 'Indigo Blueprint'
+        bg: 'bg-primary/5 dark:bg-primary/10',
+        text: 'text-primary dark:text-primary-light',
+        border: 'border-primary/10 dark:border-primary/30 hover:border-primary/30',
+        gradient: 'from-primary-dark via-primary to-slate-900',
+        preview: 'bg-gradient-to-r from-primary to-primary-light',
+        name: 'Official NOUN Workspace'
     },
     emerald: {
         bg: 'bg-emerald-50/50 dark:bg-emerald-950/10',
@@ -51,10 +51,11 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
     }
 };
 
-const getProjectTheme = (domainField: string) => {
-    if (!domainField) return { theme: THEMES.indigo, name: 'General Research', colorKey: 'indigo' };
-    const parts = domainField.split('|');
-    const name = parts[0] || 'General Research';
+const getProjectTheme = (domain: string) => {
+    if (!domain) return { theme: THEMES.indigo, name: 'General Research', colorKey: 'indigo' };
+    const domainField = domain.toLowerCase();
+    const parts = domainField.split(':');
+    const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
     const colorKey = parts[1] || 'indigo';
     return { theme: THEMES[colorKey] || THEMES.indigo, name, colorKey };
 };
@@ -147,7 +148,7 @@ export default function ResearchWorkspace() {
     if (loading) {
         return (
             <div className="flex h-full min-h-[60vh] items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
     }
@@ -164,7 +165,7 @@ export default function ResearchWorkspace() {
                         <Link href="/dashboard/research" className="p-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-150 dark:border-gray-700">
                             <ArrowLeft size={15} className="text-gray-500 dark:text-gray-400" />
                         </Link>
-                        <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        <span className={`${theme.bg} ${theme.text} text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider`}>
                             {domainName}
                         </span>
                         <span className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-gray-100 dark:border-gray-700">
@@ -176,7 +177,7 @@ export default function ResearchWorkspace() {
                 <div className="relative z-10 flex items-center gap-3">
                     <button 
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-sm transition duration-150"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-sm transition duration-150"
                     >
                         <UserPlus size={14} />
                         <span>Invite Peer</span>
@@ -209,7 +210,7 @@ export default function ResearchWorkspace() {
                             <div className="space-y-2.5">
                                 {project.members.map((m: any) => (
                                     <div key={m.id} className="flex items-center gap-2.5">
-                                        <div className="w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-100/50">
+                                        <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold border border-primary/20">
                                             {m.staff?.surname?.[0] || 'U'}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -229,7 +230,7 @@ export default function ResearchWorkspace() {
                                 <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider flex items-center">
                                     <FileText size={14} className="mr-1.5" /> Shared Drive
                                 </h3>
-                                <label className="p-1 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg cursor-pointer transition">
+                                <label className="p-1 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg cursor-pointer transition">
                                     <FileUp size={14} />
                                     <input type="file" className="hidden" onChange={handleFileUpload} />
                                 </label>
@@ -244,7 +245,7 @@ export default function ResearchWorkspace() {
                                             <span className="text-xs text-gray-600 dark:text-gray-300 truncate w-36 font-semibold" title={f.fileName}>
                                                 {f.fileName}
                                             </span>
-                                            <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-gray-400 hover:text-blue-600 transition">
+                                            <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-gray-400 hover:text-primary transition">
                                                 <Download size={13} />
                                             </a>
                                         </div>
@@ -279,7 +280,7 @@ export default function ResearchWorkspace() {
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 shadow-2xl w-full max-w-sm space-y-4 animate-in scale-in-95 duration-200">
                         <div className="space-y-1">
                             <h2 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-                                <Sparkles size={18} className="text-blue-600" />
+                                <Sparkles size={18} className="text-primary" />
                                 Add Research Collaborator
                             </h2>
                             <p className="text-xs text-gray-500">Search and send page invites to active university researchers.</p>
@@ -292,7 +293,7 @@ export default function ResearchWorkspace() {
                                     required
                                     value={inviteeId}
                                     onChange={(e) => setInviteeId(e.target.value)}
-                                    className="w-full p-2.5 border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    className="w-full p-2.5 border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
                                 >
                                     <option value="">Select researcher...</option>
                                     {allStaff.map(s => (
@@ -305,7 +306,7 @@ export default function ResearchWorkspace() {
                             
                             <div className="flex justify-end space-x-2 pt-2 border-t border-gray-100">
                                 <button type="button" onClick={() => setShowInviteModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 rounded-xl transition">Cancel</button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition">Send Invite</button>
+                                <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-sm transition">Send Invite</button>
                             </div>
                         </form>
                     </div>

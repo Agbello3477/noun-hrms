@@ -118,7 +118,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
           <div className="relative w-20 h-20 mb-4 bg-white rounded-full p-2 shadow-sm">
             <img src="/noun_logo.png" alt="NOUN Logo" className="w-full h-full object-contain" onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/150/006633/FFFFFF?text=N'} />
           </div>
-          <h2 className="text-xl font-extrabold text-nounGreen text-center uppercase tracking-wide">
+          <h2 className="text-xl font-extrabold text-primary text-center uppercase tracking-wide">
               {twoFactorStep === 'NONE' ? 'Welcome Back' : 'Security Check'}
           </h2>
           <p className="text-sm font-medium text-gray-500 mt-1">
@@ -148,7 +148,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                   Staff ID / Email
                 </label>
                 <input
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-700 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   id="email"
                   type="text"
                   placeholder="e.g. NOUN/01005 or name@noun.edu.ng"
@@ -163,7 +163,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                   Password
                 </label>
                 <input
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-700 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   id="password"
                   type="password"
                   placeholder="Enter your password"
@@ -174,7 +174,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
               </div>
 
               <button
-                className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5 mt-4"
+                className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5 mt-4"
                 type="submit"
               >
                 Sign In Securely
@@ -186,7 +186,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                   <button 
                     type="button" 
                     onClick={() => onSwitchView('register')}
-                    className="font-bold text-nounGreen hover:text-green-800 transition-colors"
+                    className="font-bold text-primary hover:text-primary-dark transition-colors"
                   >
                     Activate Profile
                   </button>
@@ -202,7 +202,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                 </div>
                 <div>
                     <input
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-4 text-center text-2xl tracking-[0.5em] font-mono text-gray-900 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-4 text-center text-2xl tracking-[0.5em] font-mono text-gray-900 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         id="2fa-code"
                         type="text"
                         maxLength={6}
@@ -213,7 +213,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     />
                 </div>
                 <button
-                    className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5"
+                    className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5"
                     type="submit"
                 >
                     Verify & Login
@@ -237,13 +237,13 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     </div>
                 ) : (
                     <div className="flex justify-center items-center h-48 bg-gray-50 rounded-xl">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nounGreen"></div>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
                 )}
 
                 <div>
                     <input
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-4 text-center text-2xl tracking-[0.5em] font-mono text-gray-900 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-4 text-center text-2xl tracking-[0.5em] font-mono text-gray-900 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         type="text"
                         maxLength={6}
                         placeholder="000000"
@@ -253,7 +253,7 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     />
                 </div>
                 <button
-                    className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5 disabled:opacity-50"
+                    className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5 disabled:opacity-50"
                     type="submit"
                     disabled={twoFactorCode.length !== 6}
                 >

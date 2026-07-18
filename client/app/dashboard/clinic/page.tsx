@@ -343,7 +343,7 @@ export default function ClinicDashboard() {
         <button
           onClick={() => setActiveTab('records')}
           className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
-            activeTab === 'records' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            activeTab === 'records' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
           <Search size={16} /> Patient Files
@@ -353,7 +353,7 @@ export default function ClinicDashboard() {
           <button
             onClick={() => setActiveTab('triage')}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'triage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              activeTab === 'triage' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <Activity size={16} /> Nurse Triage
@@ -368,7 +368,7 @@ export default function ClinicDashboard() {
               fetchEncounters();
             }}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'consultation' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              activeTab === 'consultation' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <Clipboard size={16} /> Doctor Consultation
@@ -382,7 +382,7 @@ export default function ClinicDashboard() {
               fetchEncounters('LAB_REQUESTED');
             }}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'laboratory' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              activeTab === 'laboratory' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <Beaker size={16} /> Laboratory
@@ -396,7 +396,7 @@ export default function ClinicDashboard() {
               fetchEncounters('PHARMACY_REQUESTED');
             }}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'pharmacy' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              activeTab === 'pharmacy' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <Pill size={16} /> Pharmacy & Inventory
@@ -415,13 +415,13 @@ export default function ClinicDashboard() {
               {/* Search & Results */}
               <div className="lg:col-span-2 space-y-4">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-1.5">
-                  <Search size={18} className="text-blue-500" /> Search Patient Files
+                  <Search size={18} className="text-primary" /> Search Patient Files
                 </h2>
                 <div className="relative">
                   <input
                     type="text"
                     placeholder="Search by Employee ID, Student Matrix, or Name..."
-                    className="w-full border rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-blue-500"
+                    className="w-full border rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-primary"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -446,7 +446,7 @@ export default function ClinicDashboard() {
                         {['CLINIC_NURSE', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
                           <button
                             onClick={() => handleStartEncounter(file.id)}
-                            className="bg-blue-600 text-white font-bold text-xs py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm flex items-center gap-1"
+                            className="bg-primary text-white font-bold text-xs py-2 px-4 rounded-lg hover:bg-primary-dark shadow-sm flex items-center gap-1"
                           >
                             <PlusCircle size={14} /> Start Visit
                           </button>
@@ -563,7 +563,7 @@ export default function ClinicDashboard() {
                   </div>
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 text-white font-bold text-xs py-2 rounded-lg hover:bg-blue-700"
+                    className="w-full bg-primary text-white font-bold text-xs py-2 rounded-lg hover:bg-primary-dark"
                   >
                     Create & Encrypt Record
                   </button>

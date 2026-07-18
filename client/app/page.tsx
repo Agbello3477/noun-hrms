@@ -44,11 +44,11 @@ export default function Home() {
                                     e.currentTarget.nextElementSibling?.classList.remove('hidden');
                                 }}
                             />
-                            <div className="h-full w-full bg-nounGreen rounded-full hidden items-center justify-center text-white font-bold text-xl">N</div>
+                            <div className="h-full w-full bg-primary rounded-full hidden items-center justify-center text-white font-bold text-xl">N</div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-lg font-extrabold text-nounGreen leading-tight tracking-tight">NATIONAL OPEN UNIVERSITY</span>
-                            <span className="text-xs font-bold text-nounRed tracking-widest">OF NIGERIA</span>
+                            <span className="text-lg font-extrabold text-primary leading-tight tracking-tight">NATIONAL OPEN UNIVERSITY</span>
+                            <span className="text-xs font-bold text-accent tracking-widest">OF NIGERIA</span>
                         </div>
                     </div>
 
@@ -56,7 +56,7 @@ export default function Home() {
                         {user ? (
                             <Link
                                 href="/dashboard"
-                                className="px-5 py-2.5 bg-nounGreen text-white text-sm font-bold rounded-full hover:bg-green-800 transition-all shadow-md hover:shadow-lg"
+                                className="px-5 py-2.5 bg-primary text-white text-sm font-bold rounded-full hover:bg-primary-dark transition-all shadow-md hover:shadow-lg"
                             >
                                 Go to Dashboard
                             </Link>
@@ -64,7 +64,7 @@ export default function Home() {
                             <>
                                 <button
                                     onClick={() => setActiveView('login')}
-                                    className={`text-sm font-semibold transition-colors ${activeView === 'login' ? 'text-nounGreen' : 'text-gray-600 hover:text-nounGreen'}`}
+                                    className={`text-sm font-semibold transition-colors ${activeView === 'login' ? 'text-primary' : 'text-gray-600 hover:text-primary'}`}
                                 >
                                     Sign In
                                 </button>
@@ -72,8 +72,8 @@ export default function Home() {
                                     onClick={() => setActiveView('register')}
                                     className={`px-5 py-2.5 text-sm font-bold rounded-full transition-all shadow-md hover:shadow-lg ${
                                         activeView === 'register' 
-                                        ? 'bg-green-800 text-white' 
-                                        : 'bg-nounGreen text-white hover:bg-green-800'
+                                        ? 'bg-primary-dark text-white' 
+                                        : 'bg-primary text-white hover:bg-primary-dark'
                                     }`}
                                 >
                                     Get Started
@@ -86,29 +86,29 @@ export default function Home() {
 
             {/* Hero Section */}
             <main className="flex-1 flex flex-col">
-                <section className={`relative transition-all duration-500 ease-in-out ${activeView === 'hero' ? 'py-24 lg:py-36' : 'py-12 flex-1 flex items-center justify-center'} overflow-hidden bg-gradient-to-br from-green-50 to-white`}>
-                    <div className="absolute top-0 right-0 w-1/3 h-full bg-nounGreen/5 skew-x-12 transform origin-top-right transition-transform duration-700 ease-in-out"></div>
+                <section className={`relative transition-all duration-500 ease-in-out ${activeView === 'hero' ? 'py-24 lg:py-36' : 'py-12 flex-1 flex items-center justify-center'} overflow-hidden bg-gradient-to-br from-green-50/40 to-white`}>
+                    <div className="absolute top-0 right-0 w-1/3 h-full bg-primary/5 skew-x-12 transform origin-top-right transition-transform duration-700 ease-in-out"></div>
 
                     <div className="container mx-auto px-6 relative z-10 flex flex-col items-center justify-center w-full">
                         {activeView === 'hero' && (
                             <div className="max-w-4xl text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
                                 <h1 className="text-4xl lg:text-7xl font-extrabold text-gray-900 tracking-tight mb-8">
-                                    <span className="block text-nounGreen mb-2">Human Resource</span>
-                                    <span className="block text-nounRed">Management System</span>
+                                    <span className="block text-primary mb-2">Human Resource</span>
+                                    <span className="block text-accent">Management System</span>
                                 </h1>
                                 <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-2xl mx-auto">
-                                    The centralized platform for managing staff workflows, academic administration, and payroll services for the <span className="font-semibold text-nounGreen">National Open University of Nigeria</span>.
+                                    The centralized platform for managing staff workflows, academic administration, and payroll services for the <span className="font-semibold text-primary">National Open University of Nigeria</span>.
                                 </p>
                                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                     <button
                                         onClick={() => setActiveView('login')}
-                                        className="inline-flex items-center justify-center px-8 py-4 bg-nounGreen text-white font-bold rounded-full hover:bg-green-800 transition-all shadow-xl shadow-green-900/10 hover:-translate-y-1"
+                                        className="inline-flex items-center justify-center px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary-dark transition-all shadow-xl shadow-primary/10 hover:-translate-y-1"
                                     >
                                         Log In to Portal <ArrowRight className="ml-2 h-5 w-5" />
                                     </button>
                                     <button
                                         onClick={() => setActiveView('register')}
-                                        className="inline-flex items-center justify-center px-8 py-4 bg-white text-gray-800 border-2 border-gray-100 font-bold rounded-full hover:border-nounGreen hover:text-nounGreen transition-all hover:-translate-y-1"
+                                        className="inline-flex items-center justify-center px-8 py-4 bg-white text-gray-800 border-2 border-gray-100 font-bold rounded-full hover:border-primary hover:text-primary transition-all hover:-translate-y-1"
                                     >
                                         New Staff Registration
                                     </button>
@@ -135,22 +135,22 @@ export default function Home() {
                         </div>
 
                         <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-nounGreen/30 transition-all hover:shadow-lg group">
-                                <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center text-nounGreen mb-6 group-hover:bg-nounGreen group-hover:text-white transition-colors">
+                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-primary/30 transition-all hover:shadow-lg group">
+                                <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
                                     <Users className="h-7 w-7" />
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900 mb-3">Staff Digital Dossier</h3>
                                 <p className="text-gray-600">Secure, centralized file management for all academic and non-academic personnel records.</p>
                             </div>
-                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-red-200 transition-all hover:shadow-lg group">
-                                <div className="w-14 h-14 bg-red-50 rounded-xl flex items-center justify-center text-nounRed mb-6 group-hover:bg-nounRed group-hover:text-white transition-colors">
+                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-accent/30 transition-all hover:shadow-lg group">
+                                <div className="w-14 h-14 bg-accent/10 rounded-xl flex items-center justify-center text-accent mb-6 group-hover:bg-accent group-hover:text-white transition-colors">
                                     <BookOpen className="h-7 w-7" />
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900 mb-3">Academic Workflow</h3>
                                 <p className="text-gray-600">Integrated tools for publication tracking, course allocation, and sabbatical management.</p>
                             </div>
-                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-yellow-200 transition-all hover:shadow-lg group">
-                                <div className="w-14 h-14 bg-yellow-50 rounded-xl flex items-center justify-center text-yellow-600 mb-6 group-hover:bg-nounGold group-hover:text-black transition-colors">
+                            <div className="p-8 rounded-2xl bg-gray-50 border border-gray-100 hover:border-secondary-dark/30 transition-all hover:shadow-lg group">
+                                <div className="w-14 h-14 bg-secondary/20 rounded-xl flex items-center justify-center text-secondary-dark mb-6 group-hover:bg-secondary group-hover:text-slate-900 transition-colors">
                                     <Shield className="h-7 w-7" />
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900 mb-3">Audited & Secure</h3>
@@ -173,15 +173,15 @@ export default function Home() {
                                 © {new Date().getFullYear()} National Open University of Nigeria.
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                                Powered by: <span className="font-semibold text-nounGreen">MaSha Secure Tech</span>
+                                Powered by: <span className="font-semibold text-primary">MaSha Secure Tech</span>
                             </p>
                         </div>
                     </div>
 
                     <div className="flex gap-8 text-sm font-medium">
-                        <Link href="#" className="hover:text-nounGreen transition-colors">Privacy Policy</Link>
-                        <Link href="#" className="hover:text-nounGreen transition-colors">Terms of Service</Link>
-                        <Link href="#" className="hover:text-nounGreen transition-colors">Contact Support</Link>
+                        <Link href="#" className="hover:text-primary transition-colors">Privacy Policy</Link>
+                        <Link href="#" className="hover:text-primary transition-colors">Terms of Service</Link>
+                        <Link href="#" className="hover:text-primary transition-colors">Contact Support</Link>
                     </div>
                 </div>
             </footer>

@@ -41,7 +41,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
             href={href}
             onClick={() => setIsOpen && setIsOpen(false)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive(href)
-                ? 'bg-blue-50 text-blue-700'
+                ? 'bg-primary/10 text-primary'
                 : 'text-gray-700 hover:bg-gray-100'
                 }`}
         >
@@ -217,9 +217,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     Sign Out
                 </button>
                  <div className="mt-6 text-center opacity-75">
-                     <p className="text-[10px] text-gray-500 font-medium tracking-wide">
-                         Powered by: <span className="font-bold text-nounGreen">MaSha Secure Tech</span>
-                     </p>
+                      <p className="text-[10px] text-gray-500 font-medium tracking-wide">
+                          Powered by: <span className="font-bold text-primary">MaSha Tech Innovations</span>
+                      </p>
                  </div>
             </div>
         </aside >

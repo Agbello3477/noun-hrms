@@ -1,3 +1,15 @@
+:root {
+  --color-primary: #006533;         /* NOUN Brand Dark Green */
+  --color-primary-light: #008040;   /* Light Forest Green */
+  --color-primary-dark: #004d26;    /* Dark Forest Green */
+  --color-secondary: #FFCD00;       /* NOUN Gold/Yellow */
+  --color-secondary-light: #FFE066; /* Light Gold */
+  --color-secondary-dark: #CC9E00;  /* Dark Accent Gold */
+  --color-accent: #E31B23;          /* Accent Red */
+  --color-background: #F8FAFC;      /* Clean neutral backdrop */
+  --color-surface: #FFFFFF;         /* Card / Container white backdrop */
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
