@@ -17,13 +17,20 @@ export const StorageService = {
         const filename = `${Date.now()}-${file.originalname}`;
         const targetPath = path.join(UPLOAD_DIR, filename);
 
+        // Ensure upload directory exists asynchronously
+        try {
+            await fs.promises.access(UPLOAD_DIR);
+        } catch {
+            await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
+        }
+
         // In a real scenario with Multer diskStorage, the file might already be there.
         // If using memoryStorage, we write it. Assuming memoryStorage buffer here for simplicity in a service abstraction.
         if (file.buffer) {
-            fs.writeFileSync(targetPath, file.buffer);
+            await fs.promises.writeFile(targetPath, file.buffer);
         } else if (file.path) {
             // If multer saved to temp, move it
-            fs.renameSync(file.path, targetPath);
+            await fs.promises.rename(file.path, targetPath);
         }
 
         // Return a mock URL
@@ -34,8 +41,11 @@ export const StorageService = {
         // Remove local file
         const filename = path.basename(fileUrl);
         const targetPath = path.join(UPLOAD_DIR, filename);
-        if (fs.existsSync(targetPath)) {
-            fs.unlinkSync(targetPath);
+        try {
+            await fs.promises.access(targetPath);
+            await fs.promises.unlink(targetPath);
+        } catch (error) {
+            // File doesn't exist or is inaccessible, ignore safely
         }
     },
 

@@ -100,7 +100,7 @@ export const batchTransfer = async (req: Request, res: Response) => {
         }
 
         // Cleanup
-        fs.unlinkSync(req.file.path);
+        await fs.promises.unlink(req.file.path);
 
         res.json({
             message: 'Batch processing complete',

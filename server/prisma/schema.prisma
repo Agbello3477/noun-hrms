@@ -799,6 +799,8 @@ model ClinicEncounter {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  @@index([patientFileId])
+  @@index([status])
   @@map("clinic_encounters")
 }
 
@@ -843,6 +845,10 @@ model SecurityIncident {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@index([createdAt])
   @@map("security_incidents")
 }
 

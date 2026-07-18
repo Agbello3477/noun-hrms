@@ -616,6 +616,8 @@ export const changePassword = async (req: Request, res: Response) => {
             }
         });
 
+        await redisService.del(`user:session:${userId}`);
+
         // Audit
         await prisma.auditLog.create({
             data: {

@@ -120,11 +120,14 @@ const DEFAULT_SETTINGS = {
     mockEmailMode: true
 };
 
-const readSettings = () => {
+const readSettings = async () => {
     try {
-        if (fs.existsSync(SETTINGS_FILE)) {
-            const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        try {
+            await fs.promises.access(SETTINGS_FILE);
+            const data = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
             return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+        } catch {
+            return DEFAULT_SETTINGS;
         }
     } catch (e) {
         console.error("Error reading system settings file:", e);
@@ -132,9 +135,9 @@ const readSettings = () => {
     return DEFAULT_SETTINGS;
 };
 
-const writeSettings = (settings: any) => {
+const writeSettings = async (settings: any) => {
     try {
-        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+        await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
     } catch (e) {
         console.error("Error writing system settings file:", e);
     }
@@ -149,7 +152,7 @@ export const getSystemSettings = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden: Insufficient privileges." });
         }
 
-        const settings = readSettings();
+        const settings = await readSettings();
         res.json(settings);
     } catch (error) {
         console.error('Error in getSystemSettings:', error);
@@ -166,7 +169,7 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden: Insufficient privileges." });
         }
 
-        const currentSettings = readSettings();
+        const currentSettings = await readSettings();
         const newSettings = { ...currentSettings, ...req.body };
 
         // Simple validation rules
@@ -177,7 +180,7 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
             return res.status(400).json({ message: "Minimum APER score must be between 0 and 100." });
         }
 
-        writeSettings(newSettings);
+        await writeSettings(newSettings);
 
         // Audit Log
         await prisma.auditLog.create({

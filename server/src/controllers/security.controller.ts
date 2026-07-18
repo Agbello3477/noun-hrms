@@ -47,14 +47,20 @@ export const createRoster = async (req: AuthRequest, res: Response) => {
 };
 
 export const getIncidents = async (req: AuthRequest, res: Response) => {
-    const { status, priority } = req.query;
+    const { status, priority, page, limit } = req.query;
 
     try {
+        const pageNum = page ? parseInt(String(page)) : 1;
+        const limitNum = limit ? Math.min(parseInt(String(limit)), 50) : 20;
+        const skip = (pageNum - 1) * limitNum;
+
+        const where: any = {
+            ...(status ? { status: String(status) } : {}),
+            ...(priority ? { priority: String(priority) } : {})
+        };
+
         const incidents = await prisma.securityIncident.findMany({
-            where: {
-                ...(status ? { status: String(status) } : {}),
-                ...(priority ? { priority: String(priority) } : {})
-            },
+            where,
             include: {
                 reporter: {
                     select: { name: true, email: true }
@@ -63,10 +69,20 @@ export const getIncidents = async (req: AuthRequest, res: Response) => {
                     select: { name: true }
                 }
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum
         });
+
+        const total = await prisma.securityIncident.count({ where });
+
+        res.setHeader('X-Total-Count', total.toString());
+        res.setHeader('X-Total-Pages', Math.ceil(total / limitNum).toString());
+        res.setHeader('X-Current-Page', pageNum.toString());
+
         res.json(incidents);
     } catch (error: any) {
+        console.error('Failed to fetch security incidents:', error);
         res.status(500).json({ message: 'Failed to fetch security incidents' });
     }
 };

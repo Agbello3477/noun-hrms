@@ -4,6 +4,7 @@ import { Role, User, Cadre, Department } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { sendAccountCreatedNotification } from '../services/email.service';
+import { redisService } from '../services/redis.service';
 
 // Helper to generate next Staff ID
 const generateStaffId = async (): Promise<string> => {
@@ -407,6 +408,7 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
             });
         });
 
+        await redisService.del(`user:session:${profile!.userId}`);
         res.json({ message: 'Staff file successfully archived' });
     } catch (error) {
         console.error('Delete Staff File Error', error);
@@ -478,6 +480,7 @@ export const restoreStaffFile = async (req: Request, res: Response) => {
             });
         });
 
+        await redisService.del(`user:session:${profile!.userId}`);
         res.json({ message: 'Staff file restored successfully' });
     } catch (error) {
         console.error('Restore Staff File Error', error);

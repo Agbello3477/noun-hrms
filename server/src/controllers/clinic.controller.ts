@@ -65,7 +65,8 @@ export const searchPatientFile = async (req: AuthRequest, res: Response) => {
                 encounters: {
                     orderBy: { createdAt: 'desc' }
                 }
-            }
+            },
+            take: 20 // Enforce database take limit
         });
 
         const decryptedFiles = files.map(file => ({
@@ -338,18 +339,47 @@ export const dispensePrescription = async (req: AuthRequest, res: Response) => {
 };
 
 export const getEncounters = async (req: AuthRequest, res: Response) => {
-    const { status } = req.query;
+    const { status, page, limit } = req.query;
 
     try {
+        const pageNum = page ? parseInt(String(page)) : 1;
+        const limitNum = limit ? Math.min(parseInt(String(limit)), 50) : 20;
+        const skip = (pageNum - 1) * limitNum;
+
         const encounters = await prisma.clinicEncounter.findMany({
             where: status ? { status: String(status) } : {},
             include: {
-                patientFile: true
+                patientFile: {
+                    select: {
+                        id: true,
+                        patientId: true,
+                        name: true,
+                        gender: true,
+                        dob: true,
+                        bloodGroup: true,
+                        genotype: true,
+                        allergies: true,
+                        createdAt: true,
+                        updatedAt: true
+                    }
+                }
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum
         });
+
+        const total = await prisma.clinicEncounter.count({
+            where: status ? { status: String(status) } : {}
+        });
+
+        res.setHeader('X-Total-Count', total.toString());
+        res.setHeader('X-Total-Pages', Math.ceil(total / limitNum).toString());
+        res.setHeader('X-Current-Page', pageNum.toString());
+
         res.json(encounters);
     } catch (error: any) {
+        console.error('Failed to fetch clinic encounters:', error);
         res.status(500).json({ message: 'Failed to fetch encounters' });
     }
 };

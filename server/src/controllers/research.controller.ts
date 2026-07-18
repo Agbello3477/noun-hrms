@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prisma';
 import multer from 'multer';
 import path from 'path';
-
-const prisma = new PrismaClient();
 
 // Multer Config for Safe Uploads
 const storage = multer.diskStorage({

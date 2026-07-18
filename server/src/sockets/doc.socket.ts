@@ -2,10 +2,8 @@ import { WebSocket } from 'ws';
 import { setupWSConnection } from 'y-websocket/bin/utils';
 import { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prisma';
 import * as Y from 'yjs';
-
-const prisma = new PrismaClient();
 
 // This map allows us to intercept document updates if we want to save them to the DB.
 // By default, y-websocket stores the doc in memory. We can periodically flush it.

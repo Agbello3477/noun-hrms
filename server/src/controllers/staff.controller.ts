@@ -398,7 +398,7 @@ export const createStaff = async (req: Request, res: Response) => {
         // Log to file
         const logPath = path.join(__dirname, '../../error.log');
         const logMsg = `${new Date().toISOString()} - Create Staff Phase 3 Error: ${error.message}\nStack: ${error.stack}\n\n`;
-        try { fs.appendFileSync(logPath, logMsg); } catch (e) { }
+        try { await fs.promises.appendFile(logPath, logMsg); } catch (e) { }
 
         console.error('Create staff error:', error);
 
@@ -671,6 +671,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         }
 
         await redisService.clearPattern('staff:all:*');
+        await redisService.del(`user:session:${user.id}`);
         res.json({ message: 'Profile updated successfully', passportUrl });
 
     } catch (error) {
@@ -1131,7 +1132,10 @@ export const deleteStaffNoId = async (req: Request, res: Response) => {
         ]);
 
         // Invalidate Redis caches
-        await redisService.del('staff:all:*');
+        await redisService.clearPattern('staff:all:*');
+        for (const uid of userIds) {
+            await redisService.del(`user:session:${uid}`);
+        }
 
         res.json({
             message: `Successfully deleted ${profileIds.length} profiles and ${userIds.length} users with no staff ID number.`,
