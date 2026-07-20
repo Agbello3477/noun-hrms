@@ -1,0 +1,8 @@
+# NOUN HRMS Kubernetes Namespace Definition
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: noun-hrms
+  labels:
+    name: noun-hrms
+    environment: staging

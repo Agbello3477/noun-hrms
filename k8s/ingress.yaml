@@ -1,0 +1,65 @@
+# Ingress Controller Rules for NOUN HRMS Enterprise Architecture
+# Configured for NGINX Ingress Controller with WebSocket Upgrade & Sticky Session Support
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: noun-hrms-ingress
+  namespace: noun-hrms
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false" # Set true in production with TLS certs
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600" # High timeout for WebSocket persistence
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    
+    # Sticky Sessions for WebSocket & Live Collaboration
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "NOUN_STICKY"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    
+    # Custom Header Passing for WebSockets (Socket.io & Yjs Document Collaboration)
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+spec:
+  rules:
+    - host: hrms-staging.noun.edu.ng
+      http:
+        paths:
+          # API & Health Routes (Backend Microservices)
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: noun-backend-service
+                port:
+                  number: 80
+          # Real-time WebSockets (Socket.IO Chat & Live Security)
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: noun-backend-service
+                port:
+                  number: 80
+          # Real-time WebSockets (Yjs Collaborative Document Editing - Research Forum)
+          - path: /api/collaboration/doc
+            pathType: Prefix
+            backend:
+              service:
+                name: noun-backend-service
+                port:
+                  number: 80
+          # Frontend Next.js Dashboard Routes
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: noun-frontend-service
+                port:
+                  number: 80

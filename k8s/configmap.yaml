@@ -1,0 +1,17 @@
+# NOUN HRMS Centralized ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: noun-hrms-config
+  namespace: noun-hrms
+  labels:
+    app.kubernetes.io/name: noun-hrms
+    app.kubernetes.io/component: configuration
+data:
+  NODE_ENV: "production"
+  PORT: "5055"
+  CLIENT_PORT: "3000"
+  CLIENT_URL: "https://hrms-staging.noun.edu.ng"
+  NEXT_PUBLIC_API_URL: "https://hrms-staging.noun.edu.ng/api"
+  DATABASE_NAME: "noun_hrms"
+  REDIS_PORT: "6379"

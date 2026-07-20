@@ -1,0 +1,75 @@
+# Express Backend API Deployment & Service
+# Handles Core HR, Clinic Module, Security Module, and Research Forum API routes
+apiVersion: v1
+kind: Service
+metadata:
+  name: noun-backend-service
+  namespace: noun-hrms
+  labels:
+    app: noun-backend
+spec:
+  ports:
+    - port: 80
+      targetPort: 5055
+      name: http
+  selector:
+    app: noun-backend
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: noun-backend-deployment
+  namespace: noun-hrms
+  labels:
+    app: noun-backend
+    tier: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0%
+  selector:
+    matchLabels:
+      app: noun-backend
+  template:
+    metadata:
+      labels:
+        app: noun-backend
+        tier: api
+    spec:
+      containers:
+        - name: backend-container
+          image: noun-hrms-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5055
+              name: http
+          envFrom:
+            - configMapRef:
+                name: noun-hrms-config
+            - secretRef:
+                name: noun-hrms-secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5055
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5055
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3

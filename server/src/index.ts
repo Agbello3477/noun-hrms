@@ -87,6 +87,10 @@ app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/research', researchRoutes);
 
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'UP', service: 'NOUN-HRMS-API', timestamp: new Date().toISOString() });
+});
+
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });
 });
