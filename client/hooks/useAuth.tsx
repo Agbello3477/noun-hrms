@@ -91,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [user]);
 
     const fetchUser = async () => {
+        if (typeof window === 'undefined') return;
         const token = localStorage.getItem('token');
         if (token) {
             try {
@@ -132,7 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = (token: string, userData: User) => {
-        localStorage.setItem('token', token);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('token', token);
+        }
         setUser(userData);
 
         // Redirect logic
@@ -152,15 +155,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // So for TIMEOUT, we save path. For MANUAL logout, we probably shouldn't? 
         // "When logout always return to homepage... when starting the system it should always start from homepage."
 
-        if (currentPath) {
-            localStorage.setItem('auth_return_url', currentPath);
-        } else {
-            localStorage.removeItem('auth_return_url');
-        }
+        if (typeof window !== 'undefined') {
+            if (currentPath) {
+                localStorage.setItem('auth_return_url', currentPath);
+            } else {
+                localStorage.removeItem('auth_return_url');
+            }
 
-        localStorage.removeItem('token');
-        setUser(null);
-        window.location.href = '/'; // Always return to homepage (hard redirect to clear state/cache)
+            localStorage.removeItem('token');
+            setUser(null);
+            window.location.href = '/'; // Always return to homepage (hard redirect to clear state/cache)
+        }
     };
 
     const resetTimer = () => {

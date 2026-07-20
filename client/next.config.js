@@ -1,5 +1,7 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: process.env.NEXT_STANDALONE === "true" ? "standalone" : undefined,
+    // Enable standalone output for Docker & Kubernetes SSR deployment
+    output: process.env.NEXT_EXPORT === "true" ? undefined : "standalone",
     webpack: (config, { dev }) => {
         if (dev) {
             config.cache = false;
