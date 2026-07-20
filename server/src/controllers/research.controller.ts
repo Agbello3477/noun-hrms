@@ -265,13 +265,32 @@ export const acceptInvite = async (req: Request, res: Response) => {
         const { inviteId } = req.params;
         const user = (req as any).user;
 
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
-        if (!staffProfile) return res.status(404).json({ message: 'Staff profile required' });
+        let staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+        if (!staffProfile) {
+            staffProfile = await prisma.staffProfile.findFirst({
+                where: { OR: [{ id: user.id }, { userId: user.id }] }
+            });
+            if (!staffProfile) {
+                staffProfile = await prisma.staffProfile.create({
+                    data: {
+                        userId: user.id,
+                        surname: user.name?.split(' ')?.[0] || 'Academic',
+                        otherNames: user.name?.split(' ')?.slice(1)?.join(' ') || 'Staff',
+                        cadre: user.role || 'LECTURER',
+                        staffId: `NOUN/RES/${user.id.substring(0, 6).toUpperCase()}`
+                    }
+                });
+            }
+        }
 
         const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
         if (!invite) return res.status(404).json({ message: 'Invite not found' });
 
-        const isTargetInvitee = invite.inviteeId === user.id || invite.inviteeId === staffProfile.id;
+        const isTargetInvitee = 
+            invite.inviteeId === user.id || 
+            invite.inviteeId === staffProfile.id ||
+            invite.inviteeId === staffProfile.userId;
+
         if (!isTargetInvitee) {
             return res.status(403).json({ message: 'Forbidden: You are not the recipient of this invitation' });
         }
