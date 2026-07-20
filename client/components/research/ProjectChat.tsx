@@ -57,7 +57,6 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
     }, [projectId]);
 
     useEffect(() => {
-        // Scroll to bottom when messages change
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
@@ -65,7 +64,6 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
         e.preventDefault();
         if (!input.trim() || !socketRef.current) return;
 
-        // Emit to server
         socketRef.current.emit('send-message', {
             projectId,
             text: input.trim()
@@ -75,18 +73,18 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
     };
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-100 dark:border-gray-700">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 rounded-t-xl">
-                <h3 className="font-semibold text-gray-800 dark:text-white">Workspace Chat</h3>
+        <div className="flex flex-col h-full bg-white rounded-xl shadow border border-slate-200">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                <h3 className="font-semibold text-slate-800">Workspace Chat</h3>
                 <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
                 </span>
             </div>
             
-            <div className="flex-grow p-4 overflow-y-auto space-y-4 max-h-[500px]">
+            <div className="flex-grow p-4 overflow-y-auto space-y-4 max-h-[500px] bg-white">
                 {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 text-sm">
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm">
                         <p>No messages yet.</p>
                         <p>Start the conversation!</p>
                     </div>
@@ -100,23 +98,19 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                                         {msg.sender?.staffProfile?.passportUrl ? (
                                             <img src={msg.sender.staffProfile.passportUrl} alt="avatar" className="w-8 h-8 rounded-full object-cover shadow" />
                                         ) : (
-                                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center shadow">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shadow">
                                                 <UserIcon size={16} />
                                             </div>
                                         )}
                                     </div>
                                     <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                        <span className="text-[10px] text-gray-500 mb-1">{isMe ? 'You' : (msg.sender?.name || 'Unknown User')}</span>
-                                        <div className={`p-3 rounded-2xl shadow-sm text-sm ${
-                                            isMe 
-                                                ? 'bg-blue-600 text-white rounded-tr-sm' 
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white rounded-tl-sm'
-                                        }`}>
+                                        <span className="text-[10px] text-slate-400 mb-1 font-semibold">{isMe ? 'You' : (msg.sender?.name || 'Peer')}</span>
+                                        <div 
+                                            style={isMe ? { backgroundColor: '#006533', color: '#ffffff' } : { backgroundColor: '#f1f5f9', color: '#0f172a' }}
+                                            className={`p-3 rounded-2xl shadow-sm text-sm border ${isMe ? 'border-emerald-800' : 'border-slate-200'}`}
+                                        >
                                             {msg.text}
                                         </div>
-                                        <span className="text-[10px] text-gray-400 mt-1">
-                                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -126,24 +120,22 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-3 bg-gray-50 dark:bg-gray-800/80 rounded-b-xl border-t border-gray-100 dark:border-gray-700">
-                <form onSubmit={handleSend} className="flex space-x-2">
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        placeholder="Type a message..."
-                        className="flex-grow p-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-full focus:outline-none focus:border-blue-500 transition-colors"
-                    />
-                    <button 
-                        type="submit"
-                        disabled={!input.trim()}
-                        className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow"
-                    >
-                        <Send size={18} />
-                    </button>
-                </form>
-            </div>
+            <form onSubmit={handleSend} className="p-3 border-t border-slate-200 bg-slate-50 rounded-b-xl flex gap-2">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-grow p-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-emerald-600 text-slate-800"
+                />
+                <button
+                    type="submit"
+                    style={{ backgroundColor: '#006533' }}
+                    className="p-2.5 text-white rounded-xl hover:opacity-90 transition shadow-sm flex items-center justify-center"
+                >
+                    <Send size={16} />
+                </button>
+            </form>
         </div>
     );
 }
