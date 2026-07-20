@@ -68,24 +68,28 @@ export default function MyQueriesPage() {
         fetchQueries();
     }, []);
 
-    const handleReply = async (e: React.FormEvent) => {
+    const handleReply = async (e: React.FormEvent, targetQueryId: string, text: string, file: File | null) => {
         e.preventDefault();
-        if (!activeQuery || !replyContent) return;
-
-        setSubmitting(true);
-        const formData = new FormData();
-        formData.append('queryId', activeQuery);
-        formData.append('responseText', replyContent);
-        formData.append('content', replyContent);
-        if (replyFile) {
-            formData.append('file', replyFile);
+        if (!targetQueryId || !text || !text.trim()) {
+            alert('Please enter your response explanation before submitting.');
+            return;
         }
 
+        setSubmitting(true);
         try {
+            const formData = new FormData();
+            formData.append('queryId', targetQueryId);
+            formData.append('responseText', text.trim());
+            formData.append('content', text.trim());
+            if (file) {
+                formData.append('file', file);
+            }
+
             await api.post('/api/queries/respond', formData);
             setReplyContent('');
             setReplyFile(null);
-            fetchQueries(); // Refresh to show new response
+            setActiveQuery(null);
+            await fetchQueries();
             alert('Response submitted successfully');
         } catch (error: any) {
             console.error('Reply submission error:', error);
@@ -168,7 +172,7 @@ export default function MyQueriesPage() {
                         {/* Reply Form */}
                         {query.status === 'OPEN' && !query.response && (
                             <div className="p-4 border-t border-gray-200 bg-white">
-                                <form onSubmit={(e) => { setActiveQuery(query.id); handleReply(e); }}>
+                                <form onSubmit={(e) => handleReply(e, query.id, activeQuery === query.id ? replyContent : '', activeQuery === query.id ? replyFile : null)}>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Reply to Query</label>
                                     <textarea
                                         className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 outline-none"
@@ -189,7 +193,7 @@ export default function MyQueriesPage() {
                                             disabled={submitting && activeQuery === query.id}
                                             className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 flex items-center gap-2 disabled:opacity-50"
                                         >
-                                            <Send size={16} /> Send Response
+                                            <Send size={16} /> {submitting && activeQuery === query.id ? 'Sending...' : 'Send Response'}
                                         </button>
                                     </div>
                                 </form>

@@ -107,9 +107,12 @@ export const respondToQuery = async (req: AuthRequest, res: Response) => {
 
         if (!query) return res.status(404).json({ message: 'Query not found' });
 
-        // Ensure responder is the target staff
-        if (query.staff.userId !== responderId) {
-            return res.status(403).json({ message: 'Unauthorized' });
+        // Ensure responder is the target staff or authorized HR Admin
+        const isTargetUser = query.staff.userId === responderId || query.staff.id === responderId;
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(req.user?.role as any);
+
+        if (!isTargetUser && !isHQAdmin) {
+            return res.status(403).json({ message: 'Unauthorized: You can only respond to queries issued to your staff account.' });
         }
 
         let attachmentUrl = undefined;
