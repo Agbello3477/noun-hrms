@@ -76,19 +76,21 @@ export default function MyQueriesPage() {
         const formData = new FormData();
         formData.append('queryId', activeQuery);
         formData.append('responseText', replyContent);
+        formData.append('content', replyContent);
         if (replyFile) {
             formData.append('file', replyFile);
         }
 
         try {
-            await api.post('/api/queries/respond', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post('/api/queries/respond', formData);
             setReplyContent('');
             setReplyFile(null);
             fetchQueries(); // Refresh to show new response
-        } catch (error) {
-            alert('Failed to send reply');
+            alert('Response submitted successfully');
+        } catch (error: any) {
+            console.error('Reply submission error:', error);
+            const msg = error.response?.data?.message || error.message || 'Failed to send reply';
+            alert(`Failed to send reply: ${msg}`);
         } finally {
             setSubmitting(false);
         }

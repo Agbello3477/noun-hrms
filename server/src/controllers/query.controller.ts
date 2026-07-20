@@ -90,9 +90,15 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
 // Respond to Query (Staff -> HR)
 export const respondToQuery = async (req: AuthRequest, res: Response) => {
     try {
-        const { queryId, responseText } = req.body;
+        const { queryId, responseText, content } = req.body;
+        const replyText = responseText || content;
         const responderId = req.user?.id;
         const file = req.file; // Attachment
+
+        if (!queryId) return res.status(400).json({ message: 'Query ID is required' });
+        if (!replyText || replyText.trim().length === 0) {
+            return res.status(400).json({ message: 'Response text is required' });
+        }
 
         const query = await prisma.staffQuery.findUnique({
             where: { id: queryId },
@@ -114,7 +120,7 @@ export const respondToQuery = async (req: AuthRequest, res: Response) => {
         const updatedQuery = await prisma.staffQuery.update({
             where: { id: queryId },
             data: {
-                response: responseText,
+                response: replyText,
                 responseAttachmentUrl: attachmentUrl,
                 status: QueryStatus.RESPONDED
             }

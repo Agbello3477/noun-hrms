@@ -120,15 +120,17 @@ export const leaveApplySchema = z.object({
 // 3. Disciplinary Query Schemas
 export const queryIssueSchema = z.object({
     body: z.object({
-        staffId: z.string().uuid('Invalid staff profile ID format'),
+        staffId: z.string().min(1, 'Staff ID is required'),
         title: z.string().min(3, 'Query title must be at least 3 characters').max(100).transform(stripHtml),
-        content: z.string().min(10, 'Query content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
+        content: z.string().min(5, 'Query content must be at least 5 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
     })
 });
 
 export const queryRespondSchema = z.object({
     body: z.object({
-        content: z.string().min(10, 'Response content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
+        queryId: z.string().optional(),
+        responseText: z.string().optional(),
+        content: z.string().optional()
     })
 });
 
