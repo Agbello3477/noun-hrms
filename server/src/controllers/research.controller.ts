@@ -135,11 +135,24 @@ export const getProjectDetails = async (req: Request, res: Response) => {
 export const sendInvite = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { inviteeId } = req.body; // user ID of invitee
+        const { inviteeId } = req.body; // user ID or staffProfile ID of invitee
         const user = (req as any).user;
 
+        // Resolve target user & staffProfile
+        let targetUser = await prisma.user.findUnique({ where: { id: inviteeId } });
+        let targetStaffProfile = null;
+        if (!targetUser) {
+            targetStaffProfile = await prisma.staffProfile.findUnique({ where: { id: inviteeId } });
+            if (targetStaffProfile) {
+                targetUser = await prisma.user.findUnique({ where: { id: targetStaffProfile.userId } });
+            }
+        }
+        if (!targetUser) return res.status(404).json({ message: 'Invitee user not found' });
+
+        const resolvedInviteeId = targetUser.id;
+
         const existingInvite = await prisma.projectInvite.findFirst({
-            where: { projectId: id, inviteeId, status: 'PENDING' }
+            where: { projectId: id, inviteeId: resolvedInviteeId, status: 'PENDING' }
         });
 
         if (existingInvite) return res.status(400).json({ message: 'Invite already sent' });
@@ -148,7 +161,7 @@ export const sendInvite = async (req: Request, res: Response) => {
             data: {
                 projectId: id,
                 inviterId: user.id,
-                inviteeId
+                inviteeId: resolvedInviteeId
             }
         });
 
@@ -252,23 +265,35 @@ export const acceptInvite = async (req: Request, res: Response) => {
         const { inviteId } = req.params;
         const user = (req as any).user;
 
-        const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
-        if (!invite || invite.inviteeId !== user.id) {
-            return res.status(403).json({ message: 'Forbidden' });
-        }
-
         const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
         if (!staffProfile) return res.status(404).json({ message: 'Staff profile required' });
+
+        const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
+        if (!invite) return res.status(404).json({ message: 'Invite not found' });
+
+        const isTargetInvitee = invite.inviteeId === user.id || invite.inviteeId === staffProfile.id;
+        if (!isTargetInvitee) {
+            return res.status(403).json({ message: 'Forbidden: You are not the recipient of this invitation' });
+        }
 
         await prisma.$transaction([
             prisma.projectInvite.update({
                 where: { id: inviteId },
                 data: { status: 'ACCEPTED' }
             }),
-            prisma.projectMember.create({
-                data: {
+            prisma.projectMember.upsert({
+                where: {
+                    projectId_staffId: {
+                        projectId: invite.projectId,
+                        staffId: staffProfile.id
+                    }
+                },
+                create: {
                     projectId: invite.projectId,
                     staffId: staffProfile.id,
+                    role: 'EDITOR'
+                },
+                update: {
                     role: 'EDITOR'
                 }
             })
@@ -394,12 +419,19 @@ export const saveDocument = async (req: Request, res: Response) => {
 export const getMyInvites = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
 
         const invites = await prisma.projectInvite.findMany({
-            where: { inviteeId: user.id, status: 'PENDING' },
+            where: {
+                OR: [
+                    { inviteeId: user.id },
+                    ...(staffProfile ? [{ inviteeId: staffProfile.id }] : [])
+                ],
+                status: 'PENDING'
+            },
             include: {
-                project: { select: { id: true, title: true, domain: true, status: true } },
-                inviter: { select: { name: true } }
+                project: { select: { id: true, title: true, domain: true, status: true, abstract: true } },
+                inviter: { select: { name: true, role: true } }
             },
             orderBy: { createdAt: 'desc' }
         });

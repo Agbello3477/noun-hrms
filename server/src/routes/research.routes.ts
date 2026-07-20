@@ -18,16 +18,16 @@ const router = Router();
 
 router.use(verifyToken as any);
 
+// Invites (Registered BEFORE /:id to prevent route shadowing)
+router.get('/invites/mine', getMyInvites);
+router.post('/invite/:inviteId/accept', acceptInvite);
+router.post('/invite/:inviteId/decline', declineInvite);
+
 // Projects
 router.post('/', createProject);
 router.get('/', getMyProjects);
 router.get('/:id', getProjectDetails);
-
-// Invites
-router.get('/invites/mine', getMyInvites);
 router.post('/:id/invite', sendInvite);
-router.post('/invite/:inviteId/accept', acceptInvite);
-router.post('/invite/:inviteId/decline', declineInvite);
 
 // Files
 router.post('/:id/files', upload.single('file'), uploadFile);
