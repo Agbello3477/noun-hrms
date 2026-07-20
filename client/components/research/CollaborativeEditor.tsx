@@ -22,7 +22,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         extensions: [StarterKit.configure({})],
         editorProps: {
             attributes: {
-                class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-8 text-gray-900 dark:text-gray-100 leading-relaxed bg-white dark:bg-gray-900',
+                class: 'prose max-w-none focus:outline-none min-h-[550px] p-10 text-gray-900 leading-relaxed bg-white shadow-inner',
             },
         },
         onUpdate: ({ editor }) => {
@@ -93,9 +93,9 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-full w-full rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+        <div className="flex flex-col h-full w-full bg-slate-100 border border-slate-200 overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center gap-1 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/70 flex-wrap">
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-200 bg-slate-50 flex-wrap">
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBold().run()}
                     active={editor?.isActive('bold')}
@@ -188,7 +188,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                     <button
                         onClick={() => handleSave()}
                         disabled={saveStatus === 'saving'}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-900 dark:bg-blue-800 text-white text-xs font-bold hover:bg-blue-850 dark:hover:bg-blue-750 disabled:opacity-60 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-60 transition-colors shadow-sm"
                         title="Save (Ctrl+S)"
                     >
                         <Save size={13} />
@@ -197,9 +197,11 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 </div>
             </div>
 
-            {/* Editor area */}
-            <div className="flex-grow overflow-auto">
-                <EditorContent editor={editor} className="h-full" />
+            {/* Word Page Container */}
+            <div className="flex-grow overflow-auto p-6 bg-slate-100 flex justify-center">
+                <div className="w-full max-w-4xl bg-white border border-slate-200 shadow-sm min-h-[700px]">
+                    <EditorContent editor={editor} className="h-full" />
+                </div>
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `

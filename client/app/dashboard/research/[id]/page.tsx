@@ -22,43 +22,43 @@ import Link from 'next/link';
 
 const THEMES: Record<string, { bg: string; text: string; border: string; gradient: string; preview: string; name: string }> = {
     indigo: {
-        bg: 'bg-primary/5 dark:bg-primary/10',
-        text: 'text-primary dark:text-primary-light',
-        border: 'border-primary/10 dark:border-primary/30 hover:border-primary/30',
-        gradient: 'from-primary-dark via-primary to-slate-900',
-        preview: 'bg-gradient-to-r from-primary to-primary-light',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/20',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        border: 'border-emerald-200 dark:border-emerald-800 hover:border-emerald-400',
+        gradient: 'from-emerald-800 via-teal-800 to-slate-900',
+        preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Official NOUN Workspace'
     },
     emerald: {
-        bg: 'bg-emerald-50/50 dark:bg-emerald-950/10',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/20',
         text: 'text-emerald-700 dark:text-emerald-300',
-        border: 'border-emerald-100 dark:border-emerald-900/40 hover:border-emerald-300 dark:hover:border-emerald-700',
-        gradient: 'from-emerald-600 via-teal-700 to-emerald-900',
-        preview: 'bg-gradient-to-r from-emerald-500 to-teal-600',
+        border: 'border-emerald-200 dark:border-emerald-800 hover:border-emerald-400',
+        gradient: 'from-emerald-700 via-teal-800 to-emerald-950',
+        preview: 'bg-gradient-to-r from-emerald-600 to-teal-600',
         name: 'Emerald Research'
     },
     rose: {
-        bg: 'bg-rose-50/50 dark:bg-rose-950/10',
+        bg: 'bg-rose-50 dark:bg-rose-950/20',
         text: 'text-rose-700 dark:text-rose-300',
-        border: 'border-rose-100 dark:border-rose-900/40 hover:border-rose-300 dark:hover:border-rose-700',
-        gradient: 'from-rose-600 via-pink-700 to-rose-900',
-        preview: 'bg-gradient-to-r from-rose-500 to-pink-600',
+        border: 'border-rose-200 dark:border-rose-800 hover:border-rose-400',
+        gradient: 'from-rose-700 via-pink-800 to-slate-900',
+        preview: 'bg-gradient-to-r from-rose-600 to-pink-600',
         name: 'Rose Humanity'
     },
     amber: {
-        bg: 'bg-amber-50/50 dark:bg-amber-950/10',
+        bg: 'bg-amber-50 dark:bg-amber-950/20',
         text: 'text-amber-700 dark:text-amber-300',
-        border: 'border-amber-100 dark:border-amber-900/40 hover:border-amber-300 dark:hover:border-amber-700',
-        gradient: 'from-amber-600 via-orange-700 to-amber-900',
-        preview: 'bg-gradient-to-r from-amber-500 to-orange-600',
+        border: 'border-amber-200 dark:border-amber-800 hover:border-amber-400',
+        gradient: 'from-amber-700 via-orange-800 to-slate-900',
+        preview: 'bg-gradient-to-r from-amber-600 to-orange-600',
         name: 'Amber Discovery'
     },
     violet: {
-        bg: 'bg-violet-50/50 dark:bg-violet-950/10',
+        bg: 'bg-violet-50 dark:bg-violet-950/20',
         text: 'text-violet-700 dark:text-violet-300',
-        border: 'border-violet-100 dark:border-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700',
-        gradient: 'from-violet-600 via-purple-700 to-violet-900',
-        preview: 'bg-gradient-to-r from-violet-500 to-purple-600',
+        border: 'border-violet-200 dark:border-violet-800 hover:border-violet-400',
+        gradient: 'from-violet-700 via-purple-800 to-slate-900',
+        preview: 'bg-gradient-to-r from-violet-600 to-purple-600',
         name: 'Violet Tech'
     }
 };
@@ -171,26 +171,26 @@ export default function ResearchWorkspace() {
 
     return (
         <div className="h-[calc(100vh-90px)] flex flex-col space-y-6 animate-in fade-in duration-500">
-            {/* Top Workspace Header (White theme for legibility and visual continuity) */}
-            <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 px-8 py-5 border border-gray-150 dark:border-gray-700/50 shadow-sm flex-shrink-0 flex items-center justify-between">
+            {/* Top Workspace Header (Green theme bar for header) */}
+            <div className="relative overflow-hidden rounded-2xl bg-emerald-800 text-white px-8 py-5 border border-emerald-900 shadow-md flex-shrink-0 flex items-center justify-between">
                 <div className="relative z-10 space-y-1">
                     <div className="flex items-center gap-3">
-                        <Link href="/dashboard/research" className="p-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-150 dark:border-gray-700">
-                            <ArrowLeft size={15} className="text-gray-500 dark:text-gray-400" />
+                        <Link href="/dashboard/research" className="p-1.5 bg-emerald-900/60 hover:bg-emerald-900 text-white rounded-lg transition-colors border border-emerald-700">
+                            <ArrowLeft size={15} />
                         </Link>
-                        <span className={`${theme.bg} ${theme.text} text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider`}>
+                        <span className="bg-emerald-900/80 text-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-emerald-600">
                             {domainName}
                         </span>
-                        <span className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-gray-100 dark:border-gray-700">
+                        <span className="bg-emerald-950/90 text-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border border-emerald-700">
                             {project.status}
                         </span>
                     </div>
-                    <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-1.5">{project.title}</h1>
+                    <h1 className="text-xl font-bold text-white mt-1.5">{project.title}</h1>
                 </div>
                 <div className="relative z-10 flex items-center gap-3">
                     <button 
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-sm transition duration-150"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm transition duration-150 border border-emerald-400"
                     >
                         <UserPlus size={14} />
                         <span>Invite Peer</span>
