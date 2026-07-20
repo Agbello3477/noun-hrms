@@ -465,3 +465,141 @@ export const declineInvite = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+// 11. Edit Workspace (Title, Synopsis/Abstract, Domain)
+export const updateProject = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { title, abstract, domain } = req.body;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        const updated = await prisma.researchProject.update({
+            where: { id },
+            data: {
+                ...(title ? { title } : {}),
+                ...(abstract !== undefined ? { abstract } : {}),
+                ...(domain ? { domain } : {})
+            }
+        });
+
+        res.json(updated);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 12. Mark Workspace Status (COMPLETED / ONGOING / DRAFT)
+export const updateProjectStatus = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        const updated = await prisma.researchProject.update({
+            where: { id },
+            data: { status: status || 'COMPLETED' }
+        });
+
+        res.json(updated);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 13. Delete Workspace
+export const deleteProject = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        await prisma.researchProject.delete({ where: { id } });
+
+        res.json({ message: 'Workspace deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 14. Remove Collaborator / Uninvite
+export const removeMember = async (req: Request, res: Response) => {
+    try {
+        const { id, memberId } = req.params;
+        const user = (req as any).user;
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        await prisma.projectMember.delete({ where: { id: memberId } });
+
+        res.json({ message: 'Collaborator removed successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 15. Cancel Pending Invite
+export const cancelInvite = async (req: Request, res: Response) => {
+    try {
+        const { inviteId } = req.params;
+        const user = (req as any).user;
+
+        const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
+        if (!invite) return res.status(404).json({ message: 'Invite not found' });
+
+        await prisma.projectInvite.delete({ where: { id: inviteId } });
+
+        res.json({ message: 'Invite cancelled' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};

@@ -17,7 +17,20 @@ const ProjectChat = dynamic(() => import('@/components/research/ProjectChat'), {
     ssr: false,
     loading: () => <ChatSkeleton />
 });
-import { FileText, Users, Download, Upload, UserPlus, FileUp, ArrowLeft, Plus, FolderSync, Sparkles } from 'lucide-react';
+import { 
+    FileText, 
+    Users, 
+    Download, 
+    UserPlus, 
+    FileUp, 
+    ArrowLeft, 
+    Sparkles,
+    Edit3,
+    CheckCircle2,
+    Trash2,
+    UserX,
+    Clock
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function ResearchWorkspace() {
@@ -26,9 +39,16 @@ export default function ResearchWorkspace() {
     const [project, setProject] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    
+    // Modals & form state
     const [showInviteModal, setShowInviteModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
     const [inviteeId, setInviteeId] = useState('');
     const [allStaff, setAllStaff] = useState<any[]>([]);
+
+    // Edit workspace state
+    const [editTitle, setEditTitle] = useState('');
+    const [editAbstract, setEditAbstract] = useState('');
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
@@ -44,6 +64,10 @@ export default function ResearchWorkspace() {
         try {
             const res = await api.get(`/api/research/${id}`);
             setProject(res.data);
+            if (res.data) {
+                setEditTitle(res.data.title || '');
+                setEditAbstract(res.data.abstract || '');
+            }
         } catch (err: any) {
             console.error(err);
             if (err.response?.status === 403) {
@@ -94,6 +118,7 @@ export default function ResearchWorkspace() {
         }
     };
 
+    // 1. Invite Peer
     const handleInvite = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -101,8 +126,64 @@ export default function ResearchWorkspace() {
             alert('Invite sent successfully');
             setShowInviteModal(false);
             setInviteeId('');
+            fetchProject();
         } catch (err: any) {
             alert(err.response?.data?.message || 'Failed to send invite');
+        }
+    };
+
+    // 2. Uninvite / Remove Collaborator
+    const handleRemoveMember = async (memberId: string, name: string) => {
+        if (!confirm(`Are you sure you want to remove ${name} from this workspace?`)) return;
+        try {
+            await api.delete(`/api/research/${id}/member/${memberId}`);
+            alert('Collaborator removed successfully');
+            fetchProject();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to remove collaborator');
+        }
+    };
+
+    // 3. Edit Workspace
+    const handleEditWorkspace = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.put(`/api/research/${id}`, {
+                title: editTitle,
+                abstract: editAbstract
+            });
+            alert('Workspace updated successfully');
+            setShowEditModal(false);
+            fetchProject();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to update workspace');
+        }
+    };
+
+    // 4. Mark Workspace as Complete / Toggle Status
+    const handleToggleStatus = async () => {
+        const newStatus = project.status === 'COMPLETED' ? 'ONGOING' : 'COMPLETED';
+        const label = newStatus === 'COMPLETED' ? 'COMPLETED' : 'ONGOING';
+        if (!confirm(`Mark this research workspace as ${label}?`)) return;
+
+        try {
+            await api.put(`/api/research/${id}/status`, { status: newStatus });
+            alert(`Workspace status updated to ${label}`);
+            fetchProject();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to update status');
+        }
+    };
+
+    // 5. Delete Workspace
+    const handleDeleteWorkspace = async () => {
+        if (!confirm('WARNING: Are you sure you want to permanently delete this research workspace? All content and files will be deleted.')) return;
+        try {
+            await api.delete(`/api/research/${id}`);
+            alert('Workspace deleted successfully');
+            router.push('/dashboard/research');
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to delete workspace');
         }
     };
 
@@ -122,7 +203,7 @@ export default function ResearchWorkspace() {
             {/* Top Workspace Header (Vibrant NOUN Green #006533 bar) */}
             <div 
                 style={{ backgroundColor: '#006533' }}
-                className="relative overflow-hidden rounded-2xl text-white px-8 py-5 border border-emerald-900 shadow-md flex-shrink-0 flex items-center justify-between"
+                className="relative overflow-hidden rounded-2xl text-white px-8 py-5 border border-emerald-900 shadow-md flex-shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
                 <div className="relative z-10 space-y-1">
                     <div className="flex items-center gap-3">
@@ -132,19 +213,59 @@ export default function ResearchWorkspace() {
                         <span className="bg-emerald-900/90 text-emerald-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-700 shadow-sm">
                             {domainName}
                         </span>
-                        <span className="bg-emerald-950/90 text-emerald-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-800 shadow-sm">
-                            {project.status || 'DRAFT'}
+                        <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border shadow-sm ${
+                            project.status === 'COMPLETED' ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-emerald-950/90 text-emerald-200 border-emerald-800'
+                        }`}>
+                            Status: {project.status || 'DRAFT'}
                         </span>
                     </div>
                     <h1 className="text-2xl font-black text-white mt-1.5 tracking-tight">{project.title}</h1>
                 </div>
-                <div className="relative z-10 flex items-center gap-3">
+
+                {/* Workspace Action Toolbar */}
+                <div className="relative z-10 flex items-center flex-wrap gap-2">
+                    {/* Invite Peer */}
                     <button 
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md transition duration-150 border border-emerald-400"
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md transition duration-150 border border-emerald-400"
+                        title="Invite Peer Researcher"
                     >
-                        <UserPlus size={15} />
+                        <UserPlus size={14} />
                         <span>Invite Peer</span>
+                    </button>
+
+                    {/* Edit Workspace */}
+                    <button 
+                        onClick={() => setShowEditModal(true)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-900/80 hover:bg-emerald-900 text-emerald-100 rounded-xl text-xs font-bold shadow-md transition duration-150 border border-emerald-700"
+                        title="Edit Workspace Title & Synopsis"
+                    >
+                        <Edit3 size={14} />
+                        <span>Edit</span>
+                    </button>
+
+                    {/* Mark as Complete */}
+                    <button 
+                        onClick={handleToggleStatus}
+                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-md transition duration-150 border ${
+                            project.status === 'COMPLETED'
+                                ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 border-amber-300'
+                                : 'bg-teal-500 hover:bg-teal-600 text-white border-teal-400'
+                        }`}
+                        title="Mark Workspace Status"
+                    >
+                        <CheckCircle2 size={14} />
+                        <span>{project.status === 'COMPLETED' ? 'Reopen Project' : 'Mark Complete'}</span>
+                    </button>
+
+                    {/* Delete Workspace */}
+                    <button 
+                        onClick={handleDeleteWorkspace}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md transition duration-150 border border-red-500"
+                        title="Delete Workspace Permanently"
+                    >
+                        <Trash2 size={14} />
+                        <span>Delete</span>
                     </button>
                 </div>
             </div>
@@ -155,11 +276,16 @@ export default function ResearchWorkspace() {
                 {/* COLUMN 1: Files & Team (Width: 25%) */}
                 <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-0 overflow-hidden">
                     {/* Abstract Header */}
-                    <div className="p-5 border-b border-slate-200 bg-slate-50 flex-shrink-0">
-                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
-                        <p className="text-xs text-slate-600 leading-relaxed line-clamp-3" title={project.abstract}>
-                            {project.abstract || 'No project description loaded.'}
-                        </p>
+                    <div className="p-5 border-b border-slate-200 bg-slate-50 flex-shrink-0 flex justify-between items-start gap-2">
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
+                            <p className="text-xs text-slate-600 leading-relaxed line-clamp-4" title={project.abstract}>
+                                {project.abstract || 'No project description loaded.'}
+                            </p>
+                        </div>
+                        <button onClick={() => setShowEditModal(true)} className="p-1 text-slate-400 hover:text-emerald-700">
+                            <Edit3 size={13} />
+                        </button>
                     </div>
 
                     {/* Scrollable Members & Files */}
@@ -168,23 +294,41 @@ export default function ResearchWorkspace() {
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
                                 <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center">
-                                    <Users size={14} className="mr-1.5 text-emerald-700" /> Core Team
+                                    <Users size={14} className="mr-1.5 text-emerald-700" /> Core Team ({project.members?.length || 0})
                                 </h3>
+                                <button onClick={() => setShowInviteModal(true)} className="p-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                                    <UserPlus size={12} /> Invite
+                                </button>
                             </div>
                             <div className="space-y-2.5">
-                                {project.members?.map((m: any) => (
-                                    <div key={m.id} className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-slate-50 transition">
-                                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-sm">
-                                            {m.staff?.surname?.[0] || 'U'}
+                                {project.members?.map((m: any) => {
+                                    const name = m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Staff Member';
+                                    const isOwner = m.role === 'OWNER';
+                                    return (
+                                        <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition group">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-sm flex-shrink-0">
+                                                    {m.staff?.surname?.[0] || 'U'}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-bold text-slate-800 truncate" title={name}>
+                                                        {name}
+                                                    </p>
+                                                    <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">{m.role}</p>
+                                                </div>
+                                            </div>
+                                            {!isOwner && (
+                                                <button
+                                                    onClick={() => handleRemoveMember(m.id, name)}
+                                                    className="p-1 text-slate-300 hover:text-red-600 rounded transition opacity-0 group-hover:opacity-100"
+                                                    title="Uninvite / Remove Collaborator"
+                                                >
+                                                    <UserX size={14} />
+                                                </button>
+                                            )}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-slate-800 truncate">
-                                                {m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Staff Member'}
-                                            </p>
-                                            <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">{m.role}</p>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -271,6 +415,50 @@ export default function ResearchWorkspace() {
                             <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowInviteModal(false)} className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
                                 <button type="submit" style={{ backgroundColor: '#006533' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Send Invite</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Workspace Modal */}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md space-y-4 animate-in scale-in-95 duration-200">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                                <Edit3 size={18} className="text-emerald-700" />
+                                Edit Workspace Details
+                            </h2>
+                            <p className="text-xs text-slate-500">Update research project title and abstract synopsis.</p>
+                        </div>
+                        
+                        <form onSubmit={handleEditWorkspace} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Project Title</label>
+                                <input 
+                                    type="text"
+                                    required
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Project Synopsis / Abstract</label>
+                                <textarea 
+                                    rows={4}
+                                    value={editAbstract}
+                                    onChange={(e) => setEditAbstract(e.target.value)}
+                                    placeholder="Enter abstract..."
+                                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none"
+                                />
+                            </div>
+                            
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                                <button type="submit" style={{ backgroundColor: '#006533' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Save Changes</button>
                             </div>
                         </form>
                     </div>

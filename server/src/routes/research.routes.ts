@@ -11,7 +11,12 @@ import {
     uploadFile,
     upload,
     getDocument,
-    saveDocument
+    saveDocument,
+    updateProject,
+    updateProjectStatus,
+    deleteProject,
+    removeMember,
+    cancelInvite
 } from '../controllers/research.controller';
 
 const router = Router();
@@ -22,12 +27,17 @@ router.use(verifyToken as any);
 router.get('/invites/mine', getMyInvites);
 router.post('/invite/:inviteId/accept', acceptInvite);
 router.post('/invite/:inviteId/decline', declineInvite);
+router.delete('/invite/:inviteId', cancelInvite);
 
 // Projects
 router.post('/', createProject);
 router.get('/', getMyProjects);
 router.get('/:id', getProjectDetails);
+router.put('/:id', updateProject);
+router.put('/:id/status', updateProjectStatus);
+router.delete('/:id', deleteProject);
 router.post('/:id/invite', sendInvite);
+router.delete('/:id/member/:memberId', removeMember);
 
 // Files
 router.post('/:id/files', upload.single('file'), uploadFile);
