@@ -58,6 +58,34 @@ export const getAllStaff = async (req: Request, res: Response) => {
 
         let profileFilters: any = {};
 
+        // Role Scoping & Placement Boundaries
+        // @ts-ignore
+        const requesterId = req.user?.id;
+        // @ts-ignore
+        const requesterRole = req.user?.role;
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(requesterRole as any);
+
+        if (!isHQAdmin) {
+            if ([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER].includes(requesterRole as any)) {
+                const headProfile = await prisma.staffProfile.findUnique({
+                    where: { userId: requesterId },
+                    select: { unitId: true, centerId: true }
+                });
+
+                if (headProfile) {
+                    if (requesterRole === Role.STUDY_CENTER_MANAGER && headProfile.centerId) {
+                        profileFilters.centerId = headProfile.centerId;
+                    } else if ((requesterRole === Role.UNIT_HEAD || requesterRole === Role.UNIT_ADMIN) && headProfile.unitId) {
+                        profileFilters.unitId = headProfile.unitId;
+                    }
+                } else {
+                    return res.json([]);
+                }
+            } else {
+                return res.status(403).json({ message: 'Unauthorized: You do not have permission to list staff members.' });
+            }
+        }
+
         if (statuses.length > 0) {
             profileFilters.status = { in: statuses as any };
         } else {

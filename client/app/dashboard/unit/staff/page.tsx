@@ -6,6 +6,8 @@ import api from '../../../../lib/api';
 import AddStaffModal from '../../../../components/dashboard/AddStaffModal';
 import Pagination from '../../../../components/ui/Pagination';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../../../hooks/useAuth';
 
 interface Staff {
     id: string;
@@ -37,6 +39,9 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function UnitStaffPage() {
+    const router = useRouter();
+    const { user } = useAuth();
+
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +49,12 @@ export default function UnitStaffPage() {
     const [showModal, setShowModal] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+
+    useEffect(() => {
+        if (user && !['UNIT_HEAD', 'UNIT_ADMIN', 'STUDY_CENTER_MANAGER', 'HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(user.role)) {
+            router.push('/dashboard/access-denied');
+        }
+    }, [user, router]);
 
     const fetchUnitStaff = async () => {
         try {

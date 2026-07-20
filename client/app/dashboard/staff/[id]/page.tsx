@@ -147,6 +147,24 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             setStaff(staffData);
             setOrgData(orgRes.data || { centers: [], units: [] });
 
+            // Authorization check
+            if (currentUser && staffData) {
+                const isSelf = currentUser.id === staffData.id || (currentUser.staffProfile?.id && currentUser.staffProfile.id === staffData.staffProfile?.id);
+                const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser.role || '');
+                const isManagerOfStaff = 
+                    ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN'].includes(currentUser.role || '') && 
+                    currentUser.staffProfile && staffData.staffProfile &&
+                    (
+                        (currentUser.staffProfile.unitId && staffData.staffProfile.unitId === currentUser.staffProfile.unitId) ||
+                        (currentUser.staffProfile.centerId && staffData.staffProfile.centerId === currentUser.staffProfile.centerId)
+                    );
+
+                if (!isSelf && !isHrAdmin && !isManagerOfStaff) {
+                    router.push('/dashboard/access-denied');
+                    return;
+                }
+            }
+
             // Initialize administrative form state
             if (staffData) {
                 const role = staffData.role;
@@ -187,8 +205,11 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditDateOfFirstAppointment(staffData.staffProfile?.dateOfFirstAppointment ? staffData.staffProfile.dateOfFirstAppointment.substring(0, 10) : '');
                 setEditStatus(staffData.staffProfile?.status || 'ACTIVE');
             }
-        } catch (error) {
-            console.error('Failed to fetch profile info:', error);
+        } catch (err: any) {
+            console.error('Failed to load staff details:', err);
+            if (err.response?.status === 403 || err.response?.status === 401) {
+                router.push('/dashboard/access-denied');
+            }
         } finally {
             setLoading(false);
         }

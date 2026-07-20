@@ -21,6 +21,8 @@ import {
 import api from '../../../lib/api';
 import AddStaffModal from '../../../components/dashboard/AddStaffModal';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface Staff {
     id: string;
@@ -49,10 +51,19 @@ interface OrganizationData {
 }
 
 export default function StaffPage() {
+    const router = useRouter();
+    const { user } = useAuth();
+
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+
+    useEffect(() => {
+        if (user && !['HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(user.role)) {
+            router.push('/dashboard/access-denied');
+        }
+    }, [user, router]);
     
     // View state & filters
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
