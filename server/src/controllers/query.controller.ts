@@ -71,10 +71,11 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
         });
 
         // 4. Notify Staff
+        const issuerLabel = isHQAdmin ? 'Registry' : ([Role.STUDY_CENTER_MANAGER].includes(issuerRole as any) ? 'Study Center Director' : 'Unit Head');
         await notifyUser(
             staff.userId,
             'New Query Received',
-            `You have received a pending query: "${title}". Please respond immediately.`,
+            `You have received a pending query from ${issuerLabel}: "${title}". Please respond immediately.`,
             'WARNING',
             '/dashboard/queries'
         );

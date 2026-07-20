@@ -27,6 +27,21 @@ interface Query {
     copyHR?: boolean;
 }
 
+const getIssuerDisplayName = (issuedBy?: any) => {
+    if (!issuedBy) return 'Registry';
+    const role = issuedBy.role;
+    if (['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role)) {
+        return 'Registry';
+    }
+    if (['UNIT_HEAD', 'UNIT_ADMIN', 'DIRECTOR', 'DEAN'].includes(role)) {
+        return 'Unit Head';
+    }
+    if (role === 'STUDY_CENTER_MANAGER') {
+        return 'Study Center Director';
+    }
+    return 'Registry';
+};
+
 export default function RegistryQueriesPage() {
     const { user } = useAuth();
     const isHrAdmin = ['HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(user?.role || '');
@@ -215,6 +230,7 @@ export default function RegistryQueriesPage() {
                     <div class="meta">
                         <div><strong>Staff Name:</strong> ${viewQuery.staff?.user?.name}</div>
                         <div><strong>Email:</strong> ${viewQuery.staff?.user?.email}</div>
+                        <div><strong>Issued By:</strong> ${getIssuerDisplayName(viewQuery.issuedBy)}</div>
                         <div><strong>Date Issued:</strong> ${new Date(viewQuery.createdAt).toLocaleString()}</div>
                         <div><strong>Reference ID:</strong> ${viewQuery.id.substring(0, 8)}</div>
                     </div>
@@ -377,7 +393,7 @@ export default function RegistryQueriesPage() {
                                     className="text-sm text-gray-800 prose max-w-none leading-relaxed" 
                                 />
                                 <p className="text-xs text-gray-500 mt-4 pt-4 border-t border-red-100">
-                                    Issued on: {new Date(viewQuery.createdAt).toLocaleString()}
+                                    Issued on: {new Date(viewQuery.createdAt).toLocaleString()} by <span className="font-semibold text-gray-700">{getIssuerDisplayName(viewQuery.issuedBy)}</span>
                                 </p>
                             </div>
 

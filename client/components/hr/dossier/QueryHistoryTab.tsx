@@ -4,6 +4,21 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import api from '../../../lib/api';
 
+const getIssuerDisplayName = (issuedBy?: any) => {
+    if (!issuedBy) return 'Registry';
+    const role = issuedBy.role;
+    if (['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role)) {
+        return 'Registry';
+    }
+    if (['UNIT_HEAD', 'UNIT_ADMIN', 'DIRECTOR', 'DEAN'].includes(role)) {
+        return 'Unit Head';
+    }
+    if (role === 'STUDY_CENTER_MANAGER') {
+        return 'Study Center Director';
+    }
+    return 'Registry';
+};
+
 export default function QueryHistoryTab({ staffId }: { staffId: string }) {
     const [queries, setQueries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -51,7 +66,7 @@ export default function QueryHistoryTab({ staffId }: { staffId: string }) {
                                             <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-750 border border-indigo-150 rounded">Internal</span>
                                         )}
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">Issued: {new Date(q.createdAt).toLocaleDateString()} by {q.issuedBy?.name}</p>
+                                    <p className="text-xs text-gray-500 mt-1">Issued: {new Date(q.createdAt).toLocaleDateString()} by {getIssuerDisplayName(q.issuedBy)}</p>
                                 </div>
                                 <span className={`px-2 py-1 text-xs font-bold rounded ${q.status === 'OPEN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
                                     {q.status}

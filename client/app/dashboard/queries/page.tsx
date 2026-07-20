@@ -32,6 +32,21 @@ export default function MyQueriesPage() {
     const [queries, setQueries] = useState<Query[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const getIssuerDisplayName = (issuedBy?: any) => {
+        if (!issuedBy) return 'Registry';
+        const role = issuedBy.role;
+        if (['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role)) {
+            return 'Registry';
+        }
+        if (['UNIT_HEAD', 'UNIT_ADMIN', 'DIRECTOR', 'DEAN'].includes(role)) {
+            return 'Unit Head';
+        }
+        if (role === 'STUDY_CENTER_MANAGER') {
+            return 'Study Center Director';
+        }
+        return 'Registry';
+    };
+
     // Reply State
     const [replyContent, setReplyContent] = useState('');
     const [replyFile, setReplyFile] = useState<File | null>(null);
@@ -100,7 +115,7 @@ export default function MyQueriesPage() {
                                             <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-150 text-indigo-850 border border-indigo-250 rounded">Internal Only</span>
                                         )}
                                     </h3>
-                                    <p className="text-xs text-red-700 mb-2">Issued by {query.issuedBy?.name || 'HR'}</p>
+                                    <p className="text-xs text-red-700 mb-2 font-medium">Issued by {getIssuerDisplayName(query.issuedBy)}</p>
                                     <div className="text-red-800 text-sm">
                                         <div dangerouslySetInnerHTML={{ __html: query.content || query.description }} className="prose max-w-none text-red-950" />
                                     </div>
