@@ -152,9 +152,10 @@ export default function RegistryQueriesPage() {
             setQueries(res.data);
 
             alert('Query Issued Successfully');
-        } catch (error) {
-            console.error(error);
-            alert('Failed to issue query.');
+        } catch (error: any) {
+            console.error('Issue Query Error:', error);
+            const msg = error.response?.data?.message || error.message || 'Failed to issue query.';
+            alert(`Failed to issue query: ${msg}`);
         } finally {
             setIsSubmitting(false);
         }
