@@ -108,6 +108,7 @@ export default function ClinicDashboard() {
         else if (activeRole === 'CLINIC_LAB_SCIENTIST') statusFilter = 'LAB_REQUESTED';
         else if (activeRole === 'CLINIC_PHARMACIST') statusFilter = 'PHARMACY_REQUESTED';
         else if (activeRole === 'CLINIC_NURSE') statusFilter = 'TRIAGE';
+        // CLINIC_HEAD sees all encounters — no filter
 
         const url = statusFilter
           ? `/api/clinic/encounters?status=${statusFilter}`
@@ -349,7 +350,7 @@ export default function ClinicDashboard() {
           <Search size={16} /> Patient Files
         </button>
 
-        {['CLINIC_NURSE', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+        {['CLINIC_HEAD', 'CLINIC_NURSE', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
           <button
             onClick={() => setActiveTab('triage')}
             className={`py-2.5 px-4 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${
@@ -360,7 +361,7 @@ export default function ClinicDashboard() {
           </button>
         )}
 
-        {['CLINIC_DOCTOR', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+        {['CLINIC_HEAD', 'CLINIC_DOCTOR', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
           <button
             onClick={() => {
               setActiveTab('consultation');
@@ -375,7 +376,7 @@ export default function ClinicDashboard() {
           </button>
         )}
 
-        {['CLINIC_LAB_SCIENTIST', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+        {['CLINIC_HEAD', 'CLINIC_LAB_SCIENTIST', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
           <button
             onClick={() => {
               setActiveTab('laboratory');
@@ -389,7 +390,7 @@ export default function ClinicDashboard() {
           </button>
         )}
 
-        {['CLINIC_PHARMACIST', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+        {['CLINIC_HEAD', 'CLINIC_PHARMACIST', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
           <button
             onClick={() => {
               setActiveTab('pharmacy');

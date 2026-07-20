@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Users, Clock, BookOpen, Layers, Sparkles, Check, ChevronRight } from 'lucide-react';
+import { Plus, FolderOpen, Users, Clock, BookOpen, Layers, Sparkles, Check, ChevronRight, Bell, X, UserCheck } from 'lucide-react';
 import api from '@/lib/api';
 
 const THEMES: Record<string, { bg: string; text: string; border: string; gradient: string; preview: string; name: string }> = {
@@ -57,16 +57,39 @@ const getProjectTheme = (domainField: string) => {
     return { theme: THEMES[colorKey] || THEMES.indigo, name, colorKey };
 };
 
+// Avatar bubble showing a collaborator's initials
+function MemberAvatar({ name, index }: { name: string; index: number }) {
+    const colors = [
+        'bg-emerald-500', 'bg-indigo-500', 'bg-amber-500',
+        'bg-rose-500', 'bg-violet-500', 'bg-cyan-500'
+    ];
+    const initials = name
+        ? name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+        : '?';
+    return (
+        <div
+            title={name}
+            style={{ zIndex: 10 - index, marginLeft: index === 0 ? 0 : '-8px' }}
+            className={`relative w-7 h-7 rounded-full ${colors[index % colors.length]} text-white text-[10px] font-black flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-white/50`}
+        >
+            {initials}
+        </div>
+    );
+}
+
 export default function ResearchDashboard() {
     const [projects, setProjects] = useState<any[]>([]);
+    const [invites, setInvites] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [formData, setFormData] = useState({ title: '', abstract: '', domain: '' });
     const [selectedColor, setSelectedColor] = useState('indigo');
+    const [respondingId, setRespondingId] = useState<string | null>(null);
     const router = useRouter();
 
     useEffect(() => {
         fetchProjects();
+        fetchInvites();
     }, []);
 
     const fetchProjects = async () => {
@@ -77,6 +100,40 @@ export default function ResearchDashboard() {
             console.error('Failed to fetch projects', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchInvites = async () => {
+        try {
+            const res = await api.get('/api/research/invites/mine');
+            setInvites(res.data);
+        } catch (err) {
+            // Non-fatal — invites panel just won't show
+        }
+    };
+
+    const handleAccept = async (inviteId: string) => {
+        setRespondingId(inviteId);
+        try {
+            await api.post(`/api/research/invite/${inviteId}/accept`);
+            setInvites(prev => prev.filter(i => i.id !== inviteId));
+            await fetchProjects(); // Refresh project list so the accepted project appears
+        } catch (err) {
+            console.error('Failed to accept invite', err);
+        } finally {
+            setRespondingId(null);
+        }
+    };
+
+    const handleDecline = async (inviteId: string) => {
+        setRespondingId(inviteId);
+        try {
+            await api.post(`/api/research/invite/${inviteId}/decline`);
+            setInvites(prev => prev.filter(i => i.id !== inviteId));
+        } catch (err) {
+            console.error('Failed to decline invite', err);
+        } finally {
+            setRespondingId(null);
         }
     };
 
@@ -121,10 +178,58 @@ export default function ResearchDashboard() {
                 <div className="absolute -bottom-16 left-1/3 h-48 w-48 rounded-full bg-white/5 blur-3xl"></div>
             </div>
 
+            {/* ── Pending Invitations Panel ─────────────────────────────────── */}
+            {invites.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3 shadow-sm animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2 mb-1">
+                        <Bell size={18} className="text-amber-600 animate-pulse" />
+                        <h2 className="text-sm font-black text-amber-800 uppercase tracking-wider">
+                            Pending Research Invitations ({invites.length})
+                        </h2>
+                    </div>
+                    <div className="space-y-2">
+                        {invites.map(invite => (
+                            <div
+                                key={invite.id}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-xl border border-amber-100 px-4 py-3 shadow-sm"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-gray-900 truncate">
+                                        📁 {invite.project?.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                        Invited by <span className="font-semibold">{invite.inviter?.name || 'a colleague'}</span>
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <button
+                                        onClick={() => handleAccept(invite.id)}
+                                        disabled={respondingId === invite.id}
+                                        className="flex items-center gap-1.5 px-4 py-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg transition disabled:opacity-50"
+                                    >
+                                        <UserCheck size={13} />
+                                        Accept
+                                    </button>
+                                    <button
+                                        onClick={() => handleDecline(invite.id)}
+                                        disabled={respondingId === invite.id}
+                                        className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition disabled:opacity-50"
+                                    >
+                                        <X size={13} />
+                                        Decline
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Project Grid ───────────────────────────────────────────────── */}
             {loading ? (
                 <div className="flex justify-center items-center py-24">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            </div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                </div>
             ) : projects.length === 0 ? (
                 <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700/50 shadow-sm p-16 text-center max-w-2xl mx-auto space-y-6 animate-in zoom-in-95 duration-300">
                     <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto shadow-inner">
@@ -133,7 +238,7 @@ export default function ResearchDashboard() {
                     <div className="space-y-2">
                         <h3 className="text-2xl font-black text-gray-900 dark:text-white">No active projects found</h3>
                         <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-sm">
-                            You are not currently registered as a collaborator on any research project page. Get started by initializing your own workspace.
+                            You are not currently registered as a collaborator on any research project. Get started by initializing your own workspace or accepting an invitation above.
                         </p>
                     </div>
                     <button
@@ -146,7 +251,13 @@ export default function ResearchDashboard() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {projects.map(project => {
-                        const { theme, name, colorKey } = getProjectTheme(project.domain);
+                        const { theme, name } = getProjectTheme(project.domain);
+                        // Build member list for avatar stack (show up to 5)
+                        const memberNames: string[] = (project.members || [])
+                            .slice(0, 5)
+                            .map((m: any) => m.staff?.user?.name || m.staff?.surname || '?');
+                        const extraCount = Math.max(0, (project._count?.members || 0) - 5);
+
                         return (
                             <Link key={project.id} href={`/dashboard/research/${project.id}`}>
                                 <div className={`bg-white dark:bg-gray-800 rounded-3xl border ${theme.border} p-6 shadow-sm hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full group relative overflow-hidden`}>
@@ -175,20 +286,37 @@ export default function ResearchDashboard() {
                                         {project.abstract || 'No abstract provided. Expand to open files, collaborate on document drafts, and coordinate with active team members.'}
                                     </p>
                                     
-                                    <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 pt-4 border-t border-gray-100 dark:border-gray-700/50 font-medium">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="flex items-center space-x-1.5 hover:text-gray-600 transition" title="Team members">
-                                                <Users size={15} />
-                                                <span>{project._count.members}</span>
+                                    {/* Footer: Avatars + Docs + Date */}
+                                    <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700/50">
+                                        {/* Member Avatar Stack */}
+                                        <div className="flex items-center">
+                                            <div className="flex items-center">
+                                                {memberNames.map((n, i) => (
+                                                    <MemberAvatar key={i} name={n} index={i} />
+                                                ))}
+                                                {extraCount > 0 && (
+                                                    <div
+                                                        style={{ zIndex: 0, marginLeft: '-8px' }}
+                                                        className="relative w-7 h-7 rounded-full bg-gray-300 text-gray-700 text-[10px] font-black flex items-center justify-center border-2 border-white"
+                                                    >
+                                                        +{extraCount}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="flex items-center space-x-1.5 hover:text-gray-600 transition" title="Documents count">
-                                                <FolderOpen size={15} />
-                                                <span>{project._count.documents} Docs</span>
-                                            </div>
+                                            <span className="ml-2 text-xs text-gray-400 font-medium">
+                                                {project._count?.members || 0} member{project._count?.members !== 1 ? 's' : ''}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center space-x-1 hover:text-gray-600 transition">
-                                            <Clock size={15} />
-                                            <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
+
+                                        <div className="flex items-center gap-3 text-xs text-gray-400">
+                                            <span className="flex items-center gap-1">
+                                                <FolderOpen size={13} />
+                                                {project._count?.documents || 0} docs
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <Clock size={13} />
+                                                {new Date(project.updatedAt).toLocaleDateString()}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -261,7 +389,7 @@ export default function ResearchDashboard() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Abstract & Objectives</label>
+                                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Abstract &amp; Objectives</label>
                                 <textarea
                                     required
                                     placeholder="Provide a comprehensive synopsis of the research project, objectives, methodologies, and expected academic outputs."

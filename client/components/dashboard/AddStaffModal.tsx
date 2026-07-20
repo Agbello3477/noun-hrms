@@ -430,7 +430,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     <option value="BURSARY">Bursary</option>
                                     <option value="AUDIT">Audit</option>
                                     <option value="CLINIC_HEAD">Head of Clinic</option>
-                                    <option value="CLINIC_DOCTOR">Doctor</option>
+                                    <option value="CLINIC_DOCTOR">Medical Doctor (M.D. / M.B.B.S.)</option>
                                     <option value="CLINIC_NURSE">Nurse</option>
                                     <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
                                     <option value="SECURITY_HEAD">Head of Security</option>

@@ -75,7 +75,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isVC || isSuperUser || isAdmin;
 
     // Clinic & Security Access checks
-    const isClinic = ['CLINIC_NURSE', 'CLINIC_DOCTOR', 'CLINIC_LAB_SCIENTIST', 'CLINIC_PHARMACIST'].includes(role || '') || isAdmin;
+    const isClinic = ['CLINIC_HEAD', 'CLINIC_NURSE', 'CLINIC_DOCTOR', 'CLINIC_LAB_SCIENTIST', 'CLINIC_PHARMACIST'].includes(role || '') || isAdmin;
     const isSecurity = ['SECURITY_HEAD', 'SECURITY_OFFICER'].includes(role || '') || isAdmin || isVC;
 
     return (

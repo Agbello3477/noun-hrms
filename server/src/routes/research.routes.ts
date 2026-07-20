@@ -5,7 +5,9 @@ import {
     getMyProjects, 
     getProjectDetails, 
     sendInvite, 
-    acceptInvite, 
+    acceptInvite,
+    declineInvite,
+    getMyInvites,
     uploadFile,
     upload,
     getDocument,
@@ -22,8 +24,10 @@ router.get('/', getMyProjects);
 router.get('/:id', getProjectDetails);
 
 // Invites
+router.get('/invites/mine', getMyInvites);
 router.post('/:id/invite', sendInvite);
 router.post('/invite/:inviteId/accept', acceptInvite);
+router.post('/invite/:inviteId/decline', declineInvite);
 
 // Files
 router.post('/:id/files', upload.single('file'), uploadFile);

@@ -3,6 +3,7 @@ import prisma from '../prisma';
 import multer from 'multer';
 import path from 'path';
 import { sendEmail } from '../services/email.service';
+import { notifyUser } from './notification.controller';
 
 // Multer Config for Safe Uploads
 const storage = multer.diskStorage({
@@ -221,6 +222,23 @@ export const sendInvite = async (req: Request, res: Response) => {
             console.error('[RESEARCH] Failed to send invite email (non-fatal):', emailErr);
         }
 
+        // ── In-App Notification to Invitee ────────────────────────────────
+        try {
+            const project = await prisma.researchProject.findUnique({ where: { id }, select: { title: true } });
+            const inviter = await prisma.user.findUnique({ where: { id: user.id }, select: { name: true } });
+            if (project) {
+                await notifyUser(
+                    inviteeId,
+                    '📨 Research Collaboration Invite',
+                    `${inviter?.name || 'A colleague'} has invited you to collaborate on: "${project.title}". Visit your Research Forum to accept.`,
+                    'INFO',
+                    '/dashboard/research'
+                );
+            }
+        } catch (notifErr) {
+            console.error('[RESEARCH] Failed to create in-app notification (non-fatal):', notifErr);
+        }
+
         res.json({ message: 'Invite sent', invite });
     } catch (err) {
         console.error(err);
@@ -372,3 +390,46 @@ export const saveDocument = async (req: Request, res: Response) => {
     }
 };
 
+// 9. Get My Pending Invites
+export const getMyInvites = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+
+        const invites = await prisma.projectInvite.findMany({
+            where: { inviteeId: user.id, status: 'PENDING' },
+            include: {
+                project: { select: { id: true, title: true, domain: true, status: true } },
+                inviter: { select: { name: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json(invites);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 10. Decline Invite
+export const declineInvite = async (req: Request, res: Response) => {
+    try {
+        const { inviteId } = req.params;
+        const user = (req as any).user;
+
+        const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
+        if (!invite || invite.inviteeId !== user.id) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        await prisma.projectInvite.update({
+            where: { id: inviteId },
+            data: { status: 'DECLINED' }
+        });
+
+        res.json({ message: 'Invite declined' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};

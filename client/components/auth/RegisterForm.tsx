@@ -158,7 +158,8 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                     <option value="Mr">Mr</option>
                                     <option value="Mrs">Mrs</option>
                                     <option value="Ms">Ms</option>
-                                    <option value="Dr">Dr</option>
+                                    <option value="Dr (Ph.D)">Dr. (Ph.D. - Doctor of Philosophy)</option>
+                                    <option value="Dr (M.D.)">Dr. (M.D. / M.B.B.S. - Medical Doctor)</option>
                                     <option value="Prof">Prof</option>
                                     <option value="Pharm">Pharm.</option>
                                     <option value="Nurse">Nurse</option>
@@ -211,7 +212,7 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                     <option value="BURSARY">Bursary</option>
                                     <option value="AUDIT">Audit</option>
                                     <option value="CLINIC_HEAD">Head of Clinic</option>
-                                    <option value="CLINIC_DOCTOR">Doctor</option>
+                                    <option value="CLINIC_DOCTOR">Medical Doctor (M.D. / M.B.B.S.)</option>
                                     <option value="CLINIC_NURSE">Nurse</option>
                                     <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
                                     <option value="SECURITY_HEAD">Head of Security</option>
