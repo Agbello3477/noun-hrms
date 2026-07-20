@@ -168,7 +168,7 @@ export default function DashboardHome() {
                     createdAt: m.createdAt,
                     color: isDirect 
                         ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
-                        : 'border-nounGreen bg-green-50/40 text-green-700'
+                        : 'border-primary bg-primary/10 text-primary-dark'
                 };
             });
             const fetchedTransfers = (transfersRes.data || []).map((t: any) => ({
@@ -261,7 +261,7 @@ export default function DashboardHome() {
                         createdAt: m.createdAt,
                         color: isDirect 
                             ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
-                            : 'border-nounGreen bg-green-50/40 text-green-700'
+                            : 'border-primary bg-primary/10 text-primary-dark'
                     };
                 });
 
@@ -358,7 +358,7 @@ export default function DashboardHome() {
     if (isLoading || !user) {
         return (
             <div className="flex h-full min-h-[60vh] items-center justify-center">
-                <Loader2 className="h-10 w-10 animate-spin text-nounGreen" />
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
         );
     }
@@ -941,12 +941,12 @@ export default function DashboardHome() {
         return (
             <div className="space-y-6">
                 {/* Welcome Header */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-nounGreen to-green-800 p-8 text-white shadow-xl">
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-dark to-slate-900 p-8 text-white shadow-xl">
                     <div className="relative z-10">
                         <h1 className="text-3xl font-bold tracking-tight mb-2">
                             Welcome back, {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name?.split(' ')[0]}` : user?.name?.split(' ')[0]}!
                         </h1>
-                        <p className="text-green-100 max-w-lg">
+                        <p className="text-slate-200 max-w-lg">
                             Access your digital dossier, download payslips, apply for leave, and manage your academic profile all in one secure location.
                         </p>
                     </div>
@@ -957,7 +957,7 @@ export default function DashboardHome() {
 
                 {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                    <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
                         <div className="mb-4 rounded-full bg-blue-50 p-4 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                             <FileText size={28} />
                         </div>
@@ -965,15 +965,15 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">View personal file</p>
                     </Link>
 
-                    <Link href="/dashboard/payslips" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
-                        <div className="mb-4 rounded-full bg-green-50 p-4 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                    <Link href="/dashboard/payslips" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
+                        <div className="mb-4 rounded-full bg-emerald-50 p-4 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                             <DollarSign size={28} />
                         </div>
                         <h3 className="font-semibold text-gray-800">Payslips</h3>
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
-                    <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                    <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
                         <div className="mb-4 rounded-full bg-purple-50 p-4 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                             <MapPin size={28} />
                         </div>
@@ -981,7 +981,7 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">Apply for time off</p>
                     </Link>
 
-                    <Link href="/dashboard/staff/aper" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-nounGreen/30">
+                    <Link href="/dashboard/staff/aper" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
                         <div className="mb-4 rounded-full bg-orange-50 p-4 text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
                             <ClipboardCheck size={28} />
                         </div>
@@ -995,13 +995,13 @@ export default function DashboardHome() {
                     <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                <Bell size={18} className="text-nounGreen" /> Recent Notifications
+                                <Bell size={18} className="text-primary" /> Recent Notifications
                             </h2>
                         </div>
                         <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
                             {loadingNotifications ? (
                                 <div className="flex justify-center items-center py-8">
-                                    <Loader2 className="animate-spin text-nounGreen" size={24} />
+                                    <Loader2 className="animate-spin text-primary" size={24} />
                                 </div>
                             ) : notifications.length === 0 ? (
                                 <div className="text-center py-8 text-gray-500 text-sm">
@@ -1038,7 +1038,7 @@ export default function DashboardHome() {
                                                     {note.link && (
                                                         <Link
                                                             href={note.link}
-                                                            className="text-xs font-bold text-nounGreen hover:underline inline-flex items-center gap-0.5"
+                                                            className="text-xs font-bold text-primary hover:underline inline-flex items-center gap-0.5"
                                                         >
                                                             View Details <ArrowRight size={10} />
                                                         </Link>
@@ -1082,7 +1082,7 @@ export default function DashboardHome() {
                                 <span className="text-sm font-bold text-gray-900">December 2025</span>
                             </div>
                         </div>
-                        <Link href="/dashboard/profile" className="mt-6 flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-nounGreen border border-nounGreen/30 rounded-lg hover:bg-nounGreen/5 transition-colors">
+                        <Link href="/dashboard/profile" className="mt-6 flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
                             View Full Profile <ArrowRight size={16} />
                         </Link>
                     </div>

@@ -14,6 +14,11 @@ const config: Config = {
                     light: 'var(--color-primary-light, #008040)',
                     dark: 'var(--color-primary-dark, #004d26)',
                 },
+                nounGreen: {
+                    DEFAULT: 'var(--color-primary, #006533)',
+                    light: 'var(--color-primary-light, #008040)',
+                    dark: 'var(--color-primary-dark, #004d26)',
+                },
                 secondary: {
                     DEFAULT: 'var(--color-secondary, #FFCD00)',
                     light: 'var(--color-secondary-light, #FFE066)',
