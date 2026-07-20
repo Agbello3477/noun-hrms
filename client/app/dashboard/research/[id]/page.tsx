@@ -53,9 +53,8 @@ const THEMES: Record<string, { bg: string; text: string; border: string; gradien
 
 const getProjectTheme = (domain: string) => {
     if (!domain) return { theme: THEMES.indigo, name: 'General Research', colorKey: 'indigo' };
-    const domainField = domain.toLowerCase();
-    const parts = domainField.split(':');
-    const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    const parts = domain.split('|');
+    const name = parts[0] || 'General Research';
     const colorKey = parts[1] || 'indigo';
     return { theme: THEMES[colorKey] || THEMES.indigo, name, colorKey };
 };
@@ -126,7 +125,7 @@ export default function ResearchWorkspace() {
             });
             setProject((prev: any) => ({
                 ...prev,
-                files: [...prev.files, res.data]
+                files: [...(prev.files || []), res.data]
             }));
             alert('File uploaded successfully');
         } catch (err) {
@@ -269,8 +268,9 @@ export default function ResearchWorkspace() {
                 {/* COLUMN 3: Real-Time Team Chat (Width: 25%) */}
                 <div className="w-1/4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-150 dark:border-gray-700/50 flex flex-col min-h-0 overflow-hidden">
                     <ProjectChat 
+                        key={id as string}
                         projectId={id as string} 
-                        currentUserId={currentUser?.id} 
+                        currentUserId={currentUser?.id || ''} 
                         initialMessages={project.messages}
                     />
                 </div>

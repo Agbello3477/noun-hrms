@@ -169,7 +169,7 @@ export default function TransferredStaffPage() {
                         totalItems={filteredStaff.length}
                         pageSize={pageSize}
                         onPageChange={setCurrentPage}
-                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                        onPageSizeChange={(s: number) => { setPageSize(s); setCurrentPage(1); }}
                     />
                 )}
             </div>

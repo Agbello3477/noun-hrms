@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 const RichTextEditor = dynamic(() => import('../../../../components/dashboard/RichTextEditor'), {
     ssr: false,
     loading: () => <div className="h-[300px] bg-slate-50 border rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400 font-medium">Loading editor...</div>
-});
+}) as any;
 import Pagination from '../../../../components/ui/Pagination';
 
 interface MemoResponse {
@@ -292,7 +292,7 @@ export default function RegistryMemosPage() {
                         totalItems={memos.length}
                         pageSize={pageSize}
                         onPageChange={setCurrentPage}
-                        onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                        onPageSizeChange={(s: number) => { setPageSize(s); setCurrentPage(1); }}
                     />
                 )}
             </div>

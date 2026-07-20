@@ -12,6 +12,7 @@ import { WebSocketServer } from 'ws';
 import { setupChatSocket } from './sockets/chat.socket';
 import { authenticateDocSocket, setupDocSocket } from './sockets/doc.socket';
 
+import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.routes';
 import staffRoutes from './routes/staff.routes';
 import { attendanceRouter, payrollRouter } from './routes/hr.routes';
@@ -44,6 +45,7 @@ app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ens
 const PORT = process.env.PORT || 5000;
 
 app.use(helmet());
+app.use(cookieParser());
 app.use(cors({
     origin: process.env.CLIENT_URL || 'http://localhost:3000',
     credentials: true,
@@ -80,9 +82,9 @@ app.use('/api/aper', aperRoutes);
 app.use('/api/memos', memoRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/clinic', clinicRoutes);
+app.use('/api/security/gear', gearRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
-app.use('/api/security/gear', gearRoutes);
 app.use('/api/research', researchRoutes);
 
 app.get('/', (req, res) => {

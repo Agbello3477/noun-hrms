@@ -62,6 +62,29 @@ export const setupChatSocket = (io: SocketIOServer) => {
             if (!text || text.trim() === '') return;
 
             try {
+                // Security Check: Enforce project membership unless user is SUPER_USER
+                if (user.role !== 'SUPER_USER') {
+                    const staffProfile = await prisma.staffProfile.findUnique({
+                        where: { userId: user.id }
+                    });
+                    if (!staffProfile) {
+                        socket.emit('error', 'Unauthorized: Staff profile not found');
+                        return;
+                    }
+                    const membership = await prisma.projectMember.findUnique({
+                        where: {
+                            projectId_staffId: {
+                                projectId,
+                                staffId: staffProfile.id
+                            }
+                        }
+                    });
+                    if (!membership) {
+                        socket.emit('error', 'Unauthorized: You are not a member of this project');
+                        return;
+                    }
+                }
+
                 const message = await prisma.projectMessage.create({
                     data: {
                         projectId,

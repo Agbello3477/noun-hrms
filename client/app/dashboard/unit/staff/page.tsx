@@ -289,7 +289,7 @@ export default function UnitStaffPage() {
                         totalItems={filteredStaff.length}
                         pageSize={pageSize}
                         onPageChange={setCurrentPage}
-                        onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                        onPageSizeChange={(size: number) => { setPageSize(size); setCurrentPage(1); }}
                         pageSizeOptions={PAGE_SIZE_OPTIONS}
                     />
                 )}

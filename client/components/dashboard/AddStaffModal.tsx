@@ -295,7 +295,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     disabled={!formData.stateOfOrigin}
                                 >
                                     <option value="">Select LGA</option>
-                                    {(NIGERIAN_STATES_AND_LGAS[formData.stateOfOrigin] || []).map(lga => (
+                                    {(NIGERIAN_STATES_AND_LGAS[formData.stateOfOrigin] || []).map((lga: string) => (
                                         <option key={lga} value={lga}>{lga}</option>
                                     ))}
                                 </select>

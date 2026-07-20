@@ -28,10 +28,6 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        setMessages(initialMessages);
-    }, [initialMessages]);
-
-    useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) return;
 

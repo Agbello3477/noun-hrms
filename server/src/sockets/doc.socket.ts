@@ -20,7 +20,7 @@ export const authenticateDocSocket = async (req: IncomingMessage): Promise<boole
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
         const staffProfile = await prisma.staffProfile.findUnique({
-            where: { userId: decoded.userId }
+            where: { userId: decoded.id }
         });
 
         if (!staffProfile && decoded.role !== 'SUPER_USER') return false;

@@ -177,7 +177,7 @@ export default function UnitLeavesPage() {
                             totalItems={leaves.length}
                             pageSize={pageSize}
                             onPageChange={setCurrentPage}
-                            onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                            onPageSizeChange={(s: number) => { setPageSize(s); setCurrentPage(1); }}
                         />
                     )}
                 </div>

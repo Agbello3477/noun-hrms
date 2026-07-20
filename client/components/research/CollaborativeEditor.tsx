@@ -202,7 +202,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 <EditorContent editor={editor} className="h-full" />
             </div>
 
-            <style jsx global>{`
+            <style dangerouslySetInnerHTML={{ __html: `
                 .ProseMirror p.is-editor-empty:first-child::before {
                     content: attr(data-placeholder);
                     float: left;
@@ -217,7 +217,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 .ProseMirror blockquote { border-left: 3px solid #d1d5db; padding-left: 1rem; color: #6b7280; font-style: italic; margin: 0.8rem 0; }
                 .ProseMirror strong { font-weight: 700; }
                 .ProseMirror em { font-style: italic; }
-            `}</style>
+            `}} />
         </div>
     );
 }
