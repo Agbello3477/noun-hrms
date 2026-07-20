@@ -22,6 +22,7 @@ interface Query {
     createdAt: string;
     staffId: string;
     staff: { user: { name: string, email: string } };
+    issuedBy?: { name?: string; role?: string; staffProfile?: { rank?: string; signatureUrl?: string | null } };
     response?: string;
     responseAttachmentUrl?: string;
     copyHR?: boolean;
