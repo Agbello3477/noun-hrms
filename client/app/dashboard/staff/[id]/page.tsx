@@ -12,7 +12,8 @@ import {
     Building, 
     GraduationCap, 
     ChevronRight,
-    Loader2
+    Loader2,
+    Calendar
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
