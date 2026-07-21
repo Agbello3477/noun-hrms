@@ -297,10 +297,13 @@ export const acceptInvite = async (req: Request, res: Response) => {
         const invite = await prisma.projectInvite.findUnique({ where: { id: inviteId } });
         if (!invite) return res.status(404).json({ message: 'Invite not found' });
 
+        const inviteeUser = await prisma.user.findUnique({ where: { id: invite.inviteeId } });
+
         const isTargetInvitee = 
             invite.inviteeId === user.id || 
             invite.inviteeId === staffProfile.id ||
-            invite.inviteeId === staffProfile.userId;
+            invite.inviteeId === staffProfile.userId ||
+            (inviteeUser && inviteeUser.email.toLowerCase() === user.email.toLowerCase());
 
         if (!isTargetInvitee) {
             return res.status(403).json({ message: 'Forbidden: You are not the recipient of this invitation' });
@@ -455,23 +458,23 @@ export const getMyInvites = async (req: Request, res: Response) => {
 
         const invites = await prisma.projectInvite.findMany({
             where: {
+                status: 'PENDING',
                 OR: [
                     { inviteeId: user.id },
-                    ...(staffProfile ? [{ inviteeId: staffProfile.id }] : []),
-                    { invitee: { email: user.email } }
-                ],
-                status: 'PENDING'
+                    ...(staffProfile ? [{ inviteeId: staffProfile.id }, { inviteeId: staffProfile.userId }] : []),
+                    { invitee: { email: { equals: user.email, mode: 'insensitive' } } }
+                ]
             },
             include: {
                 project: { select: { id: true, title: true, domain: true, status: true, abstract: true } },
-                inviter: { select: { name: true, role: true } }
+                inviter: { select: { id: true, name: true, role: true, email: true } }
             },
             orderBy: { createdAt: 'desc' }
         });
 
         res.json(invites);
     } catch (err) {
-        console.error(err);
+        console.error('Failed in getMyInvites:', err);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
