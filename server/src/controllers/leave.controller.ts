@@ -357,3 +357,70 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Error updating leave' });
     }
 };
+
+// Get Active Leaves Directory (All staff currently on approved active leave)
+export const getActiveLeaves = async (req: Request, res: Response) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const activeLeaves = await prisma.leaveRequest.findMany({
+            where: {
+                status: LeaveStatus.APPROVED,
+                endDate: { gte: today }
+            },
+            include: {
+                staff: {
+                    include: {
+                        unit: true,
+                        studyCenter: true,
+                        user: { select: { email: true, name: true } }
+                    }
+                }
+            },
+            orderBy: { endDate: 'asc' }
+        });
+
+        const formatted = activeLeaves.map(l => {
+            const staff = l.staff;
+            const name = staff 
+                ? `${staff.title ? staff.title + ' ' : ''}${staff.surname || ''} ${staff.otherNames || ''}`.trim() || staff.user?.name || staff.user?.email || 'Staff Member'
+                : 'Staff Member';
+            
+            let locationStr = 'Main Headquarters';
+            if (staff?.studyCenter) {
+                locationStr = `${staff.studyCenter.name} (Study Center)`;
+            } else if (staff?.unit) {
+                locationStr = `${staff.unit.name} (${staff.unit.type?.replace(/_/g, ' ') || 'Unit'})`;
+            }
+
+            return {
+                id: l.id,
+                type: l.type,
+                startDate: l.startDate,
+                endDate: l.endDate,
+                durationDays: l.durationDays,
+                reason: l.reason,
+                status: l.status,
+                staff: {
+                    id: staff?.id,
+                    name,
+                    title: staff?.title,
+                    surname: staff?.surname,
+                    otherNames: staff?.otherNames,
+                    cadre: staff?.cadre || 'STAFF',
+                    rank: staff?.rank || 'Staff',
+                    staffId: staff?.staffId || '—',
+                    location: locationStr,
+                    unitName: staff?.unit?.name,
+                    studyCenterName: staff?.studyCenter?.name
+                }
+            };
+        });
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Active Leaves Fetch Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

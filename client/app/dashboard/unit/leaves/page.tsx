@@ -1,18 +1,31 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
-import { CheckCircle, XCircle, Clock, User, ArrowRight, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, User, ArrowRight, Eye, Calendar, Search, Filter, ShieldCheck, MapPin, Building, Award, UserCheck } from 'lucide-react';
 import DocumentViewerModal from '../../../../components/dashboard/DocumentViewerModal';
 import Pagination from '../../../../components/ui/Pagination';
 
 export default function UnitLeavesPage() {
+    const searchParams = useSearchParams();
+    const defaultTab = searchParams.get('tab') === 'active' ? 'active' : 'pending';
+    const [activeTab, setActiveTab] = useState<'pending' | 'active'>(defaultTab);
+
+    // Pending Leaves state
     const [leaves, setLeaves] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loadingPending, setLoadingPending] = useState(true);
     const { user: currentUser } = useAuth();
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+
+    // Active Leaves Directory state
+    const [activeLeaves, setActiveLeaves] = useState<any[]>([]);
+    const [loadingActive, setLoadingActive] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [leaveTypeFilter, setLeaveTypeFilter] = useState('ALL');
+    const [activeCurrentPage, setActiveCurrentPage] = useState(1);
 
     // Modal state for leave request review
     const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
@@ -21,12 +34,14 @@ export default function UnitLeavesPage() {
     const [submitting, setSubmitting] = useState<boolean>(false);
     const [viewingAttachment, setViewingAttachment] = useState<any | null>(null);
 
-    // Check if the current manager is an HOD (Head of Department)
+    // Check permissions
     const isHOD = currentUser?.role === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'DEPARTMENT';
     const isDean = currentUser?.role === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'FACULTY';
+    const canApprove = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser?.role || '');
 
     useEffect(() => {
-        fetchPendingLeaves();
+        if (canApprove) fetchPendingLeaves();
+        fetchActiveLeaves();
     }, []);
 
     useEffect(() => {
@@ -37,24 +52,25 @@ export default function UnitLeavesPage() {
         }
     }, [selectedLeave]);
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [leaves]);
-
-    const paginatedLeaves = useMemo(() => {
-        return leaves.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-    }, [leaves, currentPage, pageSize]);
-
-    const totalPages = Math.max(1, Math.ceil(leaves.length / pageSize));
-
     const fetchPendingLeaves = async () => {
         try {
             const { data } = await api.get('/api/leaves/pending');
             setLeaves(data);
         } catch (error) {
-            console.error('Failed to fetch leaves', error);
+            console.error('Failed to fetch pending leaves', error);
         } finally {
-            setLoading(false);
+            setLoadingPending(false);
+        }
+    };
+
+    const fetchActiveLeaves = async () => {
+        try {
+            const { data } = await api.get('/api/leaves/active');
+            setActiveLeaves(data);
+        } catch (error) {
+            console.error('Failed to fetch active leaves directory', error);
+        } finally {
+            setLoadingActive(false);
         }
     };
 
@@ -78,6 +94,7 @@ export default function UnitLeavesPage() {
             alert(`Leave request successfully ${action.toLowerCase()}d.`);
             setLeaves(leaves.filter(l => l.id !== selectedLeave.id));
             setSelectedLeave(null);
+            fetchActiveLeaves();
         } catch (error) {
             console.error('Failed to update leave status', error);
             alert('Failed to update status');
@@ -86,287 +103,321 @@ export default function UnitLeavesPage() {
         }
     };
 
-    if (loading) return <div className="p-6">Loading requests...</div>;
+    // Filter Active Leaves Directory
+    const filteredActiveLeaves = useMemo(() => {
+        return activeLeaves.filter(leave => {
+            const matchesQuery = 
+                !searchQuery.trim() ||
+                leave.staff?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                leave.staff?.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                leave.type?.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            const matchesType = leaveTypeFilter === 'ALL' || leave.type === leaveTypeFilter;
+
+            return matchesQuery && matchesType;
+        });
+    }, [activeLeaves, searchQuery, leaveTypeFilter]);
+
+    const paginatedLeaves = useMemo(() => {
+        return leaves.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [leaves, currentPage, pageSize]);
+
+    const paginatedActiveLeaves = useMemo(() => {
+        return filteredActiveLeaves.slice((activeCurrentPage - 1) * pageSize, activeCurrentPage * pageSize);
+    }, [filteredActiveLeaves, activeCurrentPage, pageSize]);
+
+    const totalPagesPending = Math.max(1, Math.ceil(leaves.length / pageSize));
+    const totalPagesActive = Math.max(1, Math.ceil(filteredActiveLeaves.length / pageSize));
 
     return (
-        <div className="p-6">
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Unit Leave Approvals</h1>
-                <p className="text-sm text-gray-500">
-                    {isHOD ? 'Recommend department staff requests for Dean approval' : 
-                     isDean ? 'Review recommended department requests for final Faculty approval' : 
-                     'Review and approve unit or study center staff requests'}
-                </p>
+        <div className="p-8 max-w-7xl mx-auto space-y-6">
+            {/* Page Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-300">
+                            Enterprise Absence Hub
+                        </span>
+                    </div>
+                    <h1 className="text-3xl font-black text-gray-900 tracking-tight">Leave &amp; Absence Directory</h1>
+                    <p className="text-xs text-gray-500 mt-1">
+                        International standard leave workflow, approval matrix, and real-time university active absence directory.
+                    </p>
+                </div>
+
+                {/* Tab Controls */}
+                <div className="flex bg-gray-100 p-1.5 rounded-2xl border border-gray-200 self-start md:self-auto">
+                    <button
+                        onClick={() => setActiveTab('active')}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                            activeTab === 'active'
+                                ? 'bg-white text-emerald-900 shadow-sm border border-gray-200'
+                                : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        <Calendar size={15} className="text-emerald-700" />
+                        <span>Active Leaves Directory ({activeLeaves.length})</span>
+                    </button>
+
+                    {canApprove && (
+                        <button
+                            onClick={() => setActiveTab('pending')}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                                activeTab === 'pending'
+                                    ? 'bg-white text-emerald-900 shadow-sm border border-gray-200'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <Clock size={15} className="text-amber-600" />
+                            <span>Pending Approvals ({leaves.length})</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {leaves.length === 0 ? (
-                <div className="bg-white p-8 rounded-lg text-center text-gray-500 shadow-sm border border-gray-200">
-                    <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
-                    <p className="text-lg font-semibold text-gray-700">No pending leave requests!</p>
-                    <p className="text-sm text-gray-400 mt-1">All leave files in your unit have been processed.</p>
-                </div>
-            ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Staff</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Duration</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Reason</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {paginatedLeaves.map((leave) => {
-                                const staffUser = leave.staff?.user || leave.user || {};
-                                const staffProfile = leave.staff || leave.user?.staffProfile || {};
-                                const duration = leave.durationDays || Math.ceil((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / (1000 * 60 * 60 * 24)) || 1;
+            {/* TAB 1: ACTIVE LEAVES DIRECTORY */}
+            {activeTab === 'active' && (
+                <div className="space-y-6">
+                    {/* Search & Filter Bar */}
+                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="relative w-full md:w-96">
+                            <Search className="absolute left-3.5 top-3 text-gray-400" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search staff name, unit, or location..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-gray-900"
+                            />
+                        </div>
 
-                                return (
-                                    <tr key={leave.id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="flex-shrink-0 h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center font-bold text-indigo-600 shadow-sm border border-indigo-100">
-                                                    {staffUser.name?.charAt(0) || 'U'}
-                                                </div>
-                                                <div className="ml-4">
-                                                    <div className="text-sm font-semibold text-gray-900">{staffUser.name || 'Staff Member'}</div>
-                                                    <div className="text-xs text-gray-500">{staffUser.email || ''}</div>
-                                                    <div className="text-[10px] uppercase font-bold text-indigo-500 mt-1">
-                                                        {staffProfile.cadre || 'Staff'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-md bg-blue-50 text-blue-700 border border-blue-100">
-                                                {leave.type}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div className="font-semibold text-gray-700">
-                                                {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
-                                            </div>
-                                            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                                                <Clock size={12} />
-                                                {duration} Days
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={(leave.reason || '').replace(/<[^>]*>/g, '')}>
-                                            {(leave.reason || '').replace(/<[^>]*>/g, '') || 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
-                                                onClick={() => setSelectedLeave(leave)}
-                                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
-                                            >
-                                                <Eye size={14} />
-                                                <span>Review Request</span>
-                                            </button>
-                                        </td>
+                        <div className="flex items-center gap-3 w-full md:w-auto">
+                            <Filter size={15} className="text-gray-400" />
+                            <select
+                                value={leaveTypeFilter}
+                                onChange={e => setLeaveTypeFilter(e.target.value)}
+                                className="p-2.5 border border-gray-300 rounded-xl bg-white text-xs text-gray-800 font-semibold focus:outline-none focus:border-emerald-600"
+                            >
+                                <option value="ALL">All Leave Types</option>
+                                <option value="ANNUAL">Annual Leave</option>
+                                <option value="SABBATICAL">Sabbatical Leave</option>
+                                <option value="STUDY">Study Leave</option>
+                                <option value="MATERNITY">Maternity Leave</option>
+                                <option value="SICK">Sick Leave</option>
+                                <option value="CASUAL">Casual Leave</option>
+                            </select>
+
+                            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-2 rounded-xl border border-gray-200">
+                                {filteredActiveLeaves.length} Staff Currently On Leave
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Directory Table Card */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <span className="p-2 bg-white/20 rounded-lg"><UserCheck size={18} /></span>
+                                <div>
+                                    <h2 className="font-bold text-sm tracking-tight">Active Absence &amp; Leave Registry</h2>
+                                    <p className="text-[11px] text-emerald-100">Live roster of university academic and non-academic staff currently on approved leave.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {loadingActive ? (
+                            <div className="p-12 text-center text-gray-500 text-sm">
+                                Loading Active Leaves Directory...
+                            </div>
+                        ) : filteredActiveLeaves.length === 0 ? (
+                            <div className="p-16 text-center text-gray-400 text-sm space-y-2">
+                                <Calendar size={36} className="mx-auto text-gray-300" />
+                                <p className="font-bold text-gray-600">No active staff leave records found</p>
+                                <p className="text-xs text-gray-400">There are currently no staff members matching the search parameters on active leave.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider">
+                                            <th className="py-3.5 px-6">Staff Member</th>
+                                            <th className="py-3.5 px-6">Leave Type</th>
+                                            <th className="py-3.5 px-6">Unit / Location</th>
+                                            <th className="py-3.5 px-6">Duration</th>
+                                            <th className="py-3.5 px-6">Resumption Date</th>
+                                            <th className="py-3.5 px-6 text-right">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {paginatedActiveLeaves.map(leave => (
+                                            <tr key={leave.id} className="hover:bg-emerald-50/30 transition">
+                                                <td className="py-4 px-6 font-bold text-gray-900">
+                                                    <div>{leave.staff?.name}</div>
+                                                    <div className="text-[10px] font-normal text-gray-500">{leave.staff?.cadre} • {leave.staff?.staffId}</div>
+                                                </td>
+                                                <td className="py-4 px-6">
+                                                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase border border-emerald-300">
+                                                        {leave.type?.replace(/_/g, ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 px-6 text-gray-600 font-semibold">{leave.staff?.location}</td>
+                                                <td className="py-4 px-6 font-bold text-gray-900">{leave.durationDays || '—'} Days</td>
+                                                <td className="py-4 px-6 text-gray-600 font-medium">
+                                                    {new Date(leave.startDate).toLocaleDateString()} → <span className="font-bold text-gray-900">{new Date(leave.endDate).toLocaleDateString()}</span>
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-[10px] uppercase shadow-sm">
+                                                        ON LEAVE
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {filteredActiveLeaves.length > 0 && (
+                            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
+                                <Pagination
+                                    currentPage={activeCurrentPage}
+                                    totalPages={totalPagesActive}
+                                    onPageChange={setActiveCurrentPage}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 2: PENDING APPROVALS */}
+            {activeTab === 'pending' && canApprove && (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-gray-200 bg-amber-50/50 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">Pending Unit Leave Approvals</h2>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                {isHOD ? 'Recommend department staff requests for Dean approval' : 
+                                 isDean ? 'Review recommended department requests for final Faculty approval' : 
+                                 'Review and approve unit or study center staff requests'}
+                            </p>
+                        </div>
+                        <span className="px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded-full">
+                            {leaves.length} Action Required
+                        </span>
+                    </div>
+
+                    {loadingPending ? (
+                        <div className="p-12 text-center text-gray-500 text-sm">Loading pending leave applications...</div>
+                    ) : leaves.length === 0 ? (
+                        <div className="p-16 text-center text-gray-400 text-sm italic">
+                            No pending leave requests requiring action.
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider">
+                                        <th className="py-3.5 px-6">Staff Member</th>
+                                        <th className="py-3.5 px-6">Leave Type</th>
+                                        <th className="py-3.5 px-6">Requested Dates</th>
+                                        <th className="py-3.5 px-6">Duration</th>
+                                        <th className="py-3.5 px-6 text-right">Action</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                    {!loading && leaves.length > 0 && (
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPages={totalPages}
-                            totalItems={leaves.length}
-                            pageSize={pageSize}
-                            onPageChange={setCurrentPage}
-                            onPageSizeChange={(s: number) => { setPageSize(s); setCurrentPage(1); }}
-                        />
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {paginatedLeaves.map(leave => (
+                                        <tr key={leave.id} className="hover:bg-gray-50 transition">
+                                            <td className="py-4 px-6 font-bold text-gray-900">
+                                                {leave.staff ? `${leave.staff.title || ''} ${leave.staff.surname} ${leave.staff.otherNames}` : 'Staff Member'}
+                                            </td>
+                                            <td className="py-4 px-6 font-semibold text-emerald-800">{leave.type.replace(/_/g, ' ')}</td>
+                                            <td className="py-4 px-6 text-gray-600">
+                                                {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
+                                            </td>
+                                            <td className="py-4 px-6 font-bold text-gray-900">{leave.durationDays || '—'} Days</td>
+                                            <td className="py-4 px-6 text-right">
+                                                <button
+                                                    onClick={() => setSelectedLeave(leave)}
+                                                    style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                                                    className="px-4 py-1.5 text-xs font-bold rounded-lg transition shadow-sm hover:opacity-90"
+                                                >
+                                                    Review Request
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             )}
 
-        {/* Review Modal */}
-        {selectedLeave && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex justify-center items-center p-4">
-                <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-                    {/* Modal Header */}
-                    <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-gray-800">
-                            Review Leave Request
-                        </h2>
-                        <button
-                            onClick={() => setSelectedLeave(null)}
-                            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-                        >
-                            <XCircle size={20} />
-                        </button>
-                    </div>
-
-                    {/* Modal Body */}
-                    <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                        {/* Staff Profile Details */}
-                        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
-                            <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wider">Staff Details</h3>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Name</span>
-                                    <span className="font-semibold text-gray-800">{selectedLeave.staff?.user?.name || 'N/A'}</span>
-                                </div>
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Email</span>
-                                    <span className="font-semibold text-gray-800">{selectedLeave.staff?.user?.email || 'N/A'}</span>
-                                </div>
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Level / Cadre</span>
-                                    <span className="font-semibold text-gray-800">
-                                        {selectedLeave.staff?.level ? `Level ${selectedLeave.staff.level}` : 'N/A'} 
-                                        {selectedLeave.staff?.cadre ? ` (${selectedLeave.staff.cadre})` : ''}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Placement</span>
-                                    <span className="font-semibold text-gray-800">
-                                        {selectedLeave.staff?.studyCenter?.name || selectedLeave.staff?.unit?.name || 'Main Registry'}
-                                    </span>
-                                </div>
-                            </div>
+            {/* Leave Review Modal */}
+            {selectedLeave && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl p-8 max-w-lg w-full space-y-6 shadow-2xl border border-gray-200">
+                        <div className="border-b border-gray-100 pb-4">
+                            <h2 className="text-xl font-bold text-gray-900">Review Leave Application</h2>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Applied by <span className="font-bold text-gray-800">{selectedLeave.staff ? `${selectedLeave.staff.surname} ${selectedLeave.staff.otherNames}` : 'Staff'}</span>
+                            </p>
                         </div>
 
-                        {/* Leave Details */}
-                        <div className="space-y-3">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Application Details</h3>
-                            <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 border border-gray-150 rounded-xl p-4">
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Leave Type</span>
-                                    <span className="font-semibold text-gray-800 uppercase tracking-wide">{selectedLeave.type}</span>
-                                </div>
-                                <div>
-                                    <span className="text-gray-400 block text-xs">Applied Duration</span>
-                                    <span className="font-semibold text-gray-850">
-                                        {selectedLeave.durationDays || Math.ceil((new Date(selectedLeave.endDate).getTime() - new Date(selectedLeave.startDate).getTime()) / (1000 * 60 * 60 * 24)) || 1} Days
-                                    </span>
-                                </div>
-                                <div className="col-span-2">
-                                    <span className="text-gray-400 block text-xs font-medium">Applied Period</span>
-                                    <span className="font-semibold text-gray-800">
-                                        {new Date(selectedLeave.startDate).toLocaleDateString()} to {new Date(selectedLeave.endDate).toLocaleDateString()}
-                                    </span>
-                                </div>
-                                <div className="col-span-2 border-t pt-2 border-gray-200">
-                                    <span className="text-gray-400 block text-xs">Reason</span>
-                                    <div 
-                                        onClick={(e) => {
-                                            const target = e.target as HTMLElement;
-                                            const anchor = target.closest('a');
-                                            if (anchor) {
-                                                const href = anchor.getAttribute('href');
-                                                if (href && href.includes('/uploads/')) {
-                                                    e.preventDefault();
-                                                    const relativeUrl = href.substring(href.indexOf('/uploads/'));
-                                                    setViewingAttachment({
-                                                        id: 'leave-attachment',
-                                                        title: anchor.textContent || 'Supporting Document',
-                                                        url: relativeUrl,
-                                                        type: 'SUPPORTING_DOCUMENT'
-                                                    });
-                                                }
-                                            }
-                                        }}
-                                        dangerouslySetInnerHTML={{ 
-                                            __html: (selectedLeave.reason || 'No reason provided')
-                                                .replace(/href="\/uploads\//g, `href="${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}/uploads/`)
-                                        }} 
-                                        className="text-gray-700 text-xs mt-1 prose max-w-none leading-relaxed" 
-                                    />
-                                </div>
+                        <div className="space-y-3 text-xs bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Leave Type:</span>
+                                <span className="font-bold text-gray-900">{selectedLeave.type.replace(/_/g, ' ')}</span>
                             </div>
-                        </div>
-
-                        {/* Decision & Corrections Form */}
-                        <div className="space-y-4 pt-2 border-t">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Manager Decision</h3>
-                            
-                            {!isHOD && (
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider" htmlFor="approvedDays">
-                                        Days to Approve
-                                    </label>
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="number"
-                                            id="approvedDays"
-                                            min="1"
-                                            max={selectedLeave.durationDays || 30}
-                                            className="w-24 border rounded-xl px-3 py-2 text-center font-semibold text-gray-700 bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-100"
-                                            value={approvedDays}
-                                            onChange={(e) => setApprovedDays(Math.max(1, parseInt(e.target.value) || 1))}
-                                        />
-                                        <span className="text-xs text-gray-400">
-                                            Applied for {selectedLeave.durationDays} days. You can reduce this number of days if needed.
-                                        </span>
-                                    </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Requested Duration:</span>
+                                <span className="font-bold text-gray-900">{selectedLeave.durationDays} Days</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Start / Resumption Date:</span>
+                                <span className="font-semibold text-gray-800">
+                                    {new Date(selectedLeave.startDate).toLocaleDateString()} to {new Date(selectedLeave.endDate).toLocaleDateString()}
+                                </span>
+                            </div>
+                            {selectedLeave.reason && (
+                                <div>
+                                    <span className="text-gray-500 block mb-1">Reason:</span>
+                                    <p className="bg-white p-2.5 rounded-xl border border-gray-200 text-gray-700 italic">{selectedLeave.reason}</p>
                                 </div>
                             )}
+                        </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider" htmlFor="rejectionReason">
-                                    Rejection Reason <span className="text-red-500 font-normal">(Required only if rejecting)</span>
-                                </label>
-                                <textarea
-                                    id="rejectionReason"
-                                    rows={3}
-                                    className="w-full border rounded-xl p-3 text-xs text-gray-755 placeholder-gray-400 bg-gray-55/30 focus:bg-white outline-none focus:ring-2 focus:ring-blue-100"
-                                    placeholder="Provide reason here if you decide to reject the leave..."
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                />
-                            </div>
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedLeave(null)}
+                                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleActionSubmit('REJECTED')}
+                                disabled={submitting}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition disabled:opacity-50"
+                            >
+                                Reject
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleActionSubmit(isHOD ? 'RECOMMENDED' : 'APPROVED')}
+                                disabled={submitting}
+                                style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                                className="px-5 py-2 text-xs font-bold rounded-xl shadow-sm hover:opacity-90 transition disabled:opacity-50"
+                            >
+                                {isHOD ? 'Recommend for Approval' : 'Approve Leave'}
+                            </button>
                         </div>
                     </div>
-
-                    {/* Modal Footer */}
-                    <div className="px-6 py-4 border-t border-gray-250 bg-gray-50 flex flex-col sm:flex-row gap-3 sm:justify-end">
-                        <button
-                            onClick={() => setSelectedLeave(null)}
-                            className="px-5 py-2.5 bg-white border border-gray-300 text-gray-750 hover:bg-gray-100 rounded-xl text-xs font-bold shadow-sm transition-colors"
-                            disabled={submitting}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={() => handleActionSubmit('REJECTED')}
-                            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
-                            disabled={submitting}
-                        >
-                            Reject
-                        </button>
-                        {isHOD ? (
-                            <button
-                                onClick={() => handleActionSubmit('RECOMMENDED')}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1"
-                                disabled={submitting}
-                            >
-                                <span>Recommend</span>
-                                <ArrowRight size={12} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => handleActionSubmit('APPROVED')}
-                                className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
-                                disabled={submitting}
-                            >
-                                Approve Days
-                            </button>
-                        )}
-                    </div>
                 </div>
-            </div>
-        )}
-
-        {viewingAttachment && (
-            <DocumentViewerModal
-                document={viewingAttachment}
-                onClose={() => setViewingAttachment(null)}
-            />
-        )}
-    </div>
-);
+            )}
+        </div>
+    );
 }
