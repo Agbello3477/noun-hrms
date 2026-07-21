@@ -1170,19 +1170,19 @@ export default function DashboardHome() {
 
             {/* ====== RECRUITMENT FILTER PANEL ====== */}
             <div className="mt-8 rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-700 to-blue-700 text-white">
+                {/* Header — NOUN Emerald Green */}
+                <div style={{ backgroundColor: '#006533', color: '#ffffff' }} className="flex items-center justify-between px-6 py-4 text-white shadow-sm">
                     <div className="flex items-center gap-3">
                         <span className="p-2 bg-white/20 rounded-lg"><BarChart2 size={18} /></span>
                         <div>
                             <h2 className="font-bold text-base tracking-tight">Staff Recruitment Analytics</h2>
-                            <p className="text-xs text-indigo-200 mt-0.5">Filter recruited staff by period, gender, geopolitical zone</p>
+                            <p className="text-xs text-emerald-100 mt-0.5">Filter recruited staff by period, gender, geopolitical zone</p>
                         </div>
                     </div>
                     {recruitData && (
                         <div className="text-right">
                             <p className="text-2xl font-black">{recruitData.total}</p>
-                            <p className="text-xs text-indigo-200">Matching Staff</p>
+                            <p className="text-xs text-emerald-100 font-medium">Matching Staff</p>
                         </div>
                     )}
                 </div>
