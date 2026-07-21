@@ -173,7 +173,7 @@ export default function Home() {
                                 © {new Date().getFullYear()} National Open University of Nigeria.
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                                Powered by: <span className="font-semibold text-primary">MaSha Secure Tech</span>
+                                Powered by: <span className="font-semibold text-primary">MaSha Tech Innovations</span>
                             </p>
                         </div>
                     </div>
