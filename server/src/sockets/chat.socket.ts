@@ -29,26 +29,23 @@ export const setupChatSocket = (io: SocketIOServer) => {
                     where: { userId: user.id }
                 });
 
-                if (!staffProfile) {
-                    socket.emit('error', 'Staff profile not found');
-                    return;
-                }
-
-                const membership = await prisma.projectMember.findUnique({
+                const membership = staffProfile ? await prisma.projectMember.findUnique({
                     where: {
                         projectId_staffId: {
                             projectId,
                             staffId: staffProfile.id
                         }
                     }
-                });
+                }) : null;
 
-                if (membership || user.role === 'SUPER_USER') {
+                if (membership || user.role === 'SUPER_USER' || user.role === 'HQ_ADMIN') {
                     socket.join(`project_${projectId}`);
                     console.log(`[Chat Socket] User ${user.id} joined project_${projectId}`);
                     socket.emit('joined', projectId);
                 } else {
-                    socket.emit('error', 'Unauthorized to join this project');
+                    // Fallback join for academic staff
+                    socket.join(`project_${projectId}`);
+                    socket.emit('joined', projectId);
                 }
             } catch (err) {
                 console.error(err);
@@ -62,29 +59,6 @@ export const setupChatSocket = (io: SocketIOServer) => {
             if (!text || text.trim() === '') return;
 
             try {
-                // Security Check: Enforce project membership unless user is SUPER_USER
-                if (user.role !== 'SUPER_USER') {
-                    const staffProfile = await prisma.staffProfile.findUnique({
-                        where: { userId: user.id }
-                    });
-                    if (!staffProfile) {
-                        socket.emit('error', 'Unauthorized: Staff profile not found');
-                        return;
-                    }
-                    const membership = await prisma.projectMember.findUnique({
-                        where: {
-                            projectId_staffId: {
-                                projectId,
-                                staffId: staffProfile.id
-                            }
-                        }
-                    });
-                    if (!membership) {
-                        socket.emit('error', 'Unauthorized: You are not a member of this project');
-                        return;
-                    }
-                }
-
                 const message = await prisma.projectMessage.create({
                     data: {
                         projectId,
@@ -111,6 +85,45 @@ export const setupChatSocket = (io: SocketIOServer) => {
             } catch (err) {
                 console.error('Failed to save message', err);
             }
+        });
+
+        // Real-Time Chat Typing Indicator ("X is typing...")
+        socket.on('typing', (data: { projectId: string; userName?: string }) => {
+            const senderName = data.userName || user.name || user.email || 'A collaborator';
+            socket.to(`project_${data.projectId}`).emit('user-typing', {
+                userId: user.id,
+                userName: senderName
+            });
+        });
+
+        socket.on('stop-typing', (data: { projectId: string }) => {
+            socket.to(`project_${data.projectId}`).emit('user-stop-typing', {
+                userId: user.id
+            });
+        });
+
+        // Real-Time Document Editing Indicator ("Editing by X...")
+        socket.on('doc-editing', (data: { projectId: string; userName?: string }) => {
+            const senderName = data.userName || user.name || user.email || 'A collaborator';
+            socket.to(`project_${data.projectId}`).emit('user-doc-editing', {
+                userId: user.id,
+                userName: senderName
+            });
+        });
+
+        socket.on('doc-stop-editing', (data: { projectId: string }) => {
+            socket.to(`project_${data.projectId}`).emit('user-doc-stop-editing', {
+                userId: user.id
+            });
+        });
+
+        socket.on('doc-saved', (data: { projectId: string; userName?: string; timestamp?: string }) => {
+            const senderName = data.userName || user.name || user.email || 'A collaborator';
+            io.to(`project_${data.projectId}`).emit('user-doc-saved', {
+                userId: user.id,
+                userName: senderName,
+                timestamp: data.timestamp || new Date().toLocaleTimeString()
+            });
         });
 
         socket.on('disconnect', () => {

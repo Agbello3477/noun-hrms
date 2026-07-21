@@ -360,6 +360,8 @@ export default function ResearchWorkspace() {
                 <div className="w-2/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
                     <CollaborativeEditor 
                         projectId={id as string} 
+                        currentUserId={currentUser?.id || ''}
+                        currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
                     />
                 </div>
 
@@ -369,6 +371,7 @@ export default function ResearchWorkspace() {
                         key={id as string}
                         projectId={id as string} 
                         currentUserId={currentUser?.id || ''} 
+                        currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
                         initialMessages={project.messages}
                     />
                 </div>

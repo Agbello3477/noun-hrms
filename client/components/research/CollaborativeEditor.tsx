@@ -4,19 +4,85 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import api from '@/lib/api';
-import { Save, Loader2, CheckCircle2, AlertCircle, Bold, Italic, List, ListOrdered, Heading2, Heading3, Quote, Undo, Redo } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, AlertCircle, Bold, Italic, List, ListOrdered, Heading2, Heading3, Quote, Undo, Redo, Edit3 } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 interface RichTextEditorProps {
     projectId: string;
+    currentUserName?: string;
+    currentUserId?: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function RichTextEditor({ projectId }: RichTextEditorProps) {
+export default function RichTextEditor({ projectId, currentUserName, currentUserId }: RichTextEditorProps) {
     const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
     const [lastSaved, setLastSaved] = useState<string | null>(null);
+    const [lastContributor, setLastContributor] = useState<string | null>(null);
+    const [activeEditors, setActiveEditors] = useState<Record<string, string>>({});
+    
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const docTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const socketRef = useRef<Socket | null>(null);
+
+    // Socket.io Connection for Document Collaboration Events
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
+        const socket = io(rawBaseUrl, {
+            auth: { token },
+            withCredentials: true
+        });
+
+        socket.on('connect', () => {
+            socket.emit('join-project', projectId);
+        });
+
+        // Real-Time Document Editing Listeners
+        socket.on('user-doc-editing', (data: { userId: string; userName: string }) => {
+            if (data.userId !== currentUserId) {
+                setActiveEditors(prev => ({ ...prev, [data.userId]: data.userName }));
+            }
+        });
+
+        socket.on('user-doc-stop-editing', (data: { userId: string }) => {
+            setActiveEditors(prev => {
+                const updated = { ...prev };
+                delete updated[data.userId];
+                return updated;
+            });
+        });
+
+        socket.on('user-doc-saved', (data: { userId: string; userName: string; timestamp: string }) => {
+            setLastContributor(data.userName);
+            setLastSaved(data.timestamp);
+        });
+
+        socketRef.current = socket;
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [projectId, currentUserId]);
+
+    const handleDocTyping = useCallback(() => {
+        if (!socketRef.current) return;
+
+        socketRef.current.emit('doc-editing', {
+            projectId,
+            userName: currentUserName || 'Collaborator'
+        });
+
+        if (docTypingTimer.current) clearTimeout(docTypingTimer.current);
+        docTypingTimer.current = setTimeout(() => {
+            if (socketRef.current) {
+                socketRef.current.emit('doc-stop-editing', { projectId });
+            }
+        }, 2500);
+    }, [projectId, currentUserName]);
 
     const editor = useEditor({
         extensions: [StarterKit.configure({})],
@@ -27,10 +93,12 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
             },
         },
         onUpdate: ({ editor }) => {
+            handleDocTyping();
+
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
             autoSaveTimer.current = setTimeout(() => {
                 handleSave(editor.getHTML());
-            }, 2000);
+            }, 2500);
         },
     });
 
@@ -53,6 +121,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
 
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+            if (docTypingTimer.current) clearTimeout(docTypingTimer.current);
         };
     }, [editor, projectId]);
 
@@ -62,15 +131,25 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         setSaveStatus('saving');
         try {
             const res = await api.put(`/api/research/${projectId}/document`, { contentHtml });
-            setLastSaved(new Date(res.data.updatedAt).toLocaleTimeString());
+            const savedTime = new Date(res.data.updatedAt).toLocaleTimeString();
+            setLastSaved(savedTime);
             setSaveStatus('saved');
+
+            if (socketRef.current) {
+                socketRef.current.emit('doc-saved', {
+                    projectId,
+                    userName: currentUserName || 'Collaborator',
+                    timestamp: savedTime
+                });
+            }
+
             setTimeout(() => setSaveStatus('idle'), 3000);
         } catch (err) {
             console.error('Failed to save document:', err);
             setSaveStatus('error');
             setTimeout(() => setSaveStatus('idle'), 4000);
         }
-    }, [editor, projectId]);
+    }, [editor, projectId, currentUserName]);
 
     if (loadStatus === 'loading') {
         return (
@@ -89,6 +168,8 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
             </div>
         );
     }
+
+    const editorNames = Object.values(activeEditors);
 
     return (
         <div className="flex flex-col h-full w-full bg-white border border-gray-200 overflow-hidden rounded-2xl">
@@ -161,8 +242,23 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                     <Redo size={15} />
                 </ToolbarButton>
 
-                {/* Spacer + Save button */}
+                {/* Spacer + Real-Time Editing & Save Status */}
                 <div className="ml-auto flex items-center gap-3">
+                    {/* Live Collaborator Editing Indicator */}
+                    {editorNames.length > 0 && (
+                        <span className="text-[11px] text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 animate-pulse shadow-sm">
+                            <Edit3 size={12} className="text-amber-700 animate-spin" />
+                            Editing by {editorNames.join(', ')}...
+                        </span>
+                    )}
+
+                    {/* Last Contributor Badge */}
+                    {lastContributor && (
+                        <span className="text-[11px] text-emerald-900 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full font-semibold hidden md:inline-block">
+                            Edited by <span className="font-bold">{lastContributor}</span>
+                        </span>
+                    )}
+
                     {lastSaved && saveStatus === 'idle' && (
                         <span className="text-[11px] text-gray-500 font-medium hidden sm:inline">
                             Saved at {lastSaved}
@@ -170,7 +266,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                     )}
                     {saveStatus === 'saving' && (
                         <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
-                            <Loader2 size={12} className="animate-spin" /> Saving…
+                            <Loader2 size={12} className="animate-spin" /> Saving contribution…
                         </span>
                     )}
                     {saveStatus === 'saved' && (
@@ -195,6 +291,17 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                     </button>
                 </div>
             </div>
+
+            {/* Live Editing Alert Bar across top of document */}
+            {editorNames.length > 0 && (
+                <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-900 font-bold flex items-center justify-between animate-in slide-in-from-top-1">
+                    <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                        ✏️ {editorNames.join(', ')} is currently editing this document...
+                    </span>
+                    <span className="text-[10px] text-amber-700 font-medium">Live Collaboration Active</span>
+                </div>
+            )}
 
             {/* Microsoft Word Page Container (Clean Bright White Surface #ffffff) */}
             <div className="flex-grow overflow-auto p-6 bg-slate-100/70 flex justify-center">

@@ -18,14 +18,17 @@ interface Message {
 interface ProjectChatProps {
     projectId: string;
     currentUserId: string;
+    currentUserName?: string;
     initialMessages?: Message[];
 }
 
-export default function ProjectChat({ projectId, currentUserId, initialMessages = [] }: ProjectChatProps) {
+export default function ProjectChat({ projectId, currentUserId, currentUserName, initialMessages = [] }: ProjectChatProps) {
     const [messages, setMessages] = useState<Message[]>(initialMessages);
     const [input, setInput] = useState('');
+    const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
     const socketRef = useRef<Socket | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -47,6 +50,29 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                 if (prev.find(m => m.id === message.id)) return prev;
                 return [...prev, message];
             });
+            // Stop typing for the sender when message arrives
+            if (message.senderId) {
+                setTypingUsers(prev => {
+                    const updated = { ...prev };
+                    delete updated[message.senderId];
+                    return updated;
+                });
+            }
+        });
+
+        // Real-Time Typing Listeners
+        socket.on('user-typing', (data: { userId: string; userName: string }) => {
+            if (data.userId !== currentUserId) {
+                setTypingUsers(prev => ({ ...prev, [data.userId]: data.userName }));
+            }
+        });
+
+        socket.on('user-stop-typing', (data: { userId: string }) => {
+            setTypingUsers(prev => {
+                const updated = { ...prev };
+                delete updated[data.userId];
+                return updated;
+            });
         });
 
         socketRef.current = socket;
@@ -54,15 +80,39 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
         return () => {
             socket.disconnect();
         };
-    }, [projectId]);
+    }, [projectId, currentUserId]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [messages, typingUsers]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setInput(value);
+
+        if (!socketRef.current) return;
+
+        // Emit typing event
+        socketRef.current.emit('typing', {
+            projectId,
+            userName: currentUserName || 'Collaborator'
+        });
+
+        // Reset stop-typing timer
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+            if (socketRef.current) {
+                socketRef.current.emit('stop-typing', { projectId });
+            }
+        }, 2000);
+    };
 
     const handleSend = (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !socketRef.current) return;
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        socketRef.current.emit('stop-typing', { projectId });
 
         socketRef.current.emit('send-message', {
             projectId,
@@ -72,18 +122,27 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
         setInput('');
     };
 
+    const typingNames = Object.values(typingUsers);
+
     return (
         <div className="flex flex-col h-full w-full bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-emerald-50 flex-shrink-0">
-                <h3 className="font-bold text-sm text-gray-800">Workspace Chat</h3>
+                <div>
+                    <h3 className="font-bold text-sm text-gray-800">Workspace Chat</h3>
+                    {typingNames.length > 0 && (
+                        <p className="text-[10px] font-bold text-emerald-800 animate-pulse">
+                            ✍️ {typingNames.join(', ')} {typingNames.length === 1 ? 'is' : 'are'} typing...
+                        </p>
+                    )}
+                </div>
                 <span className="flex h-2.5 w-2.5 relative">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
                 </span>
             </div>
             
-            {/* Scrollable Messages Container (expands to push typing bar to bottom) */}
+            {/* Scrollable Messages Container */}
             <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 bg-white">
                 {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs space-y-1 my-auto">
@@ -119,6 +178,20 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                         );
                     })
                 )}
+                
+                {/* Typing Bubble inside Chat Window */}
+                {typingNames.length > 0 && (
+                    <div className="flex justify-start animate-in fade-in duration-200">
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs px-4 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
+                            <span className="flex gap-1 items-center">
+                                <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce"></span>
+                                <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                                <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                            </span>
+                            <span className="font-bold text-[11px]">{typingNames.join(', ')} is typing...</span>
+                        </div>
+                    </div>
+                )}
                 <div ref={messagesEndRef} />
             </div>
 
@@ -127,7 +200,7 @@ export default function ProjectChat({ projectId, currentUserId, initialMessages 
                 <input
                     type="text"
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={handleInputChange}
                     placeholder="Type a message..."
                     className="flex-grow p-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 text-gray-900"
                 />
