@@ -8,42 +8,42 @@ import api from '@/lib/api';
 
 const THEMES: Record<string, { bg: string; text: string; border: string; gradient: string; preview: string; name: string }> = {
     indigo: {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-800 font-bold',
-        border: 'border-emerald-200 hover:border-emerald-400',
-        gradient: 'from-emerald-600 via-emerald-700 to-teal-700',
+        bg: 'bg-emerald-700 text-white font-bold',
+        text: 'text-white font-bold',
+        border: 'border-emerald-300 hover:border-emerald-600',
+        gradient: 'from-emerald-700 via-emerald-600 to-teal-700',
         preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Emerald Research'
     },
     emerald: {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-800 font-bold',
-        border: 'border-emerald-200 hover:border-emerald-400',
-        gradient: 'from-emerald-600 via-emerald-700 to-teal-700',
+        bg: 'bg-emerald-700 text-white font-bold',
+        text: 'text-white font-bold',
+        border: 'border-emerald-300 hover:border-emerald-600',
+        gradient: 'from-emerald-700 via-emerald-600 to-teal-700',
         preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Emerald Research'
     },
     rose: {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-800 font-bold',
-        border: 'border-emerald-200 hover:border-emerald-400',
-        gradient: 'from-emerald-600 via-emerald-700 to-teal-700',
+        bg: 'bg-emerald-700 text-white font-bold',
+        text: 'text-white font-bold',
+        border: 'border-emerald-300 hover:border-emerald-600',
+        gradient: 'from-emerald-700 via-emerald-600 to-teal-700',
         preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Emerald Research'
     },
     amber: {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-800 font-bold',
-        border: 'border-emerald-200 hover:border-emerald-400',
-        gradient: 'from-emerald-600 via-emerald-700 to-teal-700',
+        bg: 'bg-emerald-700 text-white font-bold',
+        text: 'text-white font-bold',
+        border: 'border-emerald-300 hover:border-emerald-600',
+        gradient: 'from-emerald-700 via-emerald-600 to-teal-700',
         preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Emerald Research'
     },
     violet: {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-800 font-bold',
-        border: 'border-emerald-200 hover:border-emerald-400',
-        gradient: 'from-emerald-600 via-emerald-700 to-teal-700',
+        bg: 'bg-emerald-700 text-white font-bold',
+        text: 'text-white font-bold',
+        border: 'border-emerald-300 hover:border-emerald-600',
+        gradient: 'from-emerald-700 via-emerald-600 to-teal-700',
         preview: 'bg-gradient-to-r from-emerald-600 to-teal-700',
         name: 'Emerald Research'
     }
@@ -82,7 +82,6 @@ export default function ResearchDashboard() {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [formData, setFormData] = useState({ title: '', abstract: '', domain: '' });
-    const [selectedColor, setSelectedColor] = useState('emerald');
     const [respondingId, setRespondingId] = useState<string | null>(null);
     const router = useRouter();
 
@@ -160,7 +159,10 @@ export default function ResearchDashboard() {
                 className="relative overflow-hidden rounded-3xl text-white p-8 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-6 border border-emerald-800"
             >
                 <div className="relative z-10 max-w-xl space-y-2">
-                    <span className="bg-emerald-700/90 text-white border border-emerald-500 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
+                    <span 
+                        style={{ backgroundColor: '#004d26', color: '#ffffff' }}
+                        className="text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block border border-emerald-500"
+                    >
                         Academic Workspace
                     </span>
                     <h1 className="text-3xl font-black tracking-tight leading-tight">Research Forum</h1>
@@ -170,7 +172,8 @@ export default function ResearchDashboard() {
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center justify-center space-x-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 z-10 flex-shrink-0 border border-emerald-400"
+                    style={{ backgroundColor: '#008040', color: '#ffffff' }}
+                    className="flex items-center justify-center space-x-2 px-5 py-3 hover:bg-emerald-600 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 z-10 flex-shrink-0 border border-emerald-400"
                 >
                     <Plus size={20} />
                     <span>Create Research Workspace</span>
@@ -253,7 +256,7 @@ export default function ResearchDashboard() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {projects.map(project => {
-                        const { theme, name } = getProjectTheme(project.domain);
+                        const { name } = getProjectTheme(project.domain);
                         const memberNames: string[] = (project.members || [])
                             .slice(0, 5)
                             .map((m: any) => m.staff?.user?.name || m.staff?.surname || '?');
@@ -265,16 +268,23 @@ export default function ResearchDashboard() {
                                     style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
                                     className="rounded-3xl border border-emerald-200 hover:border-emerald-500 p-6 shadow-sm hover:shadow-xl hover:shadow-emerald-900/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full group relative overflow-hidden"
                                 >
-                                    {/* Top NOUN Emerald Accent Gradient Bar */}
-                                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700"></div>
+                                    {/* Top NOUN Emerald Accent Bar */}
+                                    <div style={{ backgroundColor: '#006533' }} className="absolute top-0 left-0 right-0 h-2"></div>
                                     
-                                    <div className="flex justify-between items-start mb-4 gap-2">
-                                        <span className="text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    <div className="flex justify-between items-start mb-4 gap-2 mt-1">
+                                        {/* Domain Tag — Solid NOUN Green */}
+                                        <span 
+                                            style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                                            className="text-[10px] font-bold tracking-wider uppercase px-3 py-1 rounded-full border border-emerald-700 shadow-sm"
+                                        >
                                             {name}
                                         </span>
                                         
-                                        {/* Status Badge — Locked to NOUN Emerald Green */}
-                                        <span className="text-[10px] font-black tracking-wider uppercase px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-sm">
+                                        {/* Status Badge (DRAFT/ONGOING/COMPLETED) — Solid Vibrant NOUN Green */}
+                                        <span 
+                                            style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                                            className="text-[10px] font-black tracking-wider uppercase px-3 py-1 rounded-full border border-emerald-700 shadow-sm"
+                                        >
                                             {project.status || 'DRAFT'}
                                         </span>
                                     </div>
