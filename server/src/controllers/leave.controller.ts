@@ -358,17 +358,80 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
     }
 };
 
-// Get Active Leaves Directory (All staff currently on approved active leave)
+// Get Active Leaves Directory (Location & Unit Restricted based on Manager Assignment)
 export const getActiveLeaves = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const requesterId = req.user?.id;
+        // @ts-ignore
+        const requesterRole = req.user?.role;
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        const isCentralRegistryAdmin = [
+            Role.HR_ADMIN, 
+            Role.SUPER_USER, 
+            Role.ADMIN, 
+            Role.VICE_CHANCELLOR, 
+            Role.BURSARY
+        ].includes(requesterRole as any);
+
+        let whereClause: any = {
+            status: LeaveStatus.APPROVED,
+            endDate: { gte: today }
+        };
+
+        if (!isCentralRegistryAdmin) {
+            // Fetch requester's staff profile to get their assigned unitId / centerId
+            const requesterProfile = await prisma.staffProfile.findUnique({
+                where: { userId: requesterId },
+                include: { unit: true }
+            });
+
+            if (!requesterProfile) {
+                return res.json([]);
+            }
+
+            const staffWhere: any = {};
+
+            if (requesterProfile.unitId) {
+                // If requester is in a Faculty (Dean), also include departments under that faculty
+                if (requesterProfile.unit && requesterProfile.unit.type === 'FACULTY') {
+                    const facultyCode = requesterProfile.unit.code || '';
+                    const mapping: Record<string, string[]> = {
+                        'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                        'FAC-LAW': ['DEP-LAW'],
+                        'FAC-SOCIA': ['DEP-POL'],
+                        'FAC-MANAG': ['DEP-ACC'],
+                        'FAC-EDUCA': ['DEP-EDT'],
+                        'FAC-HEALT': ['DEP-PBH'],
+                        'FAC-AGRIC': ['DEP-AGR'],
+                        'FAC-ARTS': ['DEP-ART'],
+                        'FAC-COMPU': ['DEP-CMP']
+                    };
+                    const deptCodes = mapping[facultyCode] || [];
+                    const deptUnits = await prisma.unit.findMany({
+                        where: { code: { in: deptCodes } },
+                        select: { id: true }
+                    });
+                    const deptIds = deptUnits.map(d => d.id);
+                    staffWhere.unitId = { in: [requesterProfile.unitId, ...deptIds] };
+                } else {
+                    staffWhere.unitId = requesterProfile.unitId;
+                }
+            } else if (requesterProfile.centerId) {
+                staffWhere.centerId = requesterProfile.centerId;
+            } else {
+                // Not assigned to any unit or study center — access restricted
+                return res.json([]);
+            }
+
+            whereClause.staff = staffWhere;
+        }
+
         const activeLeaves = await prisma.leaveRequest.findMany({
-            where: {
-                status: LeaveStatus.APPROVED,
-                endDate: { gte: today }
-            },
+            where: whereClause,
             include: {
                 staff: {
                     include: {
