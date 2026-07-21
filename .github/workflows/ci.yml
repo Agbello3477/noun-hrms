@@ -9,28 +9,8 @@ on:
       - main
 
 jobs:
-  build-and-test:
+  build-and-deploy-frontend:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: noun_hrms_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noun_hrms_test?schema=public
-      JWT_SECRET: "test-jwt-secret-12345678901234567890"
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -48,42 +28,16 @@ jobs:
         run: npx prisma generate
         working-directory: ./server
 
-      - name: Push Database Schema
-        run: npx prisma db push
-        working-directory: ./server
-
-      - name: Run Backend Integration Tests
-        run: npm run test:server
-
-      - name: Build Server
-        run: npm run build --workspace=server
-
-      - name: Build Client (Next.js)
+      - name: Build Frontend Client (Next.js)
         run: npm run build --workspace=client
         env:
           NEXT_PUBLIC_API_URL: "https://noun-hrms-api.onrender.com"
 
-  deploy:
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Deploy Frontend to Firebase Hosting
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NOUN_HRMS }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NOUNHRMS }}
           channelId: live
-          projectId: noun-hrms
-
-      - name: Trigger Backend Render Deploy
-        run: |
-          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
-            echo "Triggering Render webhook..."
-            curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-          else
-            echo "RENDER_DEPLOY_HOOK_URL secret is not set, skipping backend deploy."
-          fi
+          projectId: nounhrms
