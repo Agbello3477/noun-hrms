@@ -91,9 +91,9 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-full w-full bg-gray-100 border border-gray-200 overflow-hidden">
+        <div className="flex flex-col h-full w-full bg-white border border-gray-200 overflow-hidden rounded-2xl">
             {/* MS Word Toolbar */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50 flex-wrap">
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-emerald-50/50 flex-wrap">
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBold().run()}
                     active={editor?.isActive('bold')}
@@ -196,8 +196,8 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 </div>
             </div>
 
-            {/* Microsoft Word Page Container (Pure White Paper Sheet #ffffff) */}
-            <div className="flex-grow overflow-auto p-6 bg-gray-200/60 flex justify-center">
+            {/* Microsoft Word Page Container (Clean Bright White Surface #ffffff) */}
+            <div className="flex-grow overflow-auto p-6 bg-slate-100/70 flex justify-center">
                 <div 
                     style={{ backgroundColor: '#ffffff', color: '#111827' }}
                     className="w-full max-w-4xl border border-gray-300 shadow-md min-h-[750px] my-2 rounded-sm p-1"

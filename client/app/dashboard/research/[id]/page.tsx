@@ -203,18 +203,18 @@ export default function ResearchWorkspace() {
             {/* Top Workspace Header (Vibrant NOUN Green #006533 bar) */}
             <div 
                 style={{ backgroundColor: '#006533', color: '#ffffff' }}
-                className="relative overflow-hidden rounded-2xl text-white px-8 py-5 border border-emerald-900 shadow-md flex-shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="relative overflow-hidden rounded-2xl text-white px-8 py-5 border border-emerald-800 shadow-md flex-shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
                 <div className="relative z-10 space-y-1">
                     <div className="flex items-center gap-3">
-                        <Link href="/dashboard/research" className="p-1.5 bg-emerald-900/60 hover:bg-emerald-900 text-white rounded-lg transition-colors border border-emerald-700">
+                        <Link href="/dashboard/research" className="p-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg transition-colors border border-emerald-500">
                             <ArrowLeft size={15} />
                         </Link>
-                        <span className="bg-emerald-900/90 text-emerald-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-700 shadow-sm">
+                        <span className="bg-emerald-700/90 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-500 shadow-sm">
                             {domainName}
                         </span>
                         <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border shadow-sm ${
-                            project.status === 'COMPLETED' ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-emerald-950/90 text-emerald-200 border-emerald-800'
+                            project.status === 'COMPLETED' ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-emerald-700/90 text-white border-emerald-500'
                         }`}>
                             Status: {project.status || 'DRAFT'}
                         </span>
@@ -237,7 +237,7 @@ export default function ResearchWorkspace() {
                     {/* Edit Workspace */}
                     <button 
                         onClick={() => setShowEditModal(true)}
-                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-900/80 hover:bg-emerald-900 text-emerald-100 rounded-xl text-xs font-bold shadow-md transition duration-150 border border-emerald-700"
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700/90 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md transition duration-150 border border-emerald-500"
                         title="Edit Workspace Title & Synopsis"
                     >
                         <Edit3 size={14} />
@@ -276,7 +276,7 @@ export default function ResearchWorkspace() {
                 {/* COLUMN 1: Files & Team (Width: 25%) */}
                 <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
                     {/* Abstract Header */}
-                    <div className="p-5 border-b border-gray-200 bg-gray-50 flex-shrink-0 flex justify-between items-start gap-2">
+                    <div className="p-5 border-b border-gray-200 bg-emerald-50/50 flex-shrink-0 flex justify-between items-start gap-2">
                         <div>
                             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
                             <p className="text-xs text-gray-700 leading-relaxed line-clamp-4" title={project.abstract}>
@@ -456,7 +456,7 @@ export default function ResearchWorkspace() {
                                 />
                             </div>
                             
-                            <div className="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowEditModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
                                 <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Save Changes</button>
                             </div>
