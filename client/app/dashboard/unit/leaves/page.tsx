@@ -282,6 +282,8 @@ export default function UnitLeavesPage() {
                                 <Pagination
                                     currentPage={activeCurrentPage}
                                     totalPages={totalPagesActive}
+                                    totalItems={filteredActiveLeaves.length}
+                                    pageSize={pageSize}
                                     onPageChange={setActiveCurrentPage}
                                 />
                             </div>
