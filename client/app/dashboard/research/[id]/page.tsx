@@ -29,7 +29,7 @@ import {
     CheckCircle2,
     Trash2,
     UserX,
-    Clock
+    Bell
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -85,9 +85,9 @@ export default function ResearchWorkspace() {
             const dataArray = Array.isArray(res.data) ? res.data : (res.data.staff || []);
             const mappedStaff = dataArray
                 .map((s: any) => ({
-                    userId: s.id,
-                    surname: s.staffProfile?.surname || s.name || '',
-                    otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : '',
+                    userId: s.userId || s.id,
+                    surname: s.staffProfile?.surname || s.surname || s.name || '',
+                    otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : (s.otherNames || ''),
                     cadre: s.staffProfile?.cadre || s.role || ''
                 }));
             setAllStaff(mappedStaff);
@@ -189,20 +189,20 @@ export default function ResearchWorkspace() {
 
     if (loading) {
         return (
-            <div className="flex h-full min-h-[60vh] items-center justify-center">
+            <div className="flex h-full min-h-[60vh] items-center justify-center bg-white">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
             </div>
         );
     }
-    if (!project) return <div className="p-12 text-center text-red-500 font-bold">Project Not Found</div>;
+    if (!project) return <div className="p-12 text-center text-red-500 font-bold bg-white">Project Not Found</div>;
 
     const domainName = project.domain?.split('|')?.[0] || 'General Research';
 
     return (
-        <div className="h-[calc(100vh-90px)] flex flex-col space-y-6 animate-in fade-in duration-500 bg-slate-100 p-4 rounded-2xl">
+        <div className="h-[calc(100vh-90px)] flex flex-col space-y-6 animate-in fade-in duration-500 bg-white p-4 rounded-2xl">
             {/* Top Workspace Header (Vibrant NOUN Green #006533 bar) */}
             <div 
-                style={{ backgroundColor: '#006533' }}
+                style={{ backgroundColor: '#006533', color: '#ffffff' }}
                 className="relative overflow-hidden rounded-2xl text-white px-8 py-5 border border-emerald-900 shadow-md flex-shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
                 <div className="relative z-10 space-y-1">
@@ -274,26 +274,26 @@ export default function ResearchWorkspace() {
             <div className="flex-1 flex gap-6 min-h-0">
                 
                 {/* COLUMN 1: Files & Team (Width: 25%) */}
-                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-0 overflow-hidden">
+                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
                     {/* Abstract Header */}
-                    <div className="p-5 border-b border-slate-200 bg-slate-50 flex-shrink-0 flex justify-between items-start gap-2">
+                    <div className="p-5 border-b border-gray-200 bg-gray-50 flex-shrink-0 flex justify-between items-start gap-2">
                         <div>
-                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
-                            <p className="text-xs text-slate-600 leading-relaxed line-clamp-4" title={project.abstract}>
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
+                            <p className="text-xs text-gray-700 leading-relaxed line-clamp-4" title={project.abstract}>
                                 {project.abstract || 'No project description loaded.'}
                             </p>
                         </div>
-                        <button onClick={() => setShowEditModal(true)} className="p-1 text-slate-400 hover:text-emerald-700">
+                        <button onClick={() => setShowEditModal(true)} className="p-1 text-gray-400 hover:text-emerald-700">
                             <Edit3 size={13} />
                         </button>
                     </div>
 
                     {/* Scrollable Members & Files */}
-                    <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                    <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-white">
                         {/* Team Section */}
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center">
+                                <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
                                     <Users size={14} className="mr-1.5 text-emerald-700" /> Core Team ({project.members?.length || 0})
                                 </h3>
                                 <button onClick={() => setShowInviteModal(true)} className="p-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
@@ -305,13 +305,13 @@ export default function ResearchWorkspace() {
                                     const name = m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Staff Member';
                                     const isOwner = m.role === 'OWNER';
                                     return (
-                                        <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 transition group">
+                                        <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-gray-50 transition group">
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-sm flex-shrink-0">
                                                     {m.staff?.surname?.[0] || 'U'}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-xs font-bold text-slate-800 truncate" title={name}>
+                                                    <p className="text-xs font-bold text-gray-800 truncate" title={name}>
                                                         {name}
                                                     </p>
                                                     <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">{m.role}</p>
@@ -320,7 +320,7 @@ export default function ResearchWorkspace() {
                                             {!isOwner && (
                                                 <button
                                                     onClick={() => handleRemoveMember(m.id, name)}
-                                                    className="p-1 text-slate-300 hover:text-red-600 rounded transition opacity-0 group-hover:opacity-100"
+                                                    className="p-1 text-gray-300 hover:text-red-600 rounded transition opacity-0 group-hover:opacity-100"
                                                     title="Uninvite / Remove Collaborator"
                                                 >
                                                     <UserX size={14} />
@@ -335,7 +335,7 @@ export default function ResearchWorkspace() {
                         {/* Drive / Assets Section */}
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center">
+                                <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
                                     <FileText size={14} className="mr-1.5 text-emerald-700" /> Shared Drive
                                 </h3>
                                 <label className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg cursor-pointer transition border border-emerald-200">
@@ -345,15 +345,15 @@ export default function ResearchWorkspace() {
                             </div>
                             
                             {project.files?.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic">No project files uploaded yet.</p>
+                                <p className="text-xs text-gray-400 italic">No project files uploaded yet.</p>
                             ) : (
                                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                                     {project.files?.map((f: any) => (
-                                        <div key={f.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition duration-150">
-                                            <span className="text-xs text-slate-700 truncate w-36 font-semibold" title={f.fileName}>
+                                        <div key={f.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition duration-150">
+                                            <span className="text-xs text-gray-700 truncate w-36 font-semibold" title={f.fileName}>
                                                 {f.fileName}
                                             </span>
-                                            <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-slate-400 hover:text-emerald-700 transition">
+                                            <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-gray-400 hover:text-emerald-700 transition">
                                                 <Download size={13} />
                                             </a>
                                         </div>
@@ -365,14 +365,14 @@ export default function ResearchWorkspace() {
                 </div>
 
                 {/* COLUMN 2: Editor (Width: 50% - MS Word Style White Canvas) */}
-                <div className="w-2/4 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-0 overflow-hidden">
+                <div className="w-2/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
                     <CollaborativeEditor 
                         projectId={id as string} 
                     />
                 </div>
 
                 {/* COLUMN 3: Real-Time Team Chat (Width: 25%) */}
-                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-0 overflow-hidden">
+                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
                     <ProjectChat 
                         key={id as string}
                         projectId={id as string} 
@@ -384,24 +384,24 @@ export default function ResearchWorkspace() {
 
             {/* Invite Modal */}
             {showInviteModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm space-y-4 animate-in scale-in-95 duration-200">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xl w-full max-w-sm space-y-4 animate-in scale-in-95 duration-200">
                         <div className="space-y-1">
-                            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <Sparkles size={18} className="text-emerald-700" />
                                 Add Research Collaborator
                             </h2>
-                            <p className="text-xs text-slate-500">Search and send page invites to active university researchers.</p>
+                            <p className="text-xs text-gray-500">Search and send page invites to active university researchers.</p>
                         </div>
                         
                         <form onSubmit={handleInvite} className="space-y-4">
                             <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Academic Staff</label>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Academic Staff</label>
                                 <select 
                                     required
                                     value={inviteeId}
                                     onChange={(e) => setInviteeId(e.target.value)}
-                                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white text-slate-800 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:outline-none"
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl bg-white text-gray-800 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:outline-none"
                                 >
                                     <option value="">Select staff member...</option>
                                     {allStaff.map(s => (
@@ -412,9 +412,9 @@ export default function ResearchWorkspace() {
                                 </select>
                             </div>
                             
-                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
-                                <button type="button" onClick={() => setShowInviteModal(false)} className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
-                                <button type="submit" style={{ backgroundColor: '#006533' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Send Invite</button>
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                                <button type="button" onClick={() => setShowInviteModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
+                                <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Send Invite</button>
                             </div>
                         </form>
                     </div>
@@ -423,42 +423,42 @@ export default function ResearchWorkspace() {
 
             {/* Edit Workspace Modal */}
             {showEditModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md space-y-4 animate-in scale-in-95 duration-200">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md space-y-4 animate-in scale-in-95 duration-200">
                         <div className="space-y-1">
-                            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <Edit3 size={18} className="text-emerald-700" />
                                 Edit Workspace Details
                             </h2>
-                            <p className="text-xs text-slate-500">Update research project title and abstract synopsis.</p>
+                            <p className="text-xs text-gray-500">Update research project title and abstract synopsis.</p>
                         </div>
                         
                         <form onSubmit={handleEditWorkspace} className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">Project Title</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Project Title</label>
                                 <input 
                                     type="text"
                                     required
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
-                                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none"
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">Project Synopsis / Abstract</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Project Synopsis / Abstract</label>
                                 <textarea 
                                     rows={4}
                                     value={editAbstract}
                                     onChange={(e) => setEditAbstract(e.target.value)}
                                     placeholder="Enter abstract..."
-                                    className="w-full p-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none"
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
                                 />
                             </div>
                             
-                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
-                                <button type="button" onClick={() => setShowEditModal(false)} className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
-                                <button type="submit" style={{ backgroundColor: '#006533' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Save Changes</button>
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
+                                <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Save Changes</button>
                             </div>
                         </form>
                     </div>

@@ -22,7 +22,8 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
         extensions: [StarterKit.configure({})],
         editorProps: {
             attributes: {
-                class: 'prose max-w-none focus:outline-none min-h-[650px] p-12 text-slate-900 leading-relaxed bg-white shadow-sm',
+                class: 'prose max-w-none focus:outline-none min-h-[700px] p-12 text-gray-900 leading-relaxed bg-white',
+                style: 'background-color: #ffffff !important; color: #111827 !important;',
             },
         },
         onUpdate: ({ editor }) => {
@@ -73,16 +74,16 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
 
     if (loadStatus === 'loading') {
         return (
-            <div className="flex items-center justify-center min-h-[500px] gap-3 text-slate-400">
+            <div className="flex items-center justify-center min-h-[500px] gap-3 text-gray-500 bg-white">
                 <Loader2 className="animate-spin text-emerald-700" size={22} />
-                <span className="text-sm font-medium">Loading document…</span>
+                <span className="text-sm font-medium">Loading Microsoft Word document surface…</span>
             </div>
         );
     }
 
     if (loadStatus === 'error') {
         return (
-            <div className="flex items-center justify-center min-h-[500px] gap-3 text-red-500">
+            <div className="flex items-center justify-center min-h-[500px] gap-3 text-red-500 bg-white">
                 <AlertCircle size={22} />
                 <span className="text-sm font-medium">Failed to load document. Please refresh.</span>
             </div>
@@ -90,9 +91,9 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-full w-full bg-slate-100 border border-slate-200 overflow-hidden">
-            {/* Toolbar */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-200 bg-slate-50 flex-wrap">
+        <div className="flex flex-col h-full w-full bg-gray-100 border border-gray-200 overflow-hidden">
+            {/* MS Word Toolbar */}
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50 flex-wrap">
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBold().run()}
                     active={editor?.isActive('bold')}
@@ -107,7 +108,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Italic size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-slate-300 mx-1" />
+                <div className="w-px h-5 bg-gray-300 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
                     active={editor?.isActive('heading', { level: 2 })}
@@ -122,7 +123,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Heading3 size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-slate-300 mx-1" />
+                <div className="w-px h-5 bg-gray-300 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().toggleBulletList().run()}
                     active={editor?.isActive('bulletList')}
@@ -144,7 +145,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 >
                     <Quote size={15} />
                 </ToolbarButton>
-                <div className="w-px h-5 bg-slate-300 mx-1" />
+                <div className="w-px h-5 bg-gray-300 mx-1" />
                 <ToolbarButton
                     onClick={() => editor?.chain().focus().undo().run()}
                     active={false}
@@ -163,7 +164,7 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 {/* Spacer + Save button */}
                 <div className="ml-auto flex items-center gap-3">
                     {lastSaved && saveStatus === 'idle' && (
-                        <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                        <span className="text-[11px] text-gray-500 font-medium hidden sm:inline">
                             Saved at {lastSaved}
                         </span>
                     )}
@@ -185,8 +186,8 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                     <button
                         onClick={() => handleSave()}
                         disabled={saveStatus === 'saving'}
-                        style={{ backgroundColor: '#006533' }}
-                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-white text-xs font-bold disabled:opacity-60 transition-colors shadow-sm hover:opacity-90"
+                        style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold disabled:opacity-60 transition-colors shadow-sm hover:opacity-90"
                         title="Save (Ctrl+S)"
                     >
                         <Save size={13} />
@@ -195,28 +196,38 @@ export default function RichTextEditor({ projectId }: RichTextEditorProps) {
                 </div>
             </div>
 
-            {/* Microsoft Word Page Container */}
-            <div className="flex-grow overflow-auto p-6 bg-slate-200/80 flex justify-center">
-                <div className="w-full max-w-4xl bg-white border border-slate-300 shadow-md min-h-[750px] my-2">
-                    <EditorContent editor={editor} className="h-full" />
+            {/* Microsoft Word Page Container (Pure White Paper Sheet #ffffff) */}
+            <div className="flex-grow overflow-auto p-6 bg-gray-200/60 flex justify-center">
+                <div 
+                    style={{ backgroundColor: '#ffffff', color: '#111827' }}
+                    className="w-full max-w-4xl border border-gray-300 shadow-md min-h-[750px] my-2 rounded-sm p-1"
+                >
+                    <EditorContent editor={editor} className="h-full bg-white text-gray-900" />
                 </div>
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `
+                .ProseMirror {
+                    background-color: #ffffff !important;
+                    color: #111827 !important;
+                    min-height: 700px;
+                    outline: none;
+                }
                 .ProseMirror p.is-editor-empty:first-child::before {
                     content: attr(data-placeholder);
                     float: left;
-                    color: #adb5bd;
+                    color: #9ca3af;
                     pointer-events: none;
                     height: 0;
                 }
-                .ProseMirror h2 { font-size: 1.4rem; font-weight: 700; margin: 1.2rem 0 0.5rem; color: #0f172a; }
-                .ProseMirror h3 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 0.4rem; color: #1e293b; }
-                .ProseMirror ul { list-style: disc; padding-left: 1.5rem; }
-                .ProseMirror ol { list-style: decimal; padding-left: 1.5rem; }
-                .ProseMirror blockquote { border-left: 3px solid #006533; padding-left: 1rem; color: #475569; font-style: italic; margin: 0.8rem 0; }
-                .ProseMirror strong { font-weight: 700; color: #000000; }
-                .ProseMirror em { font-style: italic; }
+                .ProseMirror h2 { font-size: 1.4rem; font-weight: 700; margin: 1.2rem 0 0.5rem; color: #000000 !important; }
+                .ProseMirror h3 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 0.4rem; color: #111827 !important; }
+                .ProseMirror p { color: #111827 !important; margin-bottom: 1rem; line-height: 1.6; }
+                .ProseMirror ul { list-style: disc; padding-left: 1.5rem; color: #111827 !important; }
+                .ProseMirror ol { list-style: decimal; padding-left: 1.5rem; color: #111827 !important; }
+                .ProseMirror blockquote { border-left: 4px solid #006533; padding-left: 1rem; color: #374151 !important; font-style: italic; margin: 0.8rem 0; }
+                .ProseMirror strong { font-weight: 700; color: #000000 !important; }
+                .ProseMirror em { font-style: italic; color: #111827 !important; }
             `}} />
         </div>
     );
@@ -240,8 +251,8 @@ function ToolbarButton({
             title={title}
             className={`p-1.5 rounded-md transition-colors ${
                 active
-                    ? 'bg-emerald-100 text-emerald-800 font-bold'
-                    : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                    ? 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300'
+                    : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
             }`}
         >
             {children}
