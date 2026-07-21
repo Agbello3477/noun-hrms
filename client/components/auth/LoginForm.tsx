@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 interface LoginFormProps {
     onSwitchView: (view: 'hero' | 'register') => void;
@@ -13,6 +13,7 @@ interface LoginFormProps {
 export default function LoginForm({ onSwitchView }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const { login, user } = useAuth();
@@ -162,15 +163,25 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                 <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="password">
                   Password
                 </label>
-                <input
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-700 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-4 pr-11 py-3 text-gray-700 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-800 transition-colors p-1"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <button

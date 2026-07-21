@@ -69,14 +69,11 @@ export default function Home() {
                                     Sign In
                                 </button>
                                 <button
-                                    onClick={() => setActiveView('register')}
-                                    className={`px-5 py-2.5 text-sm font-bold rounded-full transition-all shadow-md hover:shadow-lg ${
-                                        activeView === 'register' 
-                                        ? 'bg-primary-dark text-white' 
-                                        : 'bg-primary text-white hover:bg-primary-dark'
-                                    }`}
+                                    onClick={() => alert("Registration is managed centrally by NOUN Registry. Please contact the Registry Department to activate your staff profile.")}
+                                    style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                                    className="px-5 py-2.5 text-xs font-bold rounded-full transition-all shadow-md hover:opacity-90"
                                 >
-                                    Get Started
+                                    Contact NOUN Registry to Get Started
                                 </button>
                             </>
                         )}
@@ -107,10 +104,10 @@ export default function Home() {
                                         Log In to Portal <ArrowRight className="ml-2 h-5 w-5" />
                                     </button>
                                     <button
-                                        onClick={() => setActiveView('register')}
-                                        className="inline-flex items-center justify-center px-8 py-4 bg-white text-gray-800 border-2 border-gray-100 font-bold rounded-full hover:border-primary hover:text-primary transition-all hover:-translate-y-1"
+                                        onClick={() => alert("Registration is managed centrally by NOUN Registry. Please contact the Registry Department to activate your staff profile.")}
+                                        className="inline-flex items-center justify-center px-8 py-4 bg-emerald-50 text-emerald-900 border-2 border-emerald-300 font-bold rounded-full hover:bg-emerald-100 transition-all shadow-md cursor-pointer"
                                     >
-                                        New Staff Registration
+                                        Contact NOUN Registry to Get Started
                                     </button>
                                 </div>
                             </div>

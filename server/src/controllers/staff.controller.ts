@@ -260,12 +260,35 @@ export const getStaffById = async (req: Request, res: Response) => {
             }
         }
 
-        res.json(staff);
+        // Check if the staff member is currently on active approved leave
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const activeLeave = staff.staffProfile ? await prisma.leaveRequest.findFirst({
+            where: {
+                staffId: staff.staffProfile.id,
+                status: 'APPROVED',
+                endDate: { gte: today }
+            },
+            select: {
+                id: true,
+                type: true,
+                startDate: true,
+                endDate: true,
+                durationDays: true,
+                reason: true
+            }
+        }) : null;
+
+        res.json({
+            ...staff,
+            activeLeave
+        });
     } catch (error) {
         console.error('getStaffById error:', error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
-}
+};
 
 export const createStaff = async (req: Request, res: Response) => {
     try {

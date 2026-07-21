@@ -47,7 +47,15 @@ interface StaffDetail {
         dateOfFirstAppointment?: string;
         unit?: { name: string; type: string };
         studyCenter?: { name: string; code: string };
-    }
+    };
+    activeLeave?: {
+        id: string;
+        type: string;
+        startDate: string;
+        endDate: string;
+        durationDays: number;
+        reason?: string;
+    } | null;
 }
 
 interface OrganizationData {
@@ -349,6 +357,15 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             >
                 <ArrowLeft size={18} /> Back to Directory
             </button>
+
+            {/* Active Leave Countdown Banner if staff member is on leave */}
+            {staff.activeLeave && (
+                <LeaveCountdownTimer 
+                    endDate={staff.activeLeave.endDate} 
+                    startDate={staff.activeLeave.startDate}
+                    type={staff.activeLeave.type}
+                />
+            )}
 
             {/* Profile Detail Card */}
             <div className="bg-white rounded-3xl border border-gray-150 shadow-sm overflow-hidden">
@@ -775,6 +792,81 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                     <QueryHistoryTab staffId={staff.staffProfile.id} />
                 </div>
             )}
+        </div>
+    );
+}
+
+function LeaveCountdownTimer({ endDate, startDate, type }: { endDate: string; startDate?: string; type?: string }) {
+    const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isResumed: boolean }>({
+        days: 0, hours: 0, minutes: 0, seconds: 0, isResumed: false
+    });
+
+    useEffect(() => {
+        const calculateTime = () => {
+            const end = new Date(endDate).getTime();
+            const now = new Date().getTime();
+            const diff = end - now;
+
+            if (diff <= 0) {
+                setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isResumed: true });
+                return;
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            setTimeLeft({ days, hours, minutes, seconds, isResumed: false });
+        };
+
+        calculateTime();
+        const interval = setInterval(calculateTime, 1000);
+        return () => clearInterval(interval);
+    }, [endDate]);
+
+    if (timeLeft.isResumed) {
+        return (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-4 flex items-center justify-between text-xs font-bold shadow-sm">
+                <span>✅ Active Leave Concluded — Staff Member Has Resumed Duty</span>
+                <span className="text-[10px] bg-emerald-700 text-white px-2.5 py-0.5 rounded-full uppercase">Resumed</span>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ backgroundColor: '#006533', color: '#ffffff' }} className="rounded-2xl p-5 text-white shadow-xl border border-emerald-700 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3">
+                <span className="p-3 bg-white/20 rounded-2xl"><Calendar size={24} className="animate-pulse" /></span>
+                <div>
+                    <span className="bg-emerald-800 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-600 inline-block mb-1">
+                        🌴 {type ? type.replace(/_/g, ' ') : 'APPROVED LEAVE'} IN PROGRESS
+                    </span>
+                    <h3 className="text-base font-black tracking-tight">Active Resumption Countdown</h3>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <div className="bg-emerald-950/80 px-3.5 py-2 rounded-xl border border-emerald-600 text-center min-w-[60px]">
+                    <span className="text-xl font-black block leading-tight">{timeLeft.days}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-200">Days</span>
+                </div>
+                <span className="text-xl font-bold text-emerald-300">:</span>
+                <div className="bg-emerald-950/80 px-3.5 py-2 rounded-xl border border-emerald-600 text-center min-w-[60px]">
+                    <span className="text-xl font-black block leading-tight">{String(timeLeft.hours).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-200">Hours</span>
+                </div>
+                <span className="text-xl font-bold text-emerald-300">:</span>
+                <div className="bg-emerald-950/80 px-3.5 py-2 rounded-xl border border-emerald-600 text-center min-w-[60px]">
+                    <span className="text-xl font-black block leading-tight">{String(timeLeft.minutes).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-200">Mins</span>
+                </div>
+                <span className="text-xl font-bold text-emerald-300">:</span>
+                <div className="bg-emerald-950/80 px-3.5 py-2 rounded-xl border border-emerald-600 text-center min-w-[60px]">
+                    <span className="text-xl font-black block leading-tight">{String(timeLeft.seconds).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-200">Secs</span>
+                </div>
+            </div>
         </div>
     );
 }

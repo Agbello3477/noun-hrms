@@ -23,6 +23,9 @@
     "firebase-functions": "^6.0.1",
     "firebase-admin": "^11.11.1"
   },
+  "overrides": {
+    "@tiptap/core": "^3.28.0"
+  },
   "main": "server.js",
   "engines": {
     "node": "20"

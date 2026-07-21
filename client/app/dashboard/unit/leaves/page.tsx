@@ -243,8 +243,8 @@ export default function UnitLeavesPage() {
                                             <th className="py-3.5 px-6">Staff Member</th>
                                             <th className="py-3.5 px-6">Leave Type</th>
                                             <th className="py-3.5 px-6">Unit / Location</th>
-                                            <th className="py-3.5 px-6">Duration</th>
                                             <th className="py-3.5 px-6">Resumption Date</th>
+                                            <th className="py-3.5 px-6 text-center">Countdown</th>
                                             <th className="py-3.5 px-6 text-right">Status</th>
                                         </tr>
                                     </thead>
@@ -261,9 +261,11 @@ export default function UnitLeavesPage() {
                                                     </span>
                                                 </td>
                                                 <td className="py-4 px-6 text-gray-600 font-semibold">{leave.staff?.location}</td>
-                                                <td className="py-4 px-6 font-bold text-gray-900">{leave.durationDays || '—'} Days</td>
                                                 <td className="py-4 px-6 text-gray-600 font-medium">
                                                     {new Date(leave.startDate).toLocaleDateString()} → <span className="font-bold text-gray-900">{new Date(leave.endDate).toLocaleDateString()}</span>
+                                                </td>
+                                                <td className="py-4 px-6 text-center">
+                                                    <TableCountdownBadge endDate={leave.endDate} />
                                                 </td>
                                                 <td className="py-4 px-6 text-right">
                                                     <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-[10px] uppercase shadow-sm">
@@ -421,5 +423,49 @@ export default function UnitLeavesPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+function TableCountdownBadge({ endDate }: { endDate: string }) {
+    const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; isResumed: boolean }>({
+        days: 0, hours: 0, minutes: 0, isResumed: false
+    });
+
+    useEffect(() => {
+        const calculateTime = () => {
+            const end = new Date(endDate).getTime();
+            const now = new Date().getTime();
+            const diff = end - now;
+
+            if (diff <= 0) {
+                setTimeLeft({ days: 0, hours: 0, minutes: 0, isResumed: true });
+                return;
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+            setTimeLeft({ days, hours, minutes, isResumed: false });
+        };
+
+        calculateTime();
+        const interval = setInterval(calculateTime, 1000);
+        return () => clearInterval(interval);
+    }, [endDate]);
+
+    if (timeLeft.isResumed) {
+        return (
+            <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold text-[10px] uppercase border border-gray-200">
+                Duty Resumed
+            </span>
+        );
+    }
+
+    return (
+        <span className="px-2.5 py-1 rounded-full bg-emerald-950 text-white font-mono text-[10px] font-bold border border-emerald-700 shadow-sm inline-flex items-center gap-1">
+            <Clock size={11} className="text-emerald-400 animate-spin" />
+            {timeLeft.days}d {String(timeLeft.hours).padStart(2, '0')}h {String(timeLeft.minutes).padStart(2, '0')}m
+        </span>
     );
 }

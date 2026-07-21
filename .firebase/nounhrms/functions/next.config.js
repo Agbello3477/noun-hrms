@@ -2,7 +2,8 @@
 
 // client/next.config.js
 var nextConfig = {
-  output: process.env.NEXT_STANDALONE === "true" ? "standalone" : void 0,
+  // Enable standalone output for Docker & Kubernetes SSR deployment
+  output: process.env.NEXT_EXPORT === "true" ? void 0 : "standalone",
   webpack: (config, { dev }) => {
     if (dev) {
       config.cache = false;
