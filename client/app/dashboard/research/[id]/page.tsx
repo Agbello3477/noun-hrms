@@ -81,18 +81,10 @@ export default function ResearchWorkspace() {
 
     const fetchStaff = async () => {
         try {
-            const res = await api.get('/api/staff');
-            const dataArray = Array.isArray(res.data) ? res.data : (res.data.staff || []);
-            const mappedStaff = dataArray
-                .map((s: any) => ({
-                    userId: s.userId || s.id,
-                    surname: s.staffProfile?.surname || s.surname || s.name || '',
-                    otherNames: s.staffProfile ? s.staffProfile.otherNames || '' : (s.otherNames || ''),
-                    cadre: s.staffProfile?.cadre || s.role || ''
-                }));
-            setAllStaff(mappedStaff);
+            const res = await api.get('/api/research/peers');
+            setAllStaff(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
-            console.error(err);
+            console.error('Failed to fetch academic peers', err);
         }
     };
 

@@ -135,68 +135,84 @@ export const getProjectDetails = async (req: Request, res: Response) => {
 export const sendInvite = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { inviteeId } = req.body; // user ID or staffProfile ID of invitee
+        const { inviteeId } = req.body;
         const user = (req as any).user;
 
-        // Resolve target user & staffProfile
-        let targetUser = await prisma.user.findUnique({ where: { id: inviteeId } });
-        let targetStaffProfile = null;
-        if (!targetUser) {
-            targetStaffProfile = await prisma.staffProfile.findUnique({ where: { id: inviteeId } });
-            if (targetStaffProfile) {
-                targetUser = await prisma.user.findUnique({ where: { id: targetStaffProfile.userId } });
-            }
-        }
-        if (!targetUser) return res.status(404).json({ message: 'Invitee user not found' });
+        if (!inviteeId) return res.status(400).json({ message: 'Invitee ID is required' });
 
-        const resolvedInviteeId = targetUser.id;
-
-        const existingInvite = await prisma.projectInvite.findFirst({
-            where: { projectId: id, inviteeId: resolvedInviteeId, status: 'PENDING' }
+        // Resolve target user & staffProfile by user ID, staffProfile ID, or email
+        let targetUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { id: inviteeId },
+                    { email: inviteeId },
+                    { staffProfile: { id: inviteeId } }
+                ]
+            },
+            include: { staffProfile: true }
         });
 
-        if (existingInvite) return res.status(400).json({ message: 'Invite already sent' });
+        if (!targetUser) return res.status(404).json({ message: 'Academic peer not found' });
+
+        const resolvedUserId = targetUser.id;
+        const resolvedStaffId = targetUser.staffProfile?.id;
+
+        // Check if already a member of the project
+        if (resolvedStaffId) {
+            const isMember = await prisma.projectMember.findFirst({
+                where: { projectId: id, staffId: resolvedStaffId }
+            });
+            if (isMember) return res.status(400).json({ message: 'Peer is already a collaborator on this project' });
+        }
+
+        // Check if pending invite already exists
+        const existingInvite = await prisma.projectInvite.findFirst({
+            where: {
+                projectId: id,
+                status: 'PENDING',
+                OR: [
+                    { inviteeId: resolvedUserId },
+                    ...(resolvedStaffId ? [{ inviteeId: resolvedStaffId }] : [])
+                ]
+            }
+        });
+
+        if (existingInvite) return res.status(400).json({ message: 'Invite already sent to this peer' });
 
         const invite = await prisma.projectInvite.create({
             data: {
                 projectId: id,
                 inviterId: user.id,
-                inviteeId: resolvedInviteeId
+                inviteeId: resolvedUserId
             }
         });
 
         // ── Send Email Notification to Invitee ────────────────────────────────
         try {
-            const [inviteeUser, project] = await Promise.all([
-                prisma.user.findUnique({
-                    where: { id: inviteeId },
-                    include: { staffProfile: { select: { surname: true, otherNames: true } } }
-                }),
-                prisma.researchProject.findUnique({
-                    where: { id },
-                    select: { title: true }
-                })
-            ]);
+            const project = await prisma.researchProject.findUnique({
+                where: { id },
+                select: { title: true }
+            });
 
-            if (inviteeUser?.email && project) {
-                const inviteeName = inviteeUser.staffProfile
-                    ? `${inviteeUser.staffProfile.surname} ${inviteeUser.staffProfile.otherNames}`.trim()
-                    : inviteeUser.email;
+            if (targetUser.email && project) {
+                const inviteeName = targetUser.staffProfile
+                    ? `${targetUser.staffProfile.surname} ${targetUser.staffProfile.otherNames}`.trim()
+                    : targetUser.email;
                 const portalUrl = `${process.env.CLIENT_URL || 'https://nounhrms.web.app'}/dashboard/research`;
-                const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8" />
+
+                const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
 <style>
-  body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 0; }
-  .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 10px; border: 1px solid #e0e0e0; overflow: hidden; }
-  .header { background: linear-gradient(135deg, #006533, #004d26); padding: 28px 32px; text-align: center; }
-  .header h1 { color: #FFCD00; margin: 0; font-size: 20px; letter-spacing: 1px; }
-  .header p { color: #ffffff; margin: 6px 0 0; font-size: 13px; opacity: 0.85; }
-  .body { padding: 32px; color: #1f2937; line-height: 1.7; }
-  .badge { display: inline-block; background: #f0fdf4; color: #166534; border: 1px solid #86efac; border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: bold; margin-bottom: 20px; }
-  .project-box { background: #f9fafb; border-left: 4px solid #006533; padding: 16px 20px; border-radius: 6px; margin: 20px 0; }
-  .project-box p { margin: 0; font-size: 15px; color: #006533; font-weight: bold; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+  .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+  .header { background: #006533; padding: 24px 32px; text-align: center; color: #ffffff; }
+  .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+  .header p { margin: 4px 0 0; font-size: 13px; opacity: 0.9; }
+  .body { padding: 32px; }
+  .badge { display: inline-block; background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; margin-bottom: 16px; border: 1px solid #a7f3d0; }
+  .project-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 16px; border-radius: 8px; font-weight: bold; margin: 16px 0; color: #0f172a; }
   .cta-btn { display: inline-block; margin: 20px 0; background: #006533; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; }
   .footer { background: #f5f5f5; padding: 16px 32px; font-size: 12px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; }
   p { margin: 0 0 14px; }
@@ -211,16 +227,11 @@ export const sendInvite = async (req: Request, res: Response) => {
     <div class="body">
       <span class="badge">📨 Research Collaboration Invite</span>
       <p>Dear <strong>${inviteeName}</strong>,</p>
-      <p>You have been invited to collaborate on a research project in the NOUN Research Forum. The project owner has selected you as a peer researcher and granted you collaborator access.</p>
+      <p>You have been invited to collaborate on a research project. Click the button below to review your invitation:</p>
       <div class="project-box">
         <p>📁 ${project.title}</p>
       </div>
-      <p>Click the button below to log in to the NOUN HRMS portal and accept or review your invitation:</p>
       <a href="${portalUrl}" class="cta-btn">Open Research Forum →</a>
-      <p style="font-size: 13px; color: #6b7280;">If you were not expecting this invitation, you may safely ignore this email. No action is required on your part unless you wish to accept the collaboration.</p>
-      <br />
-      <p>Regards,</p>
-      <p><strong>NOUN Research Office</strong><br />Human Resource Management System</p>
     </div>
     <div class="footer">
       This is an automatically generated notification. Please do not reply to this email.<br />
@@ -229,10 +240,10 @@ export const sendInvite = async (req: Request, res: Response) => {
   </div>
 </body>
 </html>`;
-                await sendEmail(inviteeUser.email, `Research Collaboration Invite: ${project.title}`, html);
+                await sendEmail(targetUser.email, `Research Collaboration Invite: ${project.title}`, html);
             }
         } catch (emailErr) {
-            console.error('[RESEARCH] Failed to send invite email (non-fatal):', emailErr);
+            console.error('[RESEARCH] Failed to send invite email:', emailErr);
         }
 
         // ── In-App Notification to Invitee ────────────────────────────────
@@ -241,7 +252,7 @@ export const sendInvite = async (req: Request, res: Response) => {
             const inviter = await prisma.user.findUnique({ where: { id: user.id }, select: { name: true } });
             if (project) {
                 await notifyUser(
-                    inviteeId,
+                    resolvedUserId,
                     '📨 Research Collaboration Invite',
                     `${inviter?.name || 'A colleague'} has invited you to collaborate on: "${project.title}". Visit your Research Forum to accept.`,
                     'INFO',
@@ -249,10 +260,10 @@ export const sendInvite = async (req: Request, res: Response) => {
                 );
             }
         } catch (notifErr) {
-            console.error('[RESEARCH] Failed to create in-app notification (non-fatal):', notifErr);
+            console.error('[RESEARCH] Failed to create notification:', notifErr);
         }
 
-        res.json({ message: 'Invite sent', invite });
+        res.json({ message: 'Invite sent successfully', invite });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error' });
@@ -438,13 +449,16 @@ export const saveDocument = async (req: Request, res: Response) => {
 export const getMyInvites = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+        const staffProfile = await prisma.staffProfile.findFirst({
+            where: { OR: [{ userId: user.id }, { id: user.id }] }
+        });
 
         const invites = await prisma.projectInvite.findMany({
             where: {
                 OR: [
                     { inviteeId: user.id },
-                    ...(staffProfile ? [{ inviteeId: staffProfile.id }] : [])
+                    ...(staffProfile ? [{ inviteeId: staffProfile.id }] : []),
+                    { invitee: { email: user.email } }
                 ],
                 status: 'PENDING'
             },
@@ -456,6 +470,44 @@ export const getMyInvites = async (req: Request, res: Response) => {
         });
 
         res.json(invites);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 16. Get Academic Peers (accessible to all academic staff for project invitation)
+export const getAcademicPeers = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+
+        const users = await prisma.user.findMany({
+            where: {
+                id: { not: user.id },
+                isActive: true
+            },
+            include: {
+                staffProfile: true
+            },
+            take: 300
+        });
+
+        const formattedPeers = users.map(u => ({
+            id: u.id,
+            userId: u.id,
+            staffId: u.staffProfile?.id || u.id,
+            name: u.staffProfile
+                ? `${u.staffProfile.surname || ''} ${u.staffProfile.otherNames || ''}`.trim() || u.name || u.email
+                : (u.name || u.email),
+            surname: u.staffProfile?.surname || u.name?.split(' ')?.[0] || u.email,
+            otherNames: u.staffProfile?.otherNames || u.name?.split(' ')?.slice(1)?.join(' ') || '',
+            email: u.email,
+            role: u.role,
+            cadre: u.staffProfile?.cadre || 'ACADEMIC',
+            department: u.staffProfile?.department || 'Academic Unit'
+        }));
+
+        res.json(formattedPeers);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error' });

@@ -8,6 +8,7 @@ import {
     acceptInvite,
     declineInvite,
     getMyInvites,
+    getAcademicPeers,
     uploadFile,
     upload,
     getDocument,
@@ -23,8 +24,9 @@ const router = Router();
 
 router.use(verifyToken as any);
 
-// Invites (Registered BEFORE /:id to prevent route shadowing)
+// Invites & Peers (Registered BEFORE /:id to prevent route shadowing)
 router.get('/invites/mine', getMyInvites);
+router.get('/peers', getAcademicPeers);
 router.post('/invite/:inviteId/accept', acceptInvite);
 router.post('/invite/:inviteId/decline', declineInvite);
 router.delete('/invite/:inviteId', cancelInvite);
