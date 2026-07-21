@@ -8,6 +8,13 @@
   --color-accent: #E31B23;          /* Accent Red */
   --color-background: #F8FAFC;      /* Clean neutral backdrop */
   --color-surface: #FFFFFF;         /* Card / Container white backdrop */
+  color-scheme: light !important;
+}
+
+html, body {
+  color-scheme: light !important;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
 }
 
 @tailwind base;
