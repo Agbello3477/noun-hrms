@@ -2,6 +2,23 @@
 import nodemailer from 'nodemailer';
 import { sendSMS } from './sms.service';
 import { Resend } from 'resend';
+import path from 'path';
+import fs from 'fs';
+
+const SETTINGS_FILE = path.join(__dirname, '../../system_settings.json');
+
+const getMockEmailMode = (): boolean => {
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) {
+            const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+            const parsed = JSON.parse(data);
+            return parsed.mockEmailMode !== false;
+        }
+    } catch (e) {
+        console.error("Error reading system settings file for email:", e);
+    }
+    return true; // default mockEmailMode is true
+};
 
 // Configure Resend
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -23,6 +40,12 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
     try {
         console.log(`[EMAIL_SERVICE] Sending email to ${to}: Subject "${subject}"`);
         
+        const mockMode = getMockEmailMode();
+        if (mockMode || process.env.SMTP_USER === 'your-email@example.com' || !process.env.SMTP_USER) {
+            console.log(`[EMAIL_SERVICE] [MOCK] Email HTML contents:\n${html}`);
+            return true;
+        }
+
         if (resend) {
             const response = await resend.emails.send({
                 from: resendFrom,
@@ -37,11 +60,7 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
             return true;
         }
 
-        // SMTP Fallback
-        if (process.env.SMTP_USER === 'your-email@example.com' || !process.env.SMTP_USER) {
-            console.log(`[EMAIL_SERVICE] [MOCK] Email HTML contents:\n${html}`);
-            return true;
-        }
+
 
         const info = await transporter.sendMail({
             from: '"NOUN HRMS" <no-reply@noun.edu.ng>',
