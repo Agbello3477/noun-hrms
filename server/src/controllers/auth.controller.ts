@@ -351,6 +351,15 @@ export const login = async (req: Request, res: Response) => {
             console.error('Failed to log login event:', e);
         }
 
+        // Invalidate older concurrent sessions
+        await prisma.user.update({
+            where: { id: updatedUser.id },
+            data: { tokenInvalidatedAt: new Date() }
+        });
+        if (isRedisActive) {
+            await redisService.del(`user:session:${updatedUser.id}`).catch(() => {});
+        }
+
         // Generate final token
         const token = jwt.sign(
             { id: updatedUser.id, role: updatedUser.role },
@@ -403,6 +412,16 @@ export const verify2FALogin = async (req: Request, res: Response) => {
         });
 
         if (!isValid) return res.status(401).json({ message: 'Invalid 2FA code' });
+
+        // Invalidate older concurrent sessions
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { tokenInvalidatedAt: new Date() }
+        });
+        const isRedisActive = (redisService as any).isEnabled && (redisService as any).client;
+        if (isRedisActive) {
+            await redisService.del(`user:session:${user.id}`).catch(() => {});
+        }
 
         // Generate final token
         const token = jwt.sign(
