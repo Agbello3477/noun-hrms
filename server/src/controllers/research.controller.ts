@@ -62,18 +62,27 @@ export const getMyProjects = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
-        if (!staffProfile && user.role !== 'SUPER_USER') {
+        if (!staffProfile && user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR') {
              return res.status(200).json([]); // Non-staff maybe
         }
 
         const projects = await prisma.researchProject.findMany({
-            where: user.role === 'SUPER_USER' ? {} : {
+            where: (user.role === 'SUPER_USER' || user.role === 'VICE_CHANCELLOR') ? {} : {
                 members: {
                     some: { staffId: staffProfile!.id }
                 }
             },
             include: {
                 owner: true,
+                members: {
+                    include: {
+                        staff: {
+                            include: {
+                                user: true
+                            }
+                        }
+                    }
+                },
                 _count: {
                     select: { members: true, documents: true }
                 }
@@ -118,7 +127,7 @@ export const getProjectDetails = async (req: Request, res: Response) => {
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
         // RBAC Check
-        if (user.role !== 'SUPER_USER' && staffProfile) {
+        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
             const isMember = project.members.some(m => m.staffId === staffProfile.id);
             if (!isMember) {
                 return res.status(403).json({ message: 'Forbidden. You are not a member of this project.' });
@@ -694,7 +703,7 @@ export const exportDocument = async (req: Request, res: Response) => {
         });
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        if (user.role !== 'SUPER_USER' && staffProfile) {
+        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
             const isMember = project.members.some(m => m.staffId === staffProfile.id);
             if (!isMember) return res.status(403).json({ message: 'Forbidden' });
         }
