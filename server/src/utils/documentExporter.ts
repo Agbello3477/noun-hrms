@@ -19,44 +19,85 @@ interface DocElement {
     items?: string[]; // for lists
 }
 
-// Simple HTML block parser
+// Robust HTML block parser
 function parseHtmlToElements(html: string): DocElement[] {
     const elements: DocElement[] = [];
     if (!html) return elements;
 
-    // Split HTML into blocks by paragraph/heading/list tags
-    const tagRegex = /<(p|h2|h3|blockquote|ul|ol)[^>]*>([\s\S]*?)<\/\1>/gi;
-    let match;
+    // Convert common block tags into standard line breaks or separators
+    let formatted = html
+        .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '\n[H2]$1\n')
+        .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n[H2]$1\n')
+        .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n[H3]$1\n')
+        .replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n[H3]$1\n')
+        .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '\n[BLOCKQUOTE]$1\n')
+        .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '\n[P]$1\n')
+        .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n[LI]$1\n')
+        .replace(/<tr[^>]*>([\s\S]*?)<\/tr>/gi, '\n[P]$1\n')
+        .replace(/<div[^>]*>([\s\S]*?)<\/div>/gi, '\n[P]$1\n');
 
-    while ((match = tagRegex.exec(html)) !== null) {
-        const type = match[1].toLowerCase() as any;
-        const innerContent = match[2];
+    // Split by newlines and parse each line
+    const lines = formatted.split('\n');
+    let currentList: { type: 'ul' | 'ol'; items: string[] } | null = null;
 
-        if (type === 'ul' || type === 'ol') {
-            const listItems: string[] = [];
-            const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-            let liMatch;
-            while ((liMatch = liRegex.exec(innerContent)) !== null) {
-                listItems.push(cleanHtmlText(liMatch[1]));
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // If list item, append to list
+        if (trimmed.startsWith('[LI]')) {
+            const cleanText = cleanHtmlText(trimmed.substring(4));
+            if (!cleanText) continue;
+            if (!currentList) {
+                currentList = { type: 'ul', items: [] };
             }
-            elements.push({ type, text: '', items: listItems });
-        } else {
-            // Check for math equations inside paragraph
-            const cleanText = cleanHtmlText(innerContent);
+            currentList.items.push(cleanText);
+            continue;
+        }
+
+        // Push active list first if we exit list state
+        if (currentList) {
+            elements.push({ type: currentList.type, text: '', items: currentList.items });
+            currentList = null;
+        }
+
+        if (trimmed.startsWith('[H2]')) {
+            elements.push({ type: 'h2', text: cleanHtmlText(trimmed.substring(4)) });
+        } else if (trimmed.startsWith('[H3]')) {
+            elements.push({ type: 'h3', text: cleanHtmlText(trimmed.substring(4)) });
+        } else if (trimmed.startsWith('[BLOCKQUOTE]')) {
+            elements.push({ type: 'blockquote', text: cleanHtmlText(trimmed.substring(12)) });
+        } else if (trimmed.startsWith('[P]')) {
+            const cleanText = cleanHtmlText(trimmed.substring(3));
+            if (!cleanText) continue;
+            
+            // Check for math block
             if (cleanText.startsWith('$$') && cleanText.endsWith('$$')) {
-                elements.push({
-                    type: 'math',
-                    text: cleanText.substring(2, cleanText.length - 2).trim()
+                elements.push({ type: 'math', text: cleanText.substring(2, cleanText.length - 2).trim() });
+            } else if (cleanText.includes('$$')) {
+                const parts = cleanText.split('$$');
+                parts.forEach((part, index) => {
+                    const text = part.trim();
+                    if (!text) return;
+                    if (index % 2 === 1) {
+                        elements.push({ type: 'math', text });
+                    } else {
+                        elements.push({ type: 'p', text });
+                    }
                 });
             } else {
-                elements.push({ type, text: cleanText });
+                elements.push({ type: 'p', text: cleanText });
+            }
+        } else {
+            const cleanText = cleanHtmlText(trimmed);
+            if (cleanText) {
+                elements.push({ type: 'p', text: cleanText });
             }
         }
     }
 
-    // Fallback if no tags found
-    if (elements.length === 0 && html.trim()) {
-        elements.push({ type: 'p', text: cleanHtmlText(html) });
+    if (currentList) {
+        elements.push({ type: currentList.type, text: '', items: currentList.items });
     }
 
     return elements;
