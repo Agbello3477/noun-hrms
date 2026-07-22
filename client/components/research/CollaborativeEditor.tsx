@@ -61,6 +61,20 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const socketRef = useRef<Socket | null>(null);
+    const [isOnline, setIsOnline] = useState(true);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        setIsOnline(window.navigator.onLine);
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // Socket.io Connection for Document Collaboration Events
     useEffect(() => {
@@ -552,24 +566,25 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
                         </span>
                     )}
 
-                    {lastSaved && saveStatus === 'idle' && (
-                        <span className="text-[11px] text-gray-500 font-medium hidden sm:inline">
-                            Saved at {lastSaved}
+                    {!isOnline ? (
+                        <span className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                            <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                            Offline - changes cached locally
                         </span>
-                    )}
-                    {saveStatus === 'saving' && (
-                        <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
-                            <Loader2 size={12} className="animate-spin" /> Saving...
+                    ) : saveStatus === 'saving' ? (
+                        <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                            <span className="h-2 w-2 rounded-full bg-amber-550 animate-ping"></span>
+                            Saving changes...
                         </span>
-                    )}
-                    {saveStatus === 'saved' && (
-                        <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Saved
+                    ) : saveStatus === 'error' ? (
+                        <span className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+                            <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                            Save failed
                         </span>
-                    )}
-                    {saveStatus === 'error' && (
-                        <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
-                            <AlertCircle size={12} /> Save failed
+                    ) : (
+                        <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                            Saved to cloud
                         </span>
                     )}
                     <button

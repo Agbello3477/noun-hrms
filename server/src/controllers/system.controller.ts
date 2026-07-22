@@ -10,6 +10,8 @@ export const getAuditLogs = async (req: Request, res: Response) => {
         const action = req.query.action as string;
         const resource = req.query.resource as string;
         const search = req.query.search as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
 
         const skip = (page - 1) * limit;
 
@@ -22,6 +24,18 @@ export const getAuditLogs = async (req: Request, res: Response) => {
 
         if (resource) {
             where.resource = resource;
+        }
+
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) {
+                where.createdAt.gte = new Date(startDate);
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                where.createdAt.lte = end;
+            }
         }
 
         if (search) {

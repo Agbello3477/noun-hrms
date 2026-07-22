@@ -52,9 +52,12 @@ interface User {
 interface AuthContextType {
     user: User | null;
     login: (token: string, user: User) => void;
-    logout: () => void;
+    logout: (currentPath?: any) => void;
     refreshUser: () => Promise<void>;
     isLoading: boolean;
+    keepSessionAlive: () => void;
+    showTimeoutWarning: boolean;
+    countdownTime: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -63,32 +66,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
-    const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const TIMEOUT_MS = 3 * 60 * 1000; // 3 Minutes
+    const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+    const [countdownTime, setCountdownTime] = useState(60);
+    const lastActiveTime = useRef<number>(Date.now());
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    const keepSessionAlive = () => {
+        lastActiveTime.current = Date.now();
+        setShowTimeoutWarning(false);
+        setCountdownTime(60);
+    };
 
     const handleActivity = () => {
-        resetTimer();
+        if (!showTimeoutWarning) {
+            lastActiveTime.current = Date.now();
+        }
     };
 
     useEffect(() => {
         if (user) {
-            // Attach listeners
             window.addEventListener('mousemove', handleActivity);
             window.addEventListener('keydown', handleActivity);
             window.addEventListener('click', handleActivity);
+            window.addEventListener('scroll', handleActivity);
 
-            resetTimer(); // Start timer
+            lastActiveTime.current = Date.now();
+
+            intervalRef.current = setInterval(() => {
+                const idleSeconds = Math.floor((Date.now() - lastActiveTime.current) / 1000);
+                
+                if (idleSeconds >= 120 && idleSeconds < 180) {
+                    setShowTimeoutWarning(true);
+                    setCountdownTime(180 - idleSeconds);
+                } else if (idleSeconds >= 180) {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    setShowTimeoutWarning(false);
+                    const currentPath = window.location.pathname;
+                    logout(currentPath);
+                }
+            }, 1000);
         }
 
         return () => {
-            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+            if (intervalRef.current) clearInterval(intervalRef.current);
             window.removeEventListener('mousemove', handleActivity);
             window.removeEventListener('keydown', handleActivity);
             window.removeEventListener('click', handleActivity);
+            window.removeEventListener('scroll', handleActivity);
         };
-    }, [user]);
+    }, [user, showTimeoutWarning]);
 
     const fetchUser = async () => {
         if (typeof window === 'undefined') return;
@@ -99,8 +126,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(data);
             } catch (error: any) {
                 console.error('Failed to fetch user', error);
-                // Only remove the token if it's an explicit 401 Unauthorized or 403 Forbidden auth error.
-                // Keep the token on network timeouts, offline states, or 5xx server errors to preserve session.
                 if (error.response && (error.response.status === 401 || error.response.status === 403)) {
                     localStorage.removeItem('token');
                     setUser(null);
@@ -119,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         initializeAuth();
 
-        // Prevent BFCache from restoring an authenticated state after logout
         const handlePageShow = (event: PageTransitionEvent) => {
             if (event.persisted) {
                 const token = localStorage.getItem('token');
@@ -138,7 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setUser(userData);
 
-        // Redirect logic
         const returnUrl = localStorage.getItem('auth_return_url');
         if (returnUrl) {
             localStorage.removeItem('auth_return_url');
@@ -148,15 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const logout = (currentPath?: string) => {
-        // If logout is triggered by timeout/system (passed path), save it.
-        // If manual (no path passed or explicit null), clear it? 
-        // User request: "when session timeout always return to homepage... when log back in pick on from where he was logged out"
-        // So for TIMEOUT, we save path. For MANUAL logout, we probably shouldn't? 
-        // "When logout always return to homepage... when starting the system it should always start from homepage."
-
+    const logout = (currentPath?: any) => {
         if (typeof window !== 'undefined') {
-            if (currentPath) {
+            if (currentPath && typeof currentPath === 'string') {
                 localStorage.setItem('auth_return_url', currentPath);
             } else {
                 localStorage.removeItem('auth_return_url');
@@ -164,20 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             localStorage.removeItem('token');
             setUser(null);
-            window.location.href = '/'; // Always return to homepage (hard redirect to clear state/cache)
-        }
-    };
-
-    const resetTimer = () => {
-        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-        if (user) {
-            idleTimerRef.current = setTimeout(() => {
-                console.log('Session timed out due to inactivity');
-                // Save current path before logging out
-                const currentPath = window.location.pathname;
-                logout(currentPath);
-                alert('Session timed out due to inactivity (3 minutes). Please log in again to resume.');
-            }, TIMEOUT_MS);
+            window.location.href = '/';
         }
     };
 
@@ -186,7 +190,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            login, 
+            logout, 
+            refreshUser, 
+            isLoading,
+            keepSessionAlive,
+            showTimeoutWarning,
+            countdownTime
+        }}>
             {children}
         </AuthContext.Provider>
     );

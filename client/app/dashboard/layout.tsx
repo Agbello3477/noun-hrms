@@ -7,6 +7,7 @@ import api from '../../lib/api';
 import Sidebar from '../../components/dashboard/Sidebar';
 import Header from '../../components/dashboard/Header';
 import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter';
 
 function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise<void> }) {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -159,6 +160,7 @@ function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise
                             </button>
                         </div>
                     </div>
+                    <PasswordStrengthMeter password={newPassword} />
 
                     <button
                         className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5 flex items-center justify-center gap-2 mt-6 disabled:opacity-75 disabled:cursor-not-allowed"

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { ArrowLeft } from 'lucide-react';
+import PasswordStrengthMeter from '../ui/PasswordStrengthMeter';
 
 interface OrganizationData {
     centers: { id: string; name: string; code: string }[];
@@ -191,6 +192,7 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                 <input type="password" name="confirmPassword" required minLength={6} className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.confirmPassword} onChange={handleChange} />
                             </div>
                         </div>
+                        <PasswordStrengthMeter password={formData.password} />
                     </div>
 
                     {/* Section 2 */}

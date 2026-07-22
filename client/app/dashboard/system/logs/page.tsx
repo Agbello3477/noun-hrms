@@ -56,6 +56,8 @@ export default function ActivityLogsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [actionFilter, setActionFilter] = useState('');
     const [resourceFilter, setResourceFilter] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const [limitFilter, setLimitFilter] = useState(20);
     const [currentPage, setCurrentPage] = useState(1);
 
@@ -72,7 +74,10 @@ export default function ActivityLogsPage() {
         'DELETE', 
         'VIEW', 
         'DOWNLOAD', 
-        'MOVE'
+        'MOVE',
+        'LOGIN_2FA',
+        'ENABLE_2FA',
+        'MANUAL_OVERRIDE'
     ];
     const resourceOptions = [
         'AUTH', 
@@ -82,7 +87,8 @@ export default function ActivityLogsPage() {
         'DOSSIER', 
         'PAYROLL', 
         'LEAVE', 
-        'ATTENDANCE'
+        'ATTENDANCE',
+        'CLINIC'
     ];
 
     const fetchLogs = async () => {
@@ -96,6 +102,8 @@ export default function ActivityLogsPage() {
             if (searchQuery.trim()) params.search = searchQuery.trim();
             if (actionFilter) params.action = actionFilter;
             if (resourceFilter) params.resource = resourceFilter;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
 
             const res = await api.get('/api/system/logs', { params });
             setLogs(res.data.logs || []);
@@ -130,7 +138,7 @@ export default function ActivityLogsPage() {
 
     useEffect(() => {
         fetchLogs();
-    }, [currentPage, actionFilter, resourceFilter, limitFilter]);
+    }, [currentPage, actionFilter, resourceFilter, limitFilter, startDate, endDate]);
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -142,6 +150,8 @@ export default function ActivityLogsPage() {
         setSearchQuery('');
         setActionFilter('');
         setResourceFilter('');
+        setStartDate('');
+        setEndDate('');
         setLimitFilter(20);
         setCurrentPage(1);
     };
@@ -253,11 +263,31 @@ export default function ActivityLogsPage() {
                         <select
                             value={resourceFilter}
                             onChange={e => { setResourceFilter(e.target.value); setCurrentPage(1); }}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                            className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none font-semibold text-gray-700 bg-white"
                         >
                             <option value="">All Resources</option>
                             {resourceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-medium">Start Date</span>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                            className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none font-semibold text-gray-700 bg-white"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-medium">End Date</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                            className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none font-semibold text-gray-700 bg-white"
+                        />
                     </div>
 
                     <div className="ml-auto flex items-center gap-2">

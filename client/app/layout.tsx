@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../hooks/useAuth";
 import NetworkStatus from "@/components/ui/NetworkStatus";
+import SessionTimeoutModal from "@/components/ui/SessionTimeoutModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
                 <AuthProvider>
                     {children}
                     <NetworkStatus />
+                    <SessionTimeoutModal />
                 </AuthProvider>
             </body>
         </html>
