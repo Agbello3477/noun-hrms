@@ -24,6 +24,7 @@ export const enableDbMock = async () => {
             role: args.data.role || 'STAFF',
             isActive: true,
             tokenInvalidatedAt: null,
+            twoFactorBackupCodes: null,
             staffProfile: args.data.staffProfile ? {
                 id: mockProfileId,
                 surname: args.data.staffProfile.create.surname || 'Cascader',
@@ -35,13 +36,15 @@ export const enableDbMock = async () => {
         (prisma.user as any).update = async (args: any) => ({
             id: args.where.id,
             isActive: args.data.isActive !== undefined ? args.data.isActive : true,
-            tokenInvalidatedAt: args.data.tokenInvalidatedAt || null
+            tokenInvalidatedAt: args.data.tokenInvalidatedAt || null,
+            twoFactorBackupCodes: args.data.twoFactorBackupCodes || null
         });
         (prisma.user as any).findUnique = async (args: any) => ({
             id: args.where.id,
             email: 'mock-user@noun.edu.ng',
             isActive: false,
             tokenInvalidatedAt: new Date(),
+            twoFactorBackupCodes: null,
             staffProfile: {
                 id: mockProfileId,
                 status: 'RETIRED',

@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Pagination from '../../../components/ui/Pagination';
 
+import TableSkeleton from '../../../components/ui/TableSkeleton';
+
 export default function PayrollDashboard() {
     const { user } = useAuth();
     const router = useRouter();
@@ -38,7 +40,17 @@ export default function PayrollDashboard() {
         }).format(amount || 0);
     };
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500">Loading payroll dashboard...</div>;
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <div className="h-8 w-48 bg-slate-200 animate-pulse rounded-xl"></div>
+                    <div className="h-10 w-36 bg-slate-200 animate-pulse rounded-xl"></div>
+                </div>
+                <TableSkeleton rows={5} cols={4} />
+            </div>
+        );
+    }
 
     // Permissions Check
     if (user?.role !== 'BURSARY' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_USER') {

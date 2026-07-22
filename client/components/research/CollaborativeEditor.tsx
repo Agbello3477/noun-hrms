@@ -72,7 +72,11 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
         const socket = io(rawBaseUrl, {
             auth: { token },
-            withCredentials: true
+            withCredentials: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            randomizationFactor: 0.5
         });
 
         socket.on('connect', () => {

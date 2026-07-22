@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { MapPin, Clock, Calendar, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import api from '../../../lib/api';
 import Pagination from '../../../components/ui/Pagination';
+import TableSkeleton from '../../../components/ui/TableSkeleton';
 
 interface AttendanceLog {
     id: string;
@@ -182,77 +183,75 @@ export default function AttendancePage() {
 
                 {/* Right Side: Beautiful Paginated Table of Recent Logs */}
                 <div className="lg:col-span-2 space-y-4">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
-                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-                            <Calendar size={16} className="text-gray-400" />
-                            <h2 className="text-sm font-bold text-gray-800">My Attendance Directory</h2>
-                        </div>
-                        <div className="overflow-x-auto flex-1">
-                            <table className="min-w-full text-left text-xs">
-                                <thead>
-                                    <tr className="bg-slate-50 text-gray-500 font-bold border-b border-gray-100 uppercase tracking-wider">
-                                        <th className="px-5 py-3">Date</th>
-                                        <th className="px-5 py-3">Clock In</th>
-                                        <th className="px-5 py-3">Clock Out</th>
-                                        <th className="px-5 py-3">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan={4} className="py-12 text-center text-gray-400">
-                                                Loading attendance history...
-                                            </td>
+                    {loading ? (
+                        <TableSkeleton rows={5} cols={4} />
+                    ) : (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
+                            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                                <Calendar size={16} className="text-gray-400" />
+                                <h2 className="text-sm font-bold text-gray-800">My Attendance Directory</h2>
+                            </div>
+                            <div className="overflow-x-auto flex-1">
+                                <table className="min-w-full text-left text-xs">
+                                    <thead>
+                                        <tr className="bg-slate-50 text-gray-500 font-bold border-b border-gray-100 uppercase tracking-wider">
+                                            <th className="px-5 py-3">Date</th>
+                                            <th className="px-5 py-3">Clock In</th>
+                                            <th className="px-5 py-3">Clock Out</th>
+                                            <th className="px-5 py-3">Status</th>
                                         </tr>
-                                    ) : logs.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={4} className="py-12 text-center text-gray-400 font-medium">
-                                                No attendance logs found.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        paginatedLogs.map((log) => (
-                                            <tr key={log.id} className="hover:bg-slate-50/50 transition">
-                                                <td className="px-5 py-3.5 font-semibold text-gray-800">
-                                                    {new Date(log.clockIn).toLocaleDateString(undefined, {
-                                                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
-                                                    })}
-                                                </td>
-                                                <td className="px-5 py-3.5 font-medium text-gray-600">
-                                                    {new Date(log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </td>
-                                                <td className="px-5 py-3.5 font-medium text-gray-600">
-                                                    {log.clockOut ? (
-                                                        new Date(log.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                    ) : (
-                                                        <span className="text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded">Active</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-5 py-3.5">
-                                                    <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg ${
-                                                        log.status === 'PRESENT' ? 'bg-green-150 text-green-800' : 'bg-red-150 text-red-800'
-                                                    }`}>
-                                                        {log.status}
-                                                    </span>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {logs.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="py-12 text-center text-gray-400 font-medium">
+                                                    No attendance logs found.
                                                 </td>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                        ) : (
+                                            paginatedLogs.map((log) => (
+                                                <tr key={log.id} className="hover:bg-slate-50/50 transition">
+                                                    <td className="px-5 py-3.5 font-semibold text-gray-800">
+                                                        {new Date(log.clockIn).toLocaleDateString(undefined, {
+                                                            weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+                                                        })}
+                                                    </td>
+                                                    <td className="px-5 py-3.5 font-medium text-gray-600">
+                                                        {new Date(log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </td>
+                                                    <td className="px-5 py-3.5 font-medium text-gray-600">
+                                                        {log.clockOut ? (
+                                                            new Date(log.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                        ) : (
+                                                            <span className="text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded">Active</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-5 py-3.5">
+                                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg ${
+                                                            log.status === 'PRESENT' ? 'bg-green-150 text-green-800' : 'bg-red-150 text-red-800'
+                                                        }`}>
+                                                            {log.status}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {logs.length > 0 && (
+                                <Pagination
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    totalItems={logs.length}
+                                    pageSize={pageSize}
+                                    onPageChange={setCurrentPage}
+                                    onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
+                                    pageSizeOptions={[5, 10, 20]}
+                                />
+                            )}
                         </div>
-                        {!loading && logs.length > 0 && (
-                            <Pagination
-                                currentPage={currentPage}
-                                totalPages={totalPages}
-                                totalItems={logs.length}
-                                pageSize={pageSize}
-                                onPageChange={setCurrentPage}
-                                onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
-                                pageSizeOptions={[5, 10, 20]}
-                            />
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

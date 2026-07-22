@@ -24,6 +24,7 @@ model User {
   // Phase 15: 2FA
   twoFactorSecret    String?
   isTwoFactorEnabled Boolean  @default(false)
+  twoFactorBackupCodes String? @db.Text
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -261,6 +262,7 @@ model StaffProfile {
   @@index([stateOfOrigin])
   @@index([status])
   @@index([isDueForPromotion])
+  @@index([isDeleted, status])
 }
 
 model AcademicProgramme {
@@ -417,6 +419,7 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   @@map("audit_logs")
+  @@index([createdAt])
 }
 
 model TransferLog {

@@ -411,12 +411,29 @@ export const verify2FALogin = async (req: Request, res: Response) => {
             window: 1 // Allow 30 seconds drift before/after
         });
 
-        if (!isValid) return res.status(401).json({ message: 'Invalid 2FA code' });
+        let isBackupCodeValid = false;
+        let remainingBackupCodes: string[] = [];
+
+        if (!isValid && user.twoFactorBackupCodes) {
+            const codes = user.twoFactorBackupCodes.split(',');
+            for (const hashedCode of codes) {
+                if (await bcrypt.compare(code, hashedCode)) {
+                    isBackupCodeValid = true;
+                } else {
+                    remainingBackupCodes.push(hashedCode);
+                }
+            }
+        }
+
+        if (!isValid && !isBackupCodeValid) return res.status(401).json({ message: 'Invalid 2FA code' });
 
         // Invalidate older concurrent sessions
         await prisma.user.update({
             where: { id: user.id },
-            data: { tokenInvalidatedAt: new Date() }
+            data: { 
+                tokenInvalidatedAt: new Date(),
+                twoFactorBackupCodes: isBackupCodeValid ? remainingBackupCodes.join(',') : user.twoFactorBackupCodes
+            }
         });
         const isRedisActive = (redisService as any).isEnabled && (redisService as any).client;
         if (isRedisActive) {
@@ -519,9 +536,22 @@ export const verifyAndEnable2FA = async (req: Request, res: Response) => {
 
         if (!isValid) return res.status(400).json({ message: 'Invalid 2FA code' });
 
+        // Generate 5 backup codes of 8 characters
+        const backupCodes: string[] = [];
+        const hashedBackupCodes: string[] = [];
+        for (let i = 0; i < 5; i++) {
+            const rawCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+            backupCodes.push(rawCode);
+            const hashed = bcrypt.hashSync(rawCode, 10);
+            hashedBackupCodes.push(hashed);
+        }
+
         await prisma.user.update({
             where: { id: userId },
-            data: { isTwoFactorEnabled: true }
+            data: { 
+                isTwoFactorEnabled: true,
+                twoFactorBackupCodes: hashedBackupCodes.join(',')
+            }
         });
 
         // Audit
@@ -542,10 +572,10 @@ export const verifyAndEnable2FA = async (req: Request, res: Response) => {
                 process.env.JWT_SECRET as string,
                 { expiresIn: '1d' }
             );
-            return res.json({ message: '2FA Enabled and Login Successful', token, user });
+            return res.json({ message: '2FA Enabled and Login Successful', token, user, backupCodes });
         }
 
-        res.json({ message: '2FA Enabled successfully' });
+        res.json({ message: '2FA Enabled successfully', backupCodes });
     } catch (error) {
         console.error('Verify Enable 2FA Error:', error);
         res.status(500).json({ message: 'Internal server error' });

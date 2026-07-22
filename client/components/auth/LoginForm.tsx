@@ -20,11 +20,14 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
   const router = useRouter();
 
   // 2FA States
-  const [twoFactorStep, setTwoFactorStep] = useState<'NONE' | 'VERIFY' | 'SETUP'>('NONE');
+  const [twoFactorStep, setTwoFactorStep] = useState<'NONE' | 'VERIFY' | 'SETUP' | 'SHOW_BACKUP_CODES'>('NONE');
   const [tempToken, setTempToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [secretKey, setSecretKey] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [pendingToken, setPendingToken] = useState('');
+  const [pendingUser, setPendingUser] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -87,10 +90,11 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
       setError('');
       try {
           const response = await api.post('/api/auth/2fa/verify-enable', { tempToken, code: twoFactorCode });
-          setSuccess('2FA Setup Successful! Logging you in...');
-          setTimeout(() => {
-              login(response.data.token, response.data.user);
-          }, 1000);
+          setSuccess('2FA Setup Successful!');
+          setBackupCodes(response.data.backupCodes || []);
+          setPendingToken(response.data.token);
+          setPendingUser(response.data.user);
+          setTwoFactorStep('SHOW_BACKUP_CODES');
       } catch (err: any) {
           setError(err.response?.data?.message || 'Invalid verification code');
       }
@@ -271,6 +275,53 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     Confirm & Login
                 </button>
             </form>
+        )}
+
+        {twoFactorStep === 'SHOW_BACKUP_CODES' && (
+            <div className="space-y-5">
+                <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
+                    <p className="text-xs text-emerald-800 font-bold">
+                        Two-Factor Authentication Enabled!
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                        Please save these backup recovery codes. You can use them to log in if you lose access to your authenticator app.
+                    </p>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl font-mono text-sm space-y-1.5 text-center">
+                    {backupCodes.map((code, index) => (
+                        <div key={index} className="text-gray-700 font-bold tracking-wide select-all">
+                            {code}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => {
+                            const text = `NOUN HRMS Backup Recovery Codes:\n\n${backupCodes.join('\n')}\n\nKeep these codes safe. Each code can only be used once.`;
+                            const element = document.createElement("a");
+                            const file = new Blob([text], {type: 'text/plain'});
+                            element.href = URL.createObjectURL(file);
+                            element.download = "noun_hrms_2fa_backup_codes.txt";
+                            document.body.appendChild(element);
+                            element.click();
+                            document.body.removeChild(element);
+                        }}
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-all"
+                    >
+                        Download Codes
+                    </button>
+                    <button
+                        onClick={() => {
+                            login(pendingToken, pendingUser);
+                        }}
+                        className="flex-1 py-2.5 rounded-xl bg-primary text-xs font-bold text-white hover:bg-primary-dark transition-all"
+                    >
+                        Continue
+                    </button>
+                </div>
+            </div>
         )}
 
     </div>
