@@ -73,7 +73,7 @@ export default function Home() {
                                     style={{ backgroundColor: '#006533', color: '#ffffff' }}
                                     className="px-5 py-2.5 text-xs font-bold rounded-full transition-all shadow-md hover:opacity-90"
                                 >
-                                    Contact NOUN Registry to Get Started
+                                    Get Started
                                 </button>
                             </>
                         )}
@@ -107,7 +107,7 @@ export default function Home() {
                                         onClick={() => alert("Registration is managed centrally by NOUN Registry. Please contact the Registry Department to activate your staff profile.")}
                                         className="inline-flex items-center justify-center px-8 py-4 bg-emerald-50 text-emerald-900 border-2 border-emerald-300 font-bold rounded-full hover:bg-emerald-100 transition-all shadow-md cursor-pointer"
                                     >
-                                        Contact NOUN Registry to Get Started
+                                        New Staff Registration
                                     </button>
                                 </div>
                             </div>
