@@ -1,7 +1,9 @@
 import prisma from '../prisma';
 import { sendPushNotification } from '../services/fcm.service';
+import { enableDbMock } from './dbMock';
 
 const runTests = async () => {
+    await enableDbMock();
     console.log('🧪 Starting FCM Push Notifications Integration Tests...');
 
     let tempUser: any = null;

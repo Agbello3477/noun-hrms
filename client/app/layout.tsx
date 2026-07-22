@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../hooks/useAuth";
+import NetworkStatus from "@/components/ui/NetworkStatus";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({
             <body className={`${inter.className} bg-slate-50 text-slate-900`} style={{ colorScheme: 'light' }}>
                 <AuthProvider>
                     {children}
+                    <NetworkStatus />
                 </AuthProvider>
             </body>
         </html>

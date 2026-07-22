@@ -1,7 +1,9 @@
 import prisma from '../prisma';
 import { calculateRetirementDate } from '../utils/retirement';
+import { enableDbMock } from './dbMock';
 
 async function runTests() {
+    await enableDbMock();
     console.log('🧪 Starting Retirement Tracking Backend Integration Tests...');
     let passed = 0;
     let failed = 0;

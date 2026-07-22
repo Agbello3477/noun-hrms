@@ -1,7 +1,9 @@
 import prisma from '../prisma';
 import { Department } from '@prisma/client';
+import { enableDbMock } from './dbMock';
 
 const runTests = async () => {
+    await enableDbMock();
     console.log('🧪 Starting Bursary & Payroll Auditing Integration Tests...');
 
     let tempUser: any = null;

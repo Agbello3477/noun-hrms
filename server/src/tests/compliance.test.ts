@@ -1,6 +1,8 @@
 import prisma from '../prisma';
+import { enableDbMock } from './dbMock';
 
 const runTests = async () => {
+    await enableDbMock();
     console.log('🧪 Starting Compliance, Audits & System Logs Tests...');
 
     let tempUser: any = null;

@@ -37,6 +37,7 @@ import researchRoutes from './routes/research.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
+import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
 
 
 
@@ -140,4 +141,5 @@ server.listen(PORT, () => {
     // Start background scheduled jobs
     schedulePromotionCron();
     scheduleRetirementCron();
+    scheduleSessionCleanupCron();
 });
