@@ -400,7 +400,7 @@ export const getDocument = async (req: Request, res: Response) => {
         });
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        if (user.role !== 'SUPER_USER' && staffProfile) {
+        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
             const isMember = project.members.some(m => m.staffId === staffProfile.id);
             if (!isMember) return res.status(403).json({ message: 'Forbidden' });
         }
@@ -433,7 +433,7 @@ export const saveDocument = async (req: Request, res: Response) => {
         });
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        if (user.role !== 'SUPER_USER' && staffProfile) {
+        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
             const member = project.members.find(m => m.staffId === staffProfile.id);
             if (!member) return res.status(403).json({ message: 'Forbidden' });
             if (member.role === 'VIEWER') return res.status(403).json({ message: 'Viewers cannot edit the document' });
