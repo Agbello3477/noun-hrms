@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Send, User as UserIcon } from 'lucide-react';
+import { Send, User as UserIcon, Lock } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface Message {
@@ -20,9 +20,16 @@ interface ProjectChatProps {
     currentUserId: string;
     currentUserName?: string;
     initialMessages?: Message[];
+    isSolo?: boolean;
 }
 
-export default function ProjectChat({ projectId, currentUserId, currentUserName, initialMessages = [] }: ProjectChatProps) {
+export default function ProjectChat({ 
+    projectId, 
+    currentUserId, 
+    currentUserName, 
+    initialMessages = [],
+    isSolo = false
+}: ProjectChatProps) {
     const [messages, setMessages] = useState<Message[]>(initialMessages);
     const [input, setInput] = useState('');
     const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
@@ -31,6 +38,8 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
+        if (isSolo) return; // Skip socket listener if it is a solo project space
+
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -50,7 +59,6 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
                 if (prev.find(m => m.id === message.id)) return prev;
                 return [...prev, message];
             });
-            // Stop typing for the sender when message arrives
             if (message.senderId) {
                 setTypingUsers(prev => {
                     const updated = { ...prev };
@@ -60,7 +68,6 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
             }
         });
 
-        // Real-Time Typing Listeners
         socket.on('user-typing', (data: { userId: string; userName: string }) => {
             if (data.userId !== currentUserId) {
                 setTypingUsers(prev => ({ ...prev, [data.userId]: data.userName }));
@@ -80,7 +87,7 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
         return () => {
             socket.disconnect();
         };
-    }, [projectId, currentUserId]);
+    }, [projectId, currentUserId, isSolo]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -90,26 +97,24 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
         const value = e.target.value;
         setInput(value);
 
-        if (!socketRef.current) return;
+        if (!socketRef.current || isSolo) return;
 
-        // Emit typing event
         socketRef.current.emit('typing', {
             projectId,
             userName: currentUserName || 'Collaborator'
         });
 
-        // Reset stop-typing timer
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
             if (socketRef.current) {
                 socketRef.current.emit('stop-typing', { projectId });
             }
-        }, 2000);
+        }, 1500);
     };
 
     const handleSend = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !socketRef.current) return;
+        if (!input.trim() || !socketRef.current || isSolo) return;
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         socketRef.current.emit('stop-typing', { projectId });
@@ -130,21 +135,33 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
             <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-emerald-50 flex-shrink-0">
                 <div>
                     <h3 className="font-bold text-sm text-gray-800">Workspace Chat</h3>
-                    {typingNames.length > 0 && (
+                    {typingNames.length > 0 && !isSolo && (
                         <p className="text-[10px] font-bold text-emerald-800 animate-pulse">
                             ✍️ {typingNames.join(', ')} {typingNames.length === 1 ? 'is' : 'are'} typing...
                         </p>
                     )}
                 </div>
-                <span className="flex h-2.5 w-2.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
-                </span>
+                {!isSolo && (
+                    <span className="flex h-2.5 w-2.5 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+                    </span>
+                )}
             </div>
             
             {/* Scrollable Messages Container */}
             <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 bg-white">
-                {messages.length === 0 ? (
+                {isSolo ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400 text-xs space-y-3 my-auto">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200 shadow-sm">
+                            <Lock size={18} className="text-gray-500" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-gray-700">Private Research Space</p>
+                            <p className="text-[11px] text-gray-500 mt-1">This workspace is currently private. Invite peers to collaborate to activate real-time discussion chat.</p>
+                        </div>
+                    </div>
+                ) : messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs space-y-1 my-auto">
                         <p className="font-semibold text-gray-500">No messages yet in this project.</p>
                         <p>Start co-authoring discussions below!</p>
@@ -180,7 +197,7 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
                 )}
                 
                 {/* Typing Bubble inside Chat Window */}
-                {typingNames.length > 0 && (
+                {typingNames.length > 0 && !isSolo && (
                     <div className="flex justify-start animate-in fade-in duration-200">
                         <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs px-4 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
                             <span className="flex gap-1 items-center">
@@ -199,16 +216,18 @@ export default function ProjectChat({ projectId, currentUserId, currentUserName,
             <form onSubmit={handleSend} className="p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0 mt-auto flex gap-2">
                 <input
                     type="text"
+                    disabled={isSolo}
                     value={input}
                     onChange={handleInputChange}
-                    placeholder="Type a message..."
-                    className="flex-grow p-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 text-gray-900"
+                    placeholder={isSolo ? "Chat locked (Solo Space)" : "Type a message..."}
+                    className="flex-grow p-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 text-gray-900 disabled:bg-gray-100 disabled:text-gray-400"
                 />
                 <button
                     type="submit"
+                    disabled={isSolo}
                     style={{ backgroundColor: '#006533', color: '#ffffff' }}
-                    className="p-2.5 text-white rounded-xl hover:opacity-90 transition shadow-sm flex items-center justify-center"
-                    title="Send Message"
+                    className="p-2.5 text-white rounded-xl hover:opacity-90 transition shadow-sm flex items-center justify-center disabled:opacity-50"
+                    title={isSolo ? "Chat locked" : "Send Message"}
                 >
                     <Send size={15} />
                 </button>

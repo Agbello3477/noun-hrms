@@ -280,6 +280,13 @@ export default function ResearchDashboard() {
                                             {name}
                                         </span>
                                         
+                                        {/* Solo vs Collaborative badge */}
+                                        <span 
+                                            className={`text-[10px] font-bold tracking-wider uppercase px-3 py-1 rounded-full border shadow-sm ${(project.members || []).length <= 1 ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}
+                                        >
+                                            {(project.members || []).length <= 1 ? 'Solo Research' : 'Collaborative Project'}
+                                        </span>
+
                                         {/* Status Badge (DRAFT/ONGOING/COMPLETED) — Solid Vibrant NOUN Green */}
                                         <span 
                                             style={{ backgroundColor: '#006533', color: '#ffffff' }}

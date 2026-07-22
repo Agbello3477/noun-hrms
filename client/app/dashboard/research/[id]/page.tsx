@@ -210,6 +210,11 @@ export default function ResearchWorkspace() {
                         }`}>
                             Status: {project.status || 'DRAFT'}
                         </span>
+                        <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border shadow-sm ${
+                            (project.members?.length || 0) <= 1 ? 'bg-emerald-800/80 text-emerald-200 border-emerald-700' : 'bg-emerald-700/95 text-white border-emerald-500'
+                        }`}>
+                            {(project.members?.length || 0) <= 1 ? 'Solo Workspace' : 'Collaborative Workspace'}
+                        </span>
                     </div>
                     <h1 className="text-2xl font-black text-white mt-1.5 tracking-tight">{project.title}</h1>
                 </div>
@@ -363,6 +368,7 @@ export default function ResearchWorkspace() {
                         currentUserId={currentUser?.id || ''}
                         currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
                         projectTitle={project.title}
+                        isSolo={(project.members?.length || 0) <= 1}
                     />
                 </div>
 
@@ -374,6 +380,7 @@ export default function ResearchWorkspace() {
                         currentUserId={currentUser?.id || ''} 
                         currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
                         initialMessages={project.messages}
+                        isSolo={(project.members?.length || 0) <= 1}
                     />
                 </div>
             </div>

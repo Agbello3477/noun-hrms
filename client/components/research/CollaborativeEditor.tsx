@@ -16,11 +16,12 @@ interface RichTextEditorProps {
     currentUserName?: string;
     currentUserId?: string;
     projectTitle?: string;
+    isSolo?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function RichTextEditor({ projectId, currentUserName, currentUserId, projectTitle }: RichTextEditorProps) {
+export default function RichTextEditor({ projectId, currentUserName, currentUserId, projectTitle, isSolo = false }: RichTextEditorProps) {
     const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
     const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -63,6 +64,8 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
 
     // Socket.io Connection for Document Collaboration Events
     useEffect(() => {
+        if (isSolo) return; // Skip socket connection for solo space
+
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -101,7 +104,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         return () => {
             socket.disconnect();
         };
-    }, [projectId, currentUserId]);
+    }, [projectId, currentUserId, isSolo]);
 
     const handleDocTyping = useCallback(() => {
         if (!socketRef.current) return;
