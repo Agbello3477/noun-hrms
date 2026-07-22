@@ -29,7 +29,8 @@ import {
     CheckCircle2,
     Trash2,
     UserX,
-    Bell
+    Bell,
+    ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -39,6 +40,7 @@ export default function ResearchWorkspace() {
     const [project, setProject] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [isRestricted, setIsRestricted] = useState(false);
     
     // Modals & form state
     const [showInviteModal, setShowInviteModal] = useState(false);
@@ -70,9 +72,8 @@ export default function ResearchWorkspace() {
             }
         } catch (err: any) {
             console.error(err);
-            if (err.response?.status === 403) {
-                alert('Forbidden: You are not a member of this project.');
-                router.push('/dashboard/research');
+            if (err.response?.status === 403 || err.response?.status === 401) {
+                setIsRestricted(true);
             }
         } finally {
             setLoading(false);
@@ -178,6 +179,26 @@ export default function ResearchWorkspace() {
             alert(err.response?.data?.message || 'Failed to delete workspace');
         }
     };
+
+    if (isRestricted) {
+        return (
+            <div className="flex h-[calc(100vh-10rem)] flex-col items-center justify-center bg-white border border-gray-150 rounded-2xl p-8 text-center shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mb-6 border border-red-100">
+                    <ShieldAlert size={36} />
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+                <p className="text-gray-505 max-w-md mb-8 leading-relaxed text-sm">
+                    You do not have the required permissions to view this project or resource. Access has been locked for security.
+                </p>
+                <Link
+                    href="/dashboard/research"
+                    className="inline-flex items-center gap-2 bg-nounGreen text-white px-6 py-3 rounded-full font-bold shadow-md hover:bg-green-800 transition hover:-translate-y-0.5 text-xs"
+                >
+                    <ArrowLeft size={16} /> Return to Research Forum
+                </Link>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
