@@ -17,7 +17,8 @@ import {
     updateProjectStatus,
     deleteProject,
     removeMember,
-    cancelInvite
+    cancelInvite,
+    exportDocument
 } from '../controllers/research.controller';
 
 const router = Router();
@@ -47,5 +48,6 @@ router.post('/:id/files', upload.single('file'), uploadFile);
 // Document (rich-text editor content via REST)
 router.get('/:id/document', getDocument);
 router.put('/:id/document', saveDocument);
+router.get('/:id/export', exportDocument);
 
 export default router;

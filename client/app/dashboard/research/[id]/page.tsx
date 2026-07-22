@@ -362,6 +362,7 @@ export default function ResearchWorkspace() {
                         projectId={id as string} 
                         currentUserId={currentUser?.id || ''}
                         currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
+                        projectTitle={project.title}
                     />
                 </div>
 

@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { sendEmail } from '../services/email.service';
 import { notifyUser } from './notification.controller';
+import { generatePDF, generateDOCX, generateLaTeX } from '../utils/documentExporter';
 
 // Multer Config for Safe Uploads
 const storage = multer.diskStorage({
@@ -674,6 +675,59 @@ export const cancelInvite = async (req: Request, res: Response) => {
         res.json({ message: 'Invite cancelled' });
     } catch (err) {
         console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 16. Export Collaborative Document (PDF, DOCX, LaTeX)
+export const exportDocument = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { format, doubleSpaced } = req.query;
+        const user = (req as any).user;
+
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        const project = await prisma.researchProject.findUnique({
+            where: { id },
+            include: { members: true }
+        });
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (user.role !== 'SUPER_USER' && staffProfile) {
+            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            if (!isMember) return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        const doc = await prisma.projectDocument.findFirst({ where: { projectId: id } });
+        if (!doc || !doc.contentHtml) {
+            return res.status(400).json({ message: 'Document is empty. Write some content first before exporting.' });
+        }
+
+        const title = doc.title || project.title || 'Research Document';
+        const isDoubleSpaced = doubleSpaced === 'true';
+
+        if (format === 'latex') {
+            const latexText = generateLaTeX(title, doc.contentHtml);
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/\s+/g, '_')}.tex"`);
+            return res.send(latexText);
+        }
+
+        if (format === 'docx') {
+            const docxBuffer = await generateDOCX(title, doc.contentHtml, isDoubleSpaced);
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+            res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/\s+/g, '_')}.docx"`);
+            return res.send(docxBuffer);
+        }
+
+        // Default: PDF
+        const pdfBuffer = await generatePDF(title, doc.contentHtml, isDoubleSpaced);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/\s+/g, '_')}.pdf"`);
+        return res.send(pdfBuffer);
+    } catch (err) {
+        console.error('Export Error:', err);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

@@ -7,7 +7,7 @@
     "start": "node dist/index.js",
     "seed": "ts-node --transpile-only prisma/seed.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "test": "ts-node src/tests/retirement.test.ts && ts-node src/tests/fcm.test.ts && ts-node src/tests/bursary.test.ts && ts-node src/tests/inventory.test.ts && ts-node src/tests/compliance.test.ts"
+    "test": "ts-node src/tests/retirement.test.ts && ts-node src/tests/fcm.test.ts && ts-node src/tests/bursary.test.ts && ts-node src/tests/inventory.test.ts && ts-node src/tests/compliance.test.ts && ts-node src/tests/export.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
@@ -22,6 +22,7 @@
     "@types/node": "^20.19.30",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
     "@types/ws": "^8.18.1",
@@ -29,6 +30,7 @@
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
+    "docx": "^9.7.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
@@ -40,6 +42,7 @@
     "multer": "^2.0.2",
     "node-cron": "^4.6.0",
     "nodemailer": "^7.0.12",
+    "pdfkit": "^0.19.1",
     "prisma": "^5.10.2",
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^5.0.0",
