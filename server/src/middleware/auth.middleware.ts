@@ -21,10 +21,22 @@ export const verifyToken = async (req: AuthRequest, res: Response, next: NextFun
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role; iat?: number; isTemp2FA?: boolean };
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; role: Role; iat?: number; isTemp2FA?: boolean; sid?: string };
         
         if (decoded.isTemp2FA) {
             return res.status(403).json({ message: 'Temporary tokens cannot be used for standard API access' });
+        }
+
+        if (decoded.sid) {
+            const dbSession = await prisma.userSession.findUnique({
+                where: { token: decoded.sid }
+            });
+            if (!dbSession) {
+                return res.status(401).json({ 
+                    message: 'Your session has been terminated. Please log in again.',
+                    code: 'SESSION_REVOKED'
+                });
+            }
         }
         
         // ─── Token Revocation Check ─────────────────────────────────────────

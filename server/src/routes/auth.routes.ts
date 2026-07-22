@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, getMe, validatePassword, changePassword, forgotPassword, setup2FA, verifyAndEnable2FA, verify2FALogin } from '../controllers/auth.controller';
+import { register, login, getMe, validatePassword, changePassword, forgotPassword, setup2FA, verifyAndEnable2FA, verify2FALogin, getActiveSessions, terminateSession } from '../controllers/auth.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 import { validate, registerSchema, loginSchema, changePasswordSchema, forgotPasswordSchema } from '../middleware/validation';
 import { authLimiter } from '../middleware/rateLimiter';
@@ -17,5 +17,9 @@ router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), for
 router.post('/2fa/setup', setup2FA);
 router.post('/2fa/verify-enable', verifyAndEnable2FA);
 router.post('/2fa/verify-login', authLimiter, verify2FALogin);
+
+// Session Routes
+router.get('/sessions', verifyToken, getActiveSessions);
+router.delete('/sessions/:id', verifyToken, terminateSession);
 
 export default router;

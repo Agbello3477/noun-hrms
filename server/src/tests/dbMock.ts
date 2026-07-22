@@ -209,14 +209,77 @@ export const enableDbMock = async () => {
                 id: mockAssetId,
                 name: args.data.name,
                 quantity: args.data.quantity,
-                unit: args.data.unit
+                unit: args.data.unit,
+                expiryDate: args.data.expiryDate || null,
+                minStockLevel: args.data.minStockLevel || 10
             }),
             update: async (args: any) => ({
                 id: args.where.id,
-                quantity: args.data.quantity
+                quantity: args.data.quantity,
+                expiryDate: args.data.expiryDate || null,
+                minStockLevel: args.data.minStockLevel || 10
             }),
+            upsert: async (args: any) => ({
+                id: mockAssetId,
+                name: args.create.name,
+                quantity: args.create.quantity,
+                unit: args.create.unit,
+                expiryDate: args.create.expiryDate || null,
+                minStockLevel: args.create.minStockLevel || 10
+            }),
+            findUnique: async (args: any) => ({
+                id: mockAssetId,
+                name: args.where.name || 'Paracetamol',
+                quantity: 17,
+                unit: 'tabs',
+                expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                minStockLevel: 20
+            }),
+            findMany: async (args: any) => [
+                {
+                    id: mockAssetId,
+                    name: 'Paracetamol',
+                    quantity: 17,
+                    unit: 'tabs',
+                    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    minStockLevel: 20
+                }
+            ],
             delete: async (args: any) => ({
                 id: args.where.id
+            })
+        };
+
+        // Mock UserSession
+        (prisma as any).userSession = {
+            create: async (args: any) => ({
+                id: 'mock-session-id',
+                ...args.data
+            }),
+            findUnique: async (args: any) => ({
+                id: args.where.id || 'mock-session-id',
+                userId: mockUserId,
+                token: args.where.token || 'mock-session-token',
+                ipAddress: '127.0.0.1',
+                userAgent: 'Mock Browser',
+                lastActive: new Date()
+            }),
+            findMany: async (args: any) => [
+                {
+                    id: 'mock-session-id',
+                    userId: mockUserId,
+                    token: 'mock-session-token',
+                    ipAddress: '127.0.0.1',
+                    userAgent: 'Mock Browser',
+                    lastActive: new Date(),
+                    createdAt: new Date()
+                }
+            ],
+            delete: async (args: any) => ({
+                id: args.where.id
+            }),
+            deleteMany: async (args: any) => ({
+                count: 1
             })
         };
 
@@ -232,6 +295,9 @@ export const enableDbMock = async () => {
         (prisma.auditLog as any).count = async () => 1;
         (prisma.auditLog as any).delete = async (args: any) => ({
             id: args.where.id
+        });
+        (prisma.auditLog as any).deleteMany = async (args: any) => ({
+            count: 1
         });
 
         // Mock Transaction

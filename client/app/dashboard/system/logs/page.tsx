@@ -61,6 +61,12 @@ export default function ActivityLogsPage() {
     const [limitFilter, setLimitFilter] = useState(20);
     const [currentPage, setCurrentPage] = useState(1);
 
+    // Archiving states
+    const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+    const [retentionDays, setRetentionDays] = useState(90);
+    const [archivingState, setArchivingState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [archiveResult, setArchiveResult] = useState({ message: '', count: 0, fileName: '' });
+
     // Available actions & resources for filter options (matching standard ones and database values)
     const actionOptions = [
         'LOGIN', 
@@ -156,6 +162,20 @@ export default function ActivityLogsPage() {
         setCurrentPage(1);
     };
 
+    const handleArchiveLogs = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setArchivingState('loading');
+            const res = await api.post('/api/system/logs/archive', { retentionDays });
+            setArchiveResult(res.data);
+            setArchivingState('success');
+            fetchLogs();
+        } catch (err: any) {
+            console.error(err);
+            setArchivingState('error');
+        }
+    };
+
     const toggleExpandLog = (id: string) => {
         setExpandedLogId(expandedLogId === id ? null : id);
     };
@@ -194,6 +214,12 @@ export default function ActivityLogsPage() {
                     <p className="text-slate-300 text-sm mt-1">Audit trail and security logs tracking administrative changes and user access.</p>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        onClick={() => { setIsArchiveModalOpen(true); setArchivingState('idle'); }}
+                        className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm active:scale-95 duration-100"
+                    >
+                        Archive & Prune
+                    </button>
                     <button
                         onClick={handleExportCSV}
                         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm active:scale-95 duration-100"
@@ -446,6 +472,95 @@ export default function ActivityLogsPage() {
                     </div>
                 )}
             </div>
+
+            {isArchiveModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 relative">
+                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-2">
+                            Archive & Prune Audit Logs
+                        </h3>
+                        <p className="text-xs text-gray-500 mb-4">
+                            Logs older than the selected retention period will be archived to a secure JSON backup file in system storage and purged from the database.
+                        </p>
+
+                        {archivingState === 'idle' && (
+                            <form onSubmit={handleArchiveLogs} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                        Retention Period (Days)
+                                    </label>
+                                    <select
+                                        value={retentionDays}
+                                        onChange={e => setRetentionDays(parseInt(e.target.value))}
+                                        className="w-full border rounded-lg p-2.5 outline-none text-sm font-semibold text-gray-700 bg-white"
+                                    >
+                                        <option value="30">30 Days</option>
+                                        <option value="60">60 Days</option>
+                                        <option value="90">90 Days (Recommended)</option>
+                                        <option value="180">180 Days</option>
+                                        <option value="365">1 Year</option>
+                                    </select>
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsArchiveModalOpen(false)}
+                                        className="flex-1 py-2.5 rounded-lg border text-xs font-bold text-gray-500 hover:bg-gray-50 transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white transition"
+                                    >
+                                        Execute Prune
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {archivingState === 'loading' && (
+                            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                                <span className="text-xs font-bold text-gray-600 animate-pulse">Archiving and deleting records from database...</span>
+                            </div>
+                        )}
+
+                        {archivingState === 'success' && (
+                            <div className="space-y-4 py-2">
+                                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-semibold">
+                                    {archiveResult.message}
+                                    {archiveResult.count > 0 && (
+                                        <div className="mt-1 text-[10px] text-emerald-600 font-mono">
+                                            Backup stored in: {archiveResult.fileName}
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => setIsArchiveModalOpen(false)}
+                                    className="w-full py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 transition"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        )}
+
+                        {archivingState === 'error' && (
+                            <div className="space-y-4 py-2">
+                                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold">
+                                    Failed to archive logs. Please ensure you have appropriate administrator permissions.
+                                </div>
+                                <button
+                                    onClick={() => setArchivingState('idle')}
+                                    className="w-full py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 transition"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

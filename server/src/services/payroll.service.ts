@@ -181,4 +181,41 @@ export class PayrollService {
 
         return [header, ...rows].join('\n');
     }
+
+    static async exportBankSchedule(month: string, year: number) {
+        const records = await prisma.payroll.findMany({
+            where: { month, year },
+            include: {
+                user: {
+                    include: {
+                        staffProfile: true
+                    }
+                }
+            }
+        });
+
+        if (records.length === 0) {
+            throw new Error('No records found for this period');
+        }
+
+        const header = [
+            'Serial Number', 'Employee ID', 'Employee Name',
+            'Bank Name', 'Account Number', 'Net Pay', 'Narration'
+        ].join(',');
+
+        const rows = records.map((record, index) => {
+            const profile = record.user.staffProfile;
+            return [
+                index + 1,
+                record.user.id,
+                `"${record.user.name}"`,
+                profile?.bankName || 'Access Bank',
+                profile?.accountNumber || '0000000000',
+                record.netPay,
+                `"Salary disbursement for ${month} ${year}"`
+            ].join(',');
+        });
+
+        return [header, ...rows].join('\n');
+    }
 }

@@ -78,6 +78,26 @@ export default function PayrollDashboard() {
         }
     };
 
+    const handleExportBankSchedule = async (month: string, year: number) => {
+        try {
+            const response = await api.post('/api/payroll/export-bank-schedule',
+                { month, year },
+                { responseType: 'blob' }
+            );
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Bank_Schedule_${month}_${year}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Export failed', error);
+            alert('Failed to export. Period might not have approved records.');
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -163,9 +183,15 @@ export default function PayrollDashboard() {
                                     <td className="px-6 py-4 text-right flex gap-2 justify-end">
                                         <button
                                             onClick={() => handleExportIPPIS(monthStat.month, new Date().getFullYear())}
-                                            className="text-gray-600 hover:text-blue-700 text-xs border rounded px-2 py-1"
+                                            className="text-gray-600 hover:text-blue-700 text-xs border rounded px-2.5 py-1 font-semibold"
                                         >
-                                            Export CSV
+                                            Export IPPIS
+                                        </button>
+                                        <button
+                                            onClick={() => handleExportBankSchedule(monthStat.month, new Date().getFullYear())}
+                                            className="text-emerald-700 hover:text-emerald-900 text-xs border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded px-2.5 py-1 font-semibold"
+                                        >
+                                            Bank Schedule
                                         </button>
                                         <button className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1">
                                             Details <ArrowRight size={14} />

@@ -114,6 +114,80 @@ export const getAuditLogs = async (req: Request, res: Response) => {
     }
 };
 
+export const archiveAuditLogs = async (req: Request, res: Response) => {
+    try {
+        const retentionDays = parseInt(req.body.retentionDays as string) || 90;
+        const thresholdDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+        // Find logs older than threshold
+        const logsToArchive = await prisma.auditLog.findMany({
+            where: {
+                createdAt: {
+                    lt: thresholdDate
+                }
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true
+                    }
+                }
+            }
+        });
+
+        if (logsToArchive.length === 0) {
+            return res.json({
+                message: `No audit logs found older than ${retentionDays} days to archive.`,
+                count: 0
+            });
+        }
+
+        // Ensure archive directory exists
+        const archiveDir = path.join(__dirname, '../../storage/archives');
+        if (!fs.existsSync(archiveDir)) {
+            fs.mkdirSync(archiveDir, { recursive: true });
+        }
+
+        const fileName = `audit_logs_archive_${Date.now()}.json`;
+        const filePath = path.join(archiveDir, fileName);
+
+        // Write file
+        fs.writeFileSync(filePath, JSON.stringify(logsToArchive, null, 2), 'utf8');
+
+        // Delete from DB
+        const deleteResult = await prisma.auditLog.deleteMany({
+            where: {
+                createdAt: {
+                    lt: thresholdDate
+                }
+            }
+        });
+
+        // Log this compliance action in the remaining AuditLog table!
+        const actorId = (req as any).user?.id || 'system';
+        await prisma.auditLog.create({
+            data: {
+                userId: actorId,
+                action: 'ARCHIVE_LOGS',
+                resource: 'SYSTEM',
+                details: `Archived and purged ${deleteResult.count} audit logs older than ${retentionDays} days into ${fileName}`,
+                ipAddress: req.ip || '0.0.0.0'
+            }
+        });
+
+        res.json({
+            message: `Successfully archived and purged ${deleteResult.count} logs.`,
+            count: deleteResult.count,
+            fileName
+        });
+    } catch (error) {
+        console.error('Failed to archive audit logs:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 const SETTINGS_FILE = path.join(__dirname, '../../system_settings.json');
 
 const DEFAULT_SETTINGS = {

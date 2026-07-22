@@ -75,6 +75,7 @@ model User {
   sentInvites        ProjectInvite[] @relation("Inviter")
   receivedInvites    ProjectInvite[] @relation("Invitee")
   projectMessages    ProjectMessage[]
+  sessions           UserSession[]
 
   @@map("users")
 }
@@ -254,6 +255,9 @@ model StaffProfile {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  bankName      String?
+  accountNumber String?
 
   @@map("staff_profiles")
   @@index([unitId])
@@ -808,11 +812,13 @@ model ClinicEncounter {
 }
 
 model ClinicInventory {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  quantity    Int
-  unit        String   @default("tabs")
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String    @unique
+  quantity      Int
+  unit          String    @default("tabs")
+  expiryDate    DateTime?
+  minStockLevel Int       @default(10)
+  updatedAt     DateTime  @updatedAt
 
   @@map("clinic_inventory")
 }
@@ -1115,3 +1121,17 @@ model UploadedProjectFile {
   @@map("project_files")
   @@index([projectId])
 }
+
+model UserSession {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique @db.Text
+  ipAddress  String?
+  userAgent  String?
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@map("user_sessions")
+}
+

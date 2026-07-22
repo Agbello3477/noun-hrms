@@ -7,10 +7,28 @@ import { redisService } from '../services/redis.service';
 import prisma from '../prisma';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
+import crypto from 'crypto';
 
 // Memory fallback for lockouts and failure counts if Redis is offline
 const memoryLockoutStore = new Map<string, number>(); // email -> lockedUntil timestamp
 const memoryFailureStore = new Map<string, number>(); // email -> count
+
+export const createUserSession = async (userId: string, role: string, req: Request): Promise<string> => {
+    const sid = crypto.randomUUID();
+    await prisma.userSession.create({
+        data: {
+            userId,
+            token: sid,
+            ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+            userAgent: req.headers['user-agent'] || 'unknown'
+        }
+    });
+    return jwt.sign(
+        { id: userId, role, sid },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '1d' }
+    );
+};
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -351,21 +369,8 @@ export const login = async (req: Request, res: Response) => {
             console.error('Failed to log login event:', e);
         }
 
-        // Invalidate older concurrent sessions
-        await prisma.user.update({
-            where: { id: updatedUser.id },
-            data: { tokenInvalidatedAt: new Date() }
-        });
-        if (isRedisActive) {
-            await redisService.del(`user:session:${updatedUser.id}`).catch(() => {});
-        }
-
-        // Generate final token
-        const token = jwt.sign(
-            { id: updatedUser.id, role: updatedUser.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: '1d' }
-        );
+        // Generate session and token
+        const token = await createUserSession(updatedUser.id, updatedUser.role, req);
 
         res.json({
             message: 'Login successful',
@@ -427,25 +432,18 @@ export const verify2FALogin = async (req: Request, res: Response) => {
 
         if (!isValid && !isBackupCodeValid) return res.status(401).json({ message: 'Invalid 2FA code' });
 
-        // Invalidate older concurrent sessions
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { 
-                tokenInvalidatedAt: new Date(),
-                twoFactorBackupCodes: isBackupCodeValid ? remainingBackupCodes.join(',') : user.twoFactorBackupCodes
-            }
-        });
-        const isRedisActive = (redisService as any).isEnabled && (redisService as any).client;
-        if (isRedisActive) {
-            await redisService.del(`user:session:${user.id}`).catch(() => {});
+        // Save updated backup codes if a backup code was consumed
+        if (isBackupCodeValid) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    twoFactorBackupCodes: remainingBackupCodes.join(',')
+                }
+            });
         }
 
-        // Generate final token
-        const token = jwt.sign(
-            { id: user.id, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: '1d' }
-        );
+        // Generate session and token
+        const token = await createUserSession(user.id, user.role, req);
 
         // Audit Log
         await prisma.auditLog.create({
@@ -567,11 +565,7 @@ export const verifyAndEnable2FA = async (req: Request, res: Response) => {
 
         // If they used a temp token during login intercept, automatically log them in now
         if (tempToken) {
-            const token = jwt.sign(
-                { id: user.id, role: user.role },
-                process.env.JWT_SECRET as string,
-                { expiresIn: '1d' }
-            );
+            const token = await createUserSession(user.id, user.role, req);
             return res.json({ message: '2FA Enabled and Login Successful', token, user, backupCodes });
         }
 
@@ -701,6 +695,46 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
         res.json({ message: 'If account exists, reset instructions sent.' });
     } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const getActiveSessions = async (req: any, res: Response) => {
+    try {
+        const userId = req.user.id;
+        const sessions = await prisma.userSession.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(sessions);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const terminateSession = async (req: any, res: Response) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+
+        if (id === 'all-others') {
+            const currentSid = req.user.sid;
+            await prisma.userSession.deleteMany({
+                where: {
+                    userId,
+                    token: { not: currentSid }
+                }
+            });
+            return res.json({ message: 'All other sessions terminated successfully' });
+        }
+
+        await prisma.userSession.delete({
+            where: { id }
+        });
+        res.json({ message: 'Session terminated successfully' });
+    } catch (error) {
+        console.error(error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

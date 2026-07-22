@@ -1,7 +1,7 @@
 
 import { Router } from 'express';
 import { clockIn, clockOut, getAttendanceLogs } from '../controllers/attendance.controller';
-import { runPayroll, getMyPayslips, getPayrollStats, approvePayrollRun, getPayrollRecords, exportIPPISData, getPendingPayroll, getAuditReconciliation } from '../controllers/payroll.controller';
+import { runPayroll, getMyPayslips, getPayrollStats, approvePayrollRun, getPayrollRecords, exportIPPISData, exportBankSchedule, getPendingPayroll, getAuditReconciliation } from '../controllers/payroll.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -25,6 +25,7 @@ const payrollGenRoles = [Role.BURSARY, Role.SUPER_USER, Role.ADMIN]; // Simplifi
 
 payrollRouter.post('/run', requireRole(payrollGenRoles), runPayroll);
 payrollRouter.post('/export-ippis', requireRole(payrollGenRoles), exportIPPISData);
+payrollRouter.post('/export-bank-schedule', requireRole(payrollGenRoles), exportBankSchedule);
 payrollRouter.get('/stats', requireRole(payrollGenRoles), getPayrollStats);
 payrollRouter.get('/records', requireRole(payrollGenRoles), getPayrollRecords);
 const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN];

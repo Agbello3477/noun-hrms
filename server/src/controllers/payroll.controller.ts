@@ -26,6 +26,23 @@ export const exportIPPISData = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const exportBankSchedule = async (req: AuthRequest, res: Response) => {
+    try {
+        const { month, year } = req.body;
+        if (!month || !year) return res.status(400).json({ message: 'Month and Year required' });
+
+        const csvData = await PayrollService.exportBankSchedule(month, Number(year));
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=bank_schedule_${month}_${year}.csv`);
+
+        res.status(200).send(csvData);
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ message: error.message || 'Export failed' });
+    }
+};
+
 // 1. Run Payroll (Admin/Bursary)
 export const runPayroll = async (req: AuthRequest, res: Response) => {
     try {

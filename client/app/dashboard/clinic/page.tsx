@@ -43,6 +43,8 @@ interface InventoryItem {
   name: string;
   quantity: number;
   unit: string;
+  expiryDate?: string | null;
+  minStockLevel?: number | null;
 }
 
 export default function ClinicDashboard() {
@@ -76,7 +78,7 @@ export default function ClinicDashboard() {
   const [selectedEncounter, setSelectedEncounter] = useState<Encounter | null>(null);
   
   // Inventory form
-  const [newStock, setNewStock] = useState({ name: '', quantity: '', unit: 'tabs' });
+  const [newStock, setNewStock] = useState({ name: '', quantity: '', unit: 'tabs', expiryDate: '', minStockLevel: '10' });
 
   // ── Desktop Notifications ─────────────────────────────────────────────────
   // Use a ref so count changes never cause the effect to restart (infinite-loop fix)
@@ -291,7 +293,7 @@ export default function ClinicDashboard() {
     try {
       await api.post('/api/clinic/inventory', newStock);
       setMsg({ type: 'success', text: 'Stock items updated successfully!' });
-      setNewStock({ name: '', quantity: '', unit: 'tabs' });
+      setNewStock({ name: '', quantity: '', unit: 'tabs', expiryDate: '', minStockLevel: '10' });
       fetchInventory();
     } catch (err) {
       setMsg({ type: 'error', text: 'Failed to update stock' });
@@ -1061,6 +1063,27 @@ export default function ClinicDashboard() {
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block mb-1">Min Stock Alert Level</label>
+                      <input
+                        type="number"
+                        placeholder="10"
+                        className="w-full border rounded-lg p-2.5 outline-none"
+                        value={newStock.minStockLevel}
+                        onChange={(e) => setNewStock({ ...newStock, minStockLevel: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">Expiry Date</label>
+                      <input
+                        type="date"
+                        className="w-full border rounded-lg p-2.5 outline-none"
+                        value={newStock.expiryDate}
+                        onChange={(e) => setNewStock({ ...newStock, expiryDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
                   <button
                     type="submit"
                     className="w-full bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-lg hover:bg-emerald-700"
@@ -1081,19 +1104,47 @@ export default function ClinicDashboard() {
                 {inventory.length === 0 ? (
                   <div className="col-span-full p-4 text-center text-sm text-gray-400">No inventory entries available. Add stock above.</div>
                 ) : (
-                  inventory.map((item) => (
-                    <div key={item.id} className="border p-4 rounded-xl bg-white shadow-sm flex items-center justify-between">
-                      <div>
-                        <strong className="block text-sm text-slate-800">{item.name}</strong>
-                        <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{item.unit}</span>
-                      </div>
-                      <span className={`text-sm font-extrabold px-2.5 py-1 rounded-lg ${
-                        item.quantity < 20 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                  inventory.map((item) => {
+                    const isLowStock = item.quantity < (item.minStockLevel ?? 10);
+                    let expiryLabel = '';
+                    let expiryClass = 'text-gray-400 font-semibold';
+                    if (item.expiryDate) {
+                        const daysLeft = Math.ceil((new Date(item.expiryDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+                        if (daysLeft < 0) {
+                            expiryLabel = 'Expired 🔴';
+                            expiryClass = 'text-red-500 font-bold';
+                        } else if (daysLeft <= 30) {
+                            expiryLabel = `Expires in ${daysLeft}d 🟡`;
+                            expiryClass = 'text-amber-500 font-bold';
+                        } else {
+                            expiryLabel = `Exp: ${new Date(item.expiryDate).toLocaleDateString()}`;
+                        }
+                    }
+                    return (
+                      <div key={item.id} className={`border p-4 rounded-xl bg-white shadow-sm flex flex-col justify-between gap-3 ${
+                        isLowStock ? 'border-red-200 bg-red-50/10' : 'border-gray-200'
                       }`}>
-                        {item.quantity}
-                      </span>
-                    </div>
-                  ))
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <strong className="block text-sm text-slate-800">{item.name}</strong>
+                            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{item.unit}</span>
+                          </div>
+                          <span className={`text-sm font-extrabold px-2.5 py-1 rounded-lg ${
+                            isLowStock ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                          }`}>
+                            {item.quantity}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-[10px] pt-2 border-t border-gray-100 mt-1">
+                          <span className="text-gray-400">Min Alert: {item.minStockLevel ?? 10}</span>
+                          {item.expiryDate && (
+                            <span className={expiryClass}>{expiryLabel}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import EditProfileModal from '../../../components/modals/EditProfileModal';
 import { useAuth } from '../../../hooks/useAuth';
+import ActiveSessions from '../../../components/profile/ActiveSessions';
 import {
     User, Mail, Briefcase, MapPin, Phone, Building, Edit2,
     PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2
@@ -296,6 +297,7 @@ export default function ProfilePage() {
                             </div>
                         </div>
                     </div>
+                    <ActiveSessions />
                 </div>
             </div>
 
