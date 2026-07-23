@@ -48,7 +48,20 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(cookieParser());
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const allowedOrigins = [
+            process.env.CLIENT_URL,
+            'https://nounhrms.web.app',
+            'https://nounhrms.firebaseapp.com',
+            'http://localhost:3000',
+            'http://localhost:3001'
+        ].filter(Boolean);
+        if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        return callback(null, true); // Allow deployed web app origins
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-archive-code']
@@ -94,6 +107,29 @@ app.get('/api/health', (req, res) => {
 
 app.get('/', (req, res) => {
     res.json({ message: 'NOUN HRMS API is running' });
+});
+
+// Global Error Handler Middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('🔥 UNCAUGHT SERVER ERROR:', {
+        method: req.method,
+        url: req.originalUrl,
+        errorName: err?.name,
+        errorMessage: err?.message,
+        stack: err?.stack
+    });
+
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    const statusCode = err?.status || err?.statusCode || 500;
+    res.status(statusCode).json({
+        error: true,
+        message: err?.message || 'A server error occurred. Please try again.',
+        path: req.originalUrl,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // Create HTTP Server
