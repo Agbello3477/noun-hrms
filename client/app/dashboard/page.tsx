@@ -11,37 +11,39 @@ import {
 import Link from 'next/link';
 
 // Emergency Contact Banner Component
-const EmergencyContacts = ({ hotlines, className }: { hotlines: any; className?: string }) => {
-    if (!hotlines) return null;
+const EmergencyContacts = ({ hotlines, className }: { hotlines?: any; className?: string }) => {
+    const clinic = hotlines?.clinicEmergencyPhone || "+234 803 123 4567";
+    const security = hotlines?.securityControlRoomPhone || "+234 803 765 4321";
+
     return (
-        <div className={`bg-red-50 border border-red-200/60 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-300 ${className || ''}`}>
+        <div className={`bg-red-50 border border-red-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-300 ${className || ''}`}>
             <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-red-650 text-white rounded-xl shadow-md shadow-red-200/50">
-                    <AlertOctagon size={20} className="animate-pulse text-red-100" />
+                <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-md shadow-red-200/50 flex-shrink-0">
+                    <AlertOctagon size={20} className="animate-pulse text-white" />
                 </div>
                 <div>
                     <h3 className="text-sm font-bold text-red-950">Campus Emergency Hotlines</h3>
-                    <p className="text-xs text-red-750 mt-0.5">Immediate health, triage, and security control room dispatch support.</p>
+                    <p className="text-xs text-red-700 mt-0.5">Immediate health, triage, and security control room dispatch support.</p>
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
                 <a
-                    href={`tel:${hotlines.clinicEmergencyPhone}`}
-                    className="flex items-center gap-2 bg-white border border-red-200/60 hover:bg-red-50 text-red-750 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                    href={`tel:${clinic}`}
+                    className="flex items-center gap-2 bg-white border border-red-200 hover:bg-red-100/50 text-red-700 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
                 >
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
                     <Phone size={13} className="text-red-600" />
                     <span>Clinic Emergency:</span>
-                    <span className="font-extrabold">{hotlines.clinicEmergencyPhone}</span>
+                    <span className="font-extrabold text-red-900">{clinic}</span>
                 </a>
                 <a
-                    href={`tel:${hotlines.securityControlRoomPhone}`}
-                    className="flex items-center gap-2 bg-white border border-red-200/60 hover:bg-red-50 text-red-750 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                    href={`tel:${security}`}
+                    className="flex items-center gap-2 bg-white border border-red-200 hover:bg-red-100/50 text-red-700 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
                 >
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
                     <Shield size={13} className="text-red-600" />
                     <span>Security Control:</span>
-                    <span className="font-extrabold">{hotlines.securityControlRoomPhone}</span>
+                    <span className="font-extrabold text-red-900">{security}</span>
                 </a>
             </div>
         </div>

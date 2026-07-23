@@ -131,7 +131,19 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                 </h2>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+                {/* Emergency Hotlines Quick Access Badge */}
+                <div className="hidden lg:flex items-center gap-2 border border-red-200 bg-red-50/80 text-red-700 px-3.5 py-1.5 rounded-full text-xs font-bold shadow-sm">
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    <span className="text-[11px] uppercase tracking-wider font-extrabold text-red-900">Emergency:</span>
+                    <a href="tel:+2348031234567" className="hover:underline text-red-700 font-extrabold">Clinic (+234 803 123 4567)</a>
+                    <span className="text-red-300">|</span>
+                    <a href="tel:+2348037654321" className="hover:underline text-red-700 font-extrabold">Security (+234 803 765 4321)</a>
+                </div>
+
                 {/* Notification Bell */}
                 <div className="relative" ref={dropdownRef}>
                     <button
