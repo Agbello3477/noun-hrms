@@ -108,26 +108,53 @@ export const getProjectDetails = async (req: Request, res: Response) => {
         const project = await prisma.researchProject.findUnique({
             where: { id },
             include: {
-                owner: true,
+                owner: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true, role: true } }
+                    }
+                },
                 members: {
-                    include: { staff: true }
+                    include: {
+                        staff: {
+                            include: {
+                                user: { select: { id: true, name: true, email: true, role: true } }
+                            }
+                        }
+                    }
                 },
                 invites: {
-                    include: { invitee: true }
+                    include: {
+                        invitee: { select: { id: true, name: true, email: true } },
+                        inviter: { select: { id: true, name: true, email: true } }
+                    }
                 },
-                files: true,
+                files: {
+                    include: {
+                        uploader: {
+                            include: {
+                                user: { select: { id: true, name: true, email: true } }
+                            }
+                        }
+                    }
+                },
                 messages: {
-                    take: 50,
+                    take: 100,
                     orderBy: { createdAt: 'asc' },
-                    include: { sender: true }
+                    include: {
+                        sender: { select: { id: true, name: true, email: true } }
+                    }
                 }
             }
         });
 
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        // RBAC Check
-        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
+        // RBAC Check (Super User, Vice Chancellor, Admin, HR Admin get global oversight access)
+        const isGlobalAdmin = ['SUPER_USER', 'VICE_CHANCELLOR', 'ADMIN', 'HR_ADMIN'].includes(user.role);
+        if (!isGlobalAdmin) {
+            if (!staffProfile) {
+                return res.status(403).json({ message: 'Forbidden. Active staff profile required.' });
+            }
             const isMember = project.members.some(m => m.staffId === staffProfile.id);
             if (!isMember) {
                 return res.status(403).json({ message: 'Forbidden. You are not a member of this project.' });
@@ -135,9 +162,9 @@ export const getProjectDetails = async (req: Request, res: Response) => {
         }
 
         res.json(project);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error' });
+    } catch (err: any) {
+        console.error('Error in getProjectDetails:', err);
+        res.status(500).json({ message: err?.message || 'Internal server error' });
     }
 };
 
@@ -400,7 +427,9 @@ export const getDocument = async (req: Request, res: Response) => {
         });
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
+        const isGlobalAdmin = ['SUPER_USER', 'VICE_CHANCELLOR', 'ADMIN', 'HR_ADMIN'].includes(user.role);
+        if (!isGlobalAdmin) {
+            if (!staffProfile) return res.status(403).json({ message: 'Forbidden. Active staff profile required.' });
             const isMember = project.members.some(m => m.staffId === staffProfile.id);
             if (!isMember) return res.status(403).json({ message: 'Forbidden' });
         }
@@ -413,9 +442,9 @@ export const getDocument = async (req: Request, res: Response) => {
         }
 
         res.json({ id: doc.id, title: doc.title, contentHtml: doc.contentHtml || '', updatedAt: doc.updatedAt });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error' });
+    } catch (err: any) {
+        console.error('Error in getDocument:', err);
+        res.status(500).json({ message: err?.message || 'Internal server error' });
     }
 };
 
