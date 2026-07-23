@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
+import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import { 
   Heart, Activity, Search, PlusCircle, Clipboard, FileText, 
-  Beaker, Pill, Save, CheckCircle, RefreshCw, AlertCircle 
+  Beaker, Pill, Save, CheckCircle, RefreshCw, AlertCircle, Video 
 } from 'lucide-react';
 
 interface PatientFile {
@@ -60,6 +61,26 @@ export default function ClinicDashboard() {
   }, [user]);
 
   const [activeTab, setActiveTab] = useState<'records' | 'triage' | 'consultation' | 'laboratory' | 'pharmacy'>('records');
+
+  // WebRTC Telemedicine Meeting State
+  const [isMeetingOpen, setIsMeetingOpen] = useState(false);
+  const [meetingRoomName, setMeetingRoomName] = useState('');
+  const [patientName, setPatientName] = useState('');
+
+  const handleLaunchTelemedicine = async (encounterOrPatientId: string, name: string) => {
+    setPatientName(name);
+    try {
+      const res = await api.post('/api/meetings/token', {
+        module: 'telemedicine',
+        targetId: encounterOrPatientId
+      });
+      setMeetingRoomName(res.data.roomName);
+      setIsMeetingOpen(true);
+    } catch (err) {
+      setMeetingRoomName(`telemedicine-${encounterOrPatientId}`);
+      setIsMeetingOpen(true);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
   const [encounters, setEncounters] = useState<Encounter[]>([]);
@@ -459,14 +480,24 @@ export default function ClinicDashboard() {
                             Blood: <strong className="text-slate-700">{file.bloodGroup || 'N/A'}</strong> | Genotype: <strong className="text-slate-700">{file.genotype || 'N/A'}</strong>
                           </div>
                         </div>
-                        {['CLINIC_NURSE', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleStartEncounter(file.id)}
-                            className="bg-primary text-white font-bold text-xs py-2 px-4 rounded-lg hover:bg-primary-dark shadow-sm flex items-center gap-1"
+                            onClick={() => handleLaunchTelemedicine(file.id, file.name)}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs py-2 px-3 rounded-lg shadow-sm flex items-center gap-1 transition"
+                            title="Launch Encrypted Telemedicine Video Consultation Call"
                           >
-                            <PlusCircle size={14} /> Start Visit
+                            <Video size={14} className="animate-pulse text-emerald-300" />
+                            <span>Telemedicine Call</span>
                           </button>
-                        )}
+                          {['CLINIC_NURSE', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+                            <button
+                              onClick={() => handleStartEncounter(file.id)}
+                              className="bg-primary text-white font-bold text-xs py-2 px-4 rounded-lg hover:bg-primary-dark shadow-sm flex items-center gap-1"
+                            >
+                              <PlusCircle size={14} /> Start Visit
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -1167,6 +1198,16 @@ export default function ClinicDashboard() {
 
       </div>
 
+      {/* Encrypted Telemedicine Video Consultation Overlay */}
+      <VideoConferenceModal
+        isOpen={isMeetingOpen}
+        onClose={() => setIsMeetingOpen(false)}
+        roomName={meetingRoomName || 'telemedicine-consultation'}
+        userName={user?.email ? user.email.split('@')[0] : 'Clinician'}
+        userEmail={user?.email || ''}
+        title={`Telemedicine Consultation Call: ${patientName || 'Patient'}`}
+        subtitle="Encrypted peer-to-peer WebRTC video stream for NOUN Health Services"
+      />
     </div>
   );
 }

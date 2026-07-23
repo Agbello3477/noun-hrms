@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import dynamic from 'next/dynamic';
 import EditorSkeleton from '@/components/ui/EditorSkeleton';
 import ChatSkeleton from '@/components/ui/ChatSkeleton';
+import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 
 // Dynamically import TipTap Word-style editor and Socket.IO chat with ssr: false
 const CollaborativeEditor = dynamic(() => import('@/components/research/CollaborativeEditor'), {
@@ -30,7 +31,8 @@ import {
     Trash2,
     UserX,
     Bell,
-    ShieldAlert
+    ShieldAlert,
+    Video
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -54,6 +56,24 @@ export default function ResearchWorkspace() {
     // Edit workspace state
     const [editTitle, setEditTitle] = useState('');
     const [editAbstract, setEditAbstract] = useState('');
+
+    // Video Conferencing state
+    const [isMeetingOpen, setIsMeetingOpen] = useState(false);
+    const [meetingRoomName, setMeetingRoomName] = useState('');
+
+    const handleLaunchMeeting = async () => {
+        try {
+            const res = await api.post('/api/meetings/token', {
+                module: 'research',
+                targetId: id
+            });
+            setMeetingRoomName(res.data.roomName);
+            setIsMeetingOpen(true);
+        } catch (err) {
+            setMeetingRoomName(`research-${id}`);
+            setIsMeetingOpen(true);
+        }
+    };
 
     useEffect(() => {
         setIsMounted(true);
@@ -252,6 +272,16 @@ export default function ResearchWorkspace() {
 
                 {/* Workspace Action Toolbar */}
                 <div className="relative z-10 flex items-center flex-wrap gap-2">
+                    {/* Launch WebRTC Video Meeting */}
+                    <button 
+                        onClick={handleLaunchMeeting}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-extrabold shadow-md transition duration-150 border border-teal-400"
+                        title="Launch Encrypted WebRTC Video Meeting for Co-Authors"
+                    >
+                        <Video size={14} className="animate-pulse" />
+                        <span>Start Video Call</span>
+                    </button>
+
                     {/* Invite Peer */}
                     <button 
                         onClick={() => setShowInviteModal(true)}
@@ -498,6 +528,17 @@ export default function ResearchWorkspace() {
                     </div>
                 </div>
             )}
+
+            {/* Embedded WebRTC Video Meeting Overlay */}
+            <VideoConferenceModal
+                isOpen={isMeetingOpen}
+                onClose={() => setIsMeetingOpen(false)}
+                roomName={meetingRoomName || `research-${id}`}
+                userName={currentUser?.email ? currentUser.email.split('@')[0] : 'Researcher'}
+                userEmail={currentUser?.email || ''}
+                title={`Research Forum Video Call: ${project?.title || 'Academic Project'}`}
+                subtitle="Encrypted peer-to-peer WebRTC video session alongside collaborative editor"
+            />
         </div>
     );
 }

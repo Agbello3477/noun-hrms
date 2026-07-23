@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
+import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import {
     TrendingUp, Search, RefreshCw, Shield, CheckCircle2,
     XCircle, ChevronLeft, ChevronRight, AlertTriangle,
     Download, Calendar, User, Briefcase, Star, Filter,
-    Clock, PlayCircle, ToggleLeft, ToggleRight, ClipboardList
+    Clock, PlayCircle, ToggleLeft, ToggleRight, ClipboardList, Video
 } from 'lucide-react';
 
 interface PromotionLog {
@@ -70,6 +71,26 @@ export default function DueForPromotionPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<'records' | 'flag'>('records');
+
+    // WebRTC Promotion Interview Meeting State
+    const [isMeetingOpen, setIsMeetingOpen] = useState(false);
+    const [meetingRoomName, setMeetingRoomName] = useState('');
+    const [candidateName, setCandidateName] = useState('');
+
+    const handleLaunchInterview = async (logId: string, name: string) => {
+        setCandidateName(name);
+        try {
+            const res = await api.post('/api/meetings/token', {
+                module: 'promotion',
+                targetId: logId
+            });
+            setMeetingRoomName(res.data.roomName);
+            setIsMeetingOpen(true);
+        } catch (err) {
+            setMeetingRoomName(`promotion-${logId}`);
+            setIsMeetingOpen(true);
+        }
+    };
 
     // Records tab
     const [records, setRecords] = useState<PromotionLog[]>([]);
@@ -344,7 +365,7 @@ export default function DueForPromotionPage() {
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="bg-gray-50 border-b border-gray-200 text-left">
-                                                {['Staff', 'Rank / Level', 'Unit / Department', 'Status', 'Flagged On', 'Triggered By', 'Last Promoted'].map(h => (
+                                                {['Staff', 'Rank / Level', 'Unit / Department', 'Status', 'Flagged On', 'Triggered By', 'Last Promoted', 'Panel Action'].map(h => (
                                                     <th key={h} className="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wide">{h}</th>
                                                 ))}
                                             </tr>
@@ -384,6 +405,16 @@ export default function DueForPromotionPage() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 text-gray-500">{fmtDate(p.dateOfLastPromotion)}</td>
+                                                        <td className="px-4 py-3">
+                                                            <button
+                                                                onClick={() => handleLaunchInterview(record.id, name)}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                                title="Launch Remote WebRTC Interview Panel"
+                                                            >
+                                                                <Video size={13} className="animate-pulse text-emerald-300" />
+                                                                <span>Interview Room</span>
+                                                            </button>
+                                                        </td>
                                                     </tr>
                                                 );
                                             })}
@@ -567,6 +598,17 @@ export default function DueForPromotionPage() {
                     </>
                 )}
             </div>
+
+            {/* Remote Promotion Interview Room Overlay */}
+            <VideoConferenceModal
+                isOpen={isMeetingOpen}
+                onClose={() => setIsMeetingOpen(false)}
+                roomName={meetingRoomName || 'promotion-interview'}
+                userName={user?.email ? user.email.split('@')[0] : 'Panelist'}
+                userEmail={user?.email || ''}
+                title={`Remote Promotion Interview Room: ${candidateName || 'Candidate'}`}
+                subtitle="Encrypted WebRTC Session for VC & Registry Promotion Evaluation Panel"
+            />
         </div>
     );
 }

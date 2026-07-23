@@ -34,6 +34,7 @@ import securityRoutes from './routes/security.routes';
 import voucherRoutes from './routes/voucher.routes';
 import gearRoutes from './routes/gear.routes';
 import researchRoutes from './routes/research.routes';
+import meetingRoutes from './routes/meeting.routes';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
@@ -100,6 +101,7 @@ app.use('/api/security/gear', gearRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/research', researchRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'UP', service: 'NOUN-HRMS-API', timestamp: new Date().toISOString() });

@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
+import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import { 
   Shield, AlertTriangle, Users, FileText, Send, CheckCircle, 
-  Clock, MapPin, PlusCircle, RefreshCw, Eye, EyeOff 
+  Clock, MapPin, PlusCircle, RefreshCw, Eye, EyeOff, Video 
 } from 'lucide-react';
 
 interface Incident {
@@ -47,6 +48,26 @@ export default function SecurityDashboard() {
   }, [user]);
 
   const [activeTab, setActiveTab] = useState<'command' | 'roster' | 'report' | 'compile' | 'inventory'>('command');
+
+  // WebRTC Security Live Dispatch Meeting State
+  const [isMeetingOpen, setIsMeetingOpen] = useState(false);
+  const [meetingRoomName, setMeetingRoomName] = useState('');
+  const [incidentTitle, setIncidentTitle] = useState('');
+
+  const handleLaunchSecurityDispatch = async (incidentId: string, title: string) => {
+    setIncidentTitle(title);
+    try {
+      const res = await api.post('/api/meetings/token', {
+        module: 'security',
+        targetId: incidentId
+      });
+      setMeetingRoomName(res.data.roomName);
+      setIsMeetingOpen(true);
+    } catch (err) {
+      setMeetingRoomName(`security-${incidentId}`);
+      setIsMeetingOpen(true);
+    }
+  };
 
   // Auto-switch non-security roles to report tab
   useEffect(() => {
@@ -427,12 +448,22 @@ export default function SecurityDashboard() {
                             </select>
 
                             {incident.status !== 'RESOLVED' ? (
-                              <button
-                                onClick={() => handleUpdateIncident(incident.id, { status: 'RESOLVED' })}
-                                className="bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-700 shadow-sm transition"
-                              >
-                                Resolve Threat
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleLaunchSecurityDispatch(incident.id, incident.title)}
+                                  className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition"
+                                  title="Launch Live WebRTC Video Dispatch Feed for Incident Command"
+                                >
+                                  <Video size={13} className="animate-pulse text-white" />
+                                  <span>Broadcast Live Video Feed</span>
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateIncident(incident.id, { status: 'RESOLVED' })}
+                                  className="bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-700 shadow-sm transition"
+                                >
+                                  Resolve Threat
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-emerald-600 font-extrabold flex items-center gap-1 text-xs px-2.5 py-1.5">
                                 <CheckCircle size={14} /> Resolved
@@ -1017,6 +1048,16 @@ export default function SecurityDashboard() {
 
       </div>
 
+      {/* Security Incident Live Feed & Video Dispatch Overlay */}
+      <VideoConferenceModal
+        isOpen={isMeetingOpen}
+        onClose={() => setIsMeetingOpen(false)}
+        roomName={meetingRoomName || 'security-dispatch'}
+        userName={user?.email ? user.email.split('@')[0] : 'Security Officer'}
+        userEmail={user?.email || ''}
+        title={`Security Command Live Dispatch Feed: ${incidentTitle || 'Campus Threat Response'}`}
+        subtitle="Encrypted peer-to-peer WebRTC video stream for Campus Security Control Room"
+      />
     </div>
   );
 }
