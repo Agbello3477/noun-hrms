@@ -6,9 +6,47 @@ import api, { getImageUrl } from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
     Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar,
-    Filter, Users, TrendingUp, BarChart2
+    Filter, Users, TrendingUp, BarChart2, Shield, Phone
 } from 'lucide-react';
 import Link from 'next/link';
+
+// Emergency Contact Banner Component
+const EmergencyContacts = ({ hotlines, className }: { hotlines: any; className?: string }) => {
+    if (!hotlines) return null;
+    return (
+        <div className={`bg-red-50 border border-red-200/60 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-300 ${className || ''}`}>
+            <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-red-650 text-white rounded-xl shadow-md shadow-red-200/50">
+                    <AlertOctagon size={20} className="animate-pulse text-red-100" />
+                </div>
+                <div>
+                    <h3 className="text-sm font-bold text-red-950">Campus Emergency Hotlines</h3>
+                    <p className="text-xs text-red-750 mt-0.5">Immediate health, triage, and security control room dispatch support.</p>
+                </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+                <a
+                    href={`tel:${hotlines.clinicEmergencyPhone}`}
+                    className="flex items-center gap-2 bg-white border border-red-200/60 hover:bg-red-50 text-red-750 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    <Phone size={13} className="text-red-600" />
+                    <span>Clinic Emergency:</span>
+                    <span className="font-extrabold">{hotlines.clinicEmergencyPhone}</span>
+                </a>
+                <a
+                    href={`tel:${hotlines.securityControlRoomPhone}`}
+                    className="flex items-center gap-2 bg-white border border-red-200/60 hover:bg-red-50 text-red-750 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    <Shield size={13} className="text-red-600" />
+                    <span>Security Control:</span>
+                    <span className="font-extrabold">{hotlines.securityControlRoomPhone}</span>
+                </a>
+            </div>
+        </div>
+    );
+};
 
 export default function DashboardHome() {
     const { user, isLoading } = useAuth();
@@ -16,6 +54,21 @@ export default function DashboardHome() {
     const [loadingNotifications, setLoadingNotifications] = useState(true);
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loadingLeaves, setLoadingLeaves] = useState(true);
+    
+    // Emergency hotlines settings state
+    const [emergencyHotlines, setEmergencyHotlines] = useState<{ clinicEmergencyPhone: string; securityControlRoomPhone: string } | null>(null);
+
+    useEffect(() => {
+        const fetchHotlines = async () => {
+            try {
+                const { data } = await api.get('/api/system/emergency-hotlines');
+                setEmergencyHotlines(data);
+            } catch (err) {
+                console.error('Failed to fetch emergency hotlines', err);
+            }
+        };
+        fetchHotlines();
+    }, []);
 
     // Registry Dashboard States
     const [activities, setActivities] = useState<any[]>([]);
@@ -435,6 +488,8 @@ export default function DashboardHome() {
                     <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl"></div>
                 </div>
 
+                <EmergencyContacts hotlines={emergencyHotlines} />
+
                 {/* Overall University Statistics */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
@@ -736,6 +791,8 @@ export default function DashboardHome() {
                     <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
                 </div>
 
+                <EmergencyContacts hotlines={emergencyHotlines} />
+
                 {/* Manager Stats Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
@@ -955,6 +1012,8 @@ export default function DashboardHome() {
                     <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
                 </div>
 
+                <EmergencyContacts hotlines={emergencyHotlines} />
+
                 {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
@@ -1100,6 +1159,8 @@ export default function DashboardHome() {
             <h1 className="mb-6 text-3xl font-bold text-gray-800">
                 HQ Registry Overview
             </h1>
+
+            <EmergencyContacts hotlines={emergencyHotlines} className="mb-6" />
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {/* Stat Card 1 */}

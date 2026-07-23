@@ -347,3 +347,16 @@ export const exportSystemAuditReport = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Error compiling and exporting compliance audit spreadsheet' });
     }
 };
+
+export const getEmergencyHotlines = async (req: Request, res: Response) => {
+    try {
+        const settings = await readSettings();
+        res.json({
+            clinicEmergencyPhone: settings.clinicEmergencyPhone || "+234 803 123 4567",
+            securityControlRoomPhone: settings.securityControlRoomPhone || "+234 803 765 4321"
+        });
+    } catch (error) {
+        console.error('Error in getEmergencyHotlines:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
