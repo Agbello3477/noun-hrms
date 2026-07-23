@@ -31,7 +31,7 @@ jobs:
       - name: Build Frontend Client (Next.js)
         run: npm run build --workspace=client
         env:
-          NEXT_PUBLIC_API_URL: "https://noun-hrms-api.onrender.com"
+          NEXT_PUBLIC_API_URL: "https://noun-hrms.onrender.com"
 
       - name: Deploy Frontend to Firebase Hosting
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
