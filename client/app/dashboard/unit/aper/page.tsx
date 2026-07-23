@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Loader2, CheckCircle, Star, MessageSquare, ChevronRight, X } from 'lucide-react';
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
+import OfficialAperForm from '../../../../components/aper/OfficialAperForm';
 
 export default function UnitAperReview() {
     const { user } = useAuth();
@@ -12,8 +13,7 @@ export default function UnitAperReview() {
     const [forms, setForms] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [reviewForm, setReviewForm] = useState<any>(null);
-    const [supervisorScores, setSupervisorScores] = useState<any>({});
-    const [supervisorComments, setSupervisorComments] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         const fetchSessions = async () => {
@@ -47,75 +47,89 @@ export default function UnitAperReview() {
 
     const handleOpenReview = (form: any) => {
         setReviewForm(form);
-        setSupervisorScores(form.scores || {}); // Start with staff scores as template? Or empty
-        setSupervisorComments(form.comments?.supervisor || '');
     };
 
-    const submitReview = async () => {
+    const submitHodReview = async (formData: any, isDraft: boolean) => {
+        if (!reviewForm) return;
+        setIsSubmitting(true);
+
         try {
             await api.put(`/api/aper/hr/review/${reviewForm.id}`, {
-                supervisorScores,
+                supervisorScores: formData.page4?.aspectRatings || {},
                 supervisorComments: {
                     ...reviewForm.comments,
-                    supervisor: supervisorComments
+                    page4: formData.page4,
+                    supervisor: formData.page4?.effectivenessComments || ''
                 },
-                status: 'REVIEWED'
+                status: isDraft ? 'DRAFT' : 'REVIEWED'
             });
-            alert('Review submitted successfully');
+
+            alert(isDraft ? 'HOD Assessment draft saved successfully.' : 'Part 2 Reporting Officer APER Review submitted successfully!');
             setReviewForm(null);
-            // Refresh
+            
+            // Refresh forms list
             const { data } = await api.get(`/api/aper/hr/forms?sessionId=${selectedSession}&unitId=${user?.staffProfile?.unitId}`);
             setForms(data);
-        } catch (error) {
-            alert('Failed to submit review');
+        } catch (error: any) {
+            console.error('Failed to submit review:', error);
+            alert(error.response?.data?.message || 'Failed to submit HOD review');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="p-8">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-800">Unit Appraisal Review</h1>
-                <p className="text-gray-500">Review and score appraisals for your unit staff</p>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Unit APER Appraisal Review</h1>
+                    <p className="text-xs text-slate-500 font-semibold mt-0.5">Reporting Officer / Head of Department assessment portal</p>
+                </div>
+
+                <div className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="text-xs font-extrabold text-slate-700">Appraisal Session:</label>
+                    <select
+                        className="border rounded-xl px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-800 outline-none focus:border-emerald-600"
+                        value={selectedSession}
+                        onChange={(e) => setSelectedSession(e.target.value)}
+                    >
+                        {sessions.map(s => (
+                            <option key={s.id} value={s.id}>{s.title} ({s.year})</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
-            <div className="mb-6 flex gap-4 items-center">
-                <label className="font-medium text-gray-700">Appraisal Session:</label>
-                <select
-                    className="border rounded p-2 bg-white"
-                    value={selectedSession}
-                    onChange={(e) => setSelectedSession(e.target.value)}
-                >
-                    {sessions.map(s => (
-                        <option key={s.id} value={s.id}>{s.title} ({s.year})</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-900 text-white font-extrabold uppercase">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Staff Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Staff ID</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
-                            <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Action</th>
+                            <th className="px-6 py-3.5 text-left">Staff Member</th>
+                            <th className="px-6 py-3.5 text-left">Staff ID / Cadre</th>
+                            <th className="px-6 py-3.5 text-left">Appraisal Status</th>
+                            <th className="px-6 py-3.5 text-right">Part 2 Action</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-slate-200 bg-white">
                         {loading ? (
-                            <tr><td colSpan={4} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-nounGreen" /></td></tr>
+                            <tr><td colSpan={4} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-emerald-600" /></td></tr>
                         ) : forms.length === 0 ? (
-                            <tr><td colSpan={4} className="p-8 text-center text-gray-500">No appraisal forms found for this session.</td></tr>
+                            <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-medium">No APER appraisal forms submitted for this unit session yet.</td></tr>
                         ) : (
                             forms.map(form => (
-                                <tr key={form.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-medium text-gray-900">{form.staff.user.name}</td>
-                                    <td className="px-6 py-4 text-gray-500">{form.staff.staffId}</td>
+                                <tr key={form.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                            form.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-800' :
-                                            form.status === 'REVIEWED' ? 'bg-green-100 text-green-800' :
-                                            'bg-gray-100 text-gray-800'
+                                        <div className="font-bold text-slate-900">{form.staff?.user?.name || 'Staff Member'}</div>
+                                        <div className="text-[11px] text-slate-400 font-semibold">{form.staff?.rank || '—'}</div>
+                                    </td>
+                                    <td className="px-6 py-4 font-semibold text-slate-600">
+                                        {form.staff?.staffId || '—'}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
+                                            form.status === 'SUBMITTED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            form.status === 'REVIEWED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            'bg-slate-100 text-slate-600 border-slate-200'
                                         }`}>
                                             {form.status}
                                         </span>
@@ -123,9 +137,10 @@ export default function UnitAperReview() {
                                     <td className="px-6 py-4 text-right">
                                         <button
                                             onClick={() => handleOpenReview(form)}
-                                            className="text-nounGreen hover:text-green-800 font-bold flex items-center justify-end gap-1 ml-auto"
+                                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition shadow-sm inline-flex items-center gap-1"
                                         >
-                                            Review <ChevronRight size={16} />
+                                            <span>Review & Complete Part 2</span>
+                                            <ChevronRight size={14} />
                                         </button>
                                     </td>
                                 </tr>
@@ -135,71 +150,34 @@ export default function UnitAperReview() {
                 </table>
             </div>
 
-            {/* Review Modal */}
+            {/* HOD Full APER Review Modal */}
             {reviewForm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b sticky top-0 bg-white flex justify-between items-center">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto border border-slate-200 my-auto">
+                        <div className="p-6 border-b sticky top-0 bg-white z-20 flex justify-between items-center shadow-sm">
                             <div>
-                                <h2 className="text-xl font-bold">Review Appraisal</h2>
-                                <p className="text-sm text-gray-500">{reviewForm.staff.user.name} - {reviewForm.staff.staffId}</p>
+                                <h2 className="text-xl font-black text-slate-900 uppercase">HOD APER Appraisal Review</h2>
+                                <p className="text-xs text-slate-500 font-semibold">
+                                    Evaluating: <strong className="text-emerald-700">{reviewForm.staff?.user?.name}</strong> ({reviewForm.staff?.staffId})
+                                </p>
                             </div>
-                            <button onClick={() => setReviewForm(null)} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
-                        </div>
-
-                        <div className="p-6 space-y-6">
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <h3 className="font-bold text-blue-800 flex items-center gap-2 mb-2">
-                                    <MessageSquare size={18} /> Staff Self-Assessment
-                                </h3>
-                                <p className="text-sm text-blue-900 italic">"{reviewForm.comments?.staff || 'No comments provided'}"</p>
-                            </div>
-
-                            <div>
-                                <h3 className="font-bold text-gray-800 mb-4 border-b pb-1">Supervisor Scoring</h3>
-                                <div className="space-y-4">
-                                    {['Job Knowledge', 'Quality of Work', 'Productivity', 'Dependability', 'Initiative'].map(kpi => (
-                                        <div key={kpi} className="flex justify-between items-center">
-                                            <span className="text-sm font-medium">{kpi}</span>
-                                            <div className="flex gap-2">
-                                                {[1, 2, 3, 4, 5].map(score => (
-                                                    <button
-                                                        key={score}
-                                                        onClick={() => setSupervisorScores({ ...supervisorScores, [kpi]: score })}
-                                                        className={`w-8 h-8 rounded flex items-center justify-center text-sm font-bold transition ${
-                                                            supervisorScores[kpi] === score 
-                                                            ? 'bg-nounGreen text-white shadow-md scale-110' 
-                                                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                                        }`}
-                                                    >
-                                                        {score}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 className="font-bold text-gray-800 mb-2">Supervisor Comments</h3>
-                                <textarea
-                                    className="w-full border rounded-lg p-3 h-32 focus:ring-2 focus:ring-nounGreen focus:border-transparent outline-none"
-                                    placeholder="Enter your assessment and feedback..."
-                                    value={supervisorComments}
-                                    onChange={(e) => setSupervisorComments(e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
-                            <button onClick={() => setReviewForm(null)} className="px-4 py-2 text-gray-600 font-medium">Cancel</button>
-                            <button
-                                onClick={submitReview}
-                                className="px-6 py-2 bg-nounGreen text-white font-bold rounded-lg hover:bg-green-800 flex items-center gap-2"
+                            <button 
+                                onClick={() => setReviewForm(null)} 
+                                className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition"
                             >
-                                <CheckCircle size={18} /> Submit Review
+                                <X size={20} />
                             </button>
+                        </div>
+
+                        <div className="p-4 md:p-6">
+                            <OfficialAperForm
+                                mode="HOD_REVIEW"
+                                session={sessions.find(s => s.id === selectedSession)}
+                                profile={reviewForm.staff}
+                                initialData={reviewForm.comments || undefined}
+                                onSubmit={submitHodReview}
+                                isSubmitting={isSubmitting}
+                            />
                         </div>
                     </div>
                 </div>
