@@ -205,7 +205,13 @@ const DEFAULT_SETTINGS = {
     securityControlRoomPhone: "+234 803 765 4321",
     rosterAutoExpireDays: 7,
     systemMode: "LIVE",
-    mockEmailMode: true
+    mockEmailMode: true,
+    smtpHost: "",
+    smtpPort: 587,
+    smtpUser: "",
+    smtpPass: "",
+    resendApiKey: "",
+    resendFromEmail: "no-reply@noun.edu.ng"
 };
 
 const readSettings = async () => {

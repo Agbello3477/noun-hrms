@@ -26,6 +26,12 @@ interface SystemSettings {
     rosterAutoExpireDays: number;
     systemMode: string;
     mockEmailMode: boolean;
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpUser?: string;
+    smtpPass?: string;
+    resendApiKey?: string;
+    resendFromEmail?: string;
 }
 
 const ALLOWED_ROLES = ['SUPER_USER', 'HR_ADMIN', 'VICE_CHANCELLOR', 'ADMIN'];
@@ -364,22 +370,112 @@ export default function SettingsPage() {
                                             </select>
                                         </div>
 
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider flex justify-between">
-                                                Mock Email Delivery
-                                            </label>
-                                            <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50 flex items-center justify-between text-sm">
-                                                <span className="text-xs text-gray-500">Simulate SMTP / Log templates</span>
-                                                {canWrite ? (
-                                                    <button type="button" onClick={() => setSettings({ ...settings, mockEmailMode: !settings.mockEmailMode })}
-                                                        className="text-green-600 hover:text-green-700 transition">
-                                                        {settings.mockEmailMode ? <ToggleRight size={38} /> : <ToggleLeft className="text-gray-400" size={38} />}
-                                                    </button>
-                                                ) : (
-                                                    <span className="font-medium text-xs uppercase text-gray-600">{settings.mockEmailMode ? 'ON' : 'OFF'}</span>
-                                                )}
-                                            </div>
-                                        </div>
+                                        <div className="space-y-1.5 md:col-span-2">
+                                             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider flex justify-between">
+                                                 Mock Email Delivery
+                                             </label>
+                                             <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 flex items-center justify-between text-sm">
+                                                 <div>
+                                                     <span className="text-xs font-semibold text-gray-700 block">Simulate Email Notifications</span>
+                                                     <span className="text-[11px] text-gray-500">When enabled, emails are logged to system console rather than sent via live SMTP/Resend</span>
+                                                 </div>
+                                                 {canWrite ? (
+                                                     <button type="button" onClick={() => setSettings({ ...settings, mockEmailMode: !settings.mockEmailMode })}
+                                                         className="text-green-600 hover:text-green-700 transition flex-shrink-0 ml-3">
+                                                         {settings.mockEmailMode ? <ToggleRight size={38} /> : <ToggleLeft className="text-gray-400" size={38} />}
+                                                     </button>
+                                                 ) : (
+                                                     <span className="font-medium text-xs uppercase text-gray-600 flex-shrink-0 ml-3">{settings.mockEmailMode ? 'ON' : 'OFF'}</span>
+                                                 )}
+                                             </div>
+                                         </div>
+
+                                         {!settings.mockEmailMode && (
+                                             <div className="md:col-span-2 border border-blue-200/70 bg-blue-50/40 rounded-2xl p-5 space-y-4">
+                                                 <div>
+                                                     <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-2">
+                                                         <Mail size={16} className="text-blue-600" />
+                                                         Live Email Provider Configuration (SMTP / Resend API)
+                                                     </h4>
+                                                     <p className="text-xs text-blue-700 mt-1">Configure your SMTP gateway or Resend API key to deliver live notifications to staff inboxes.</p>
+                                                 </div>
+
+                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                     <div className="space-y-1">
+                                                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Resend API Key (Recommended)</label>
+                                                         <input
+                                                             type="password"
+                                                             placeholder="re_123456789..."
+                                                             disabled={!canWrite}
+                                                             value={settings.resendApiKey || ''}
+                                                             onChange={e => setSettings({ ...settings, resendApiKey: e.target.value })}
+                                                             className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+                                                         />
+                                                     </div>
+                                                     <div className="space-y-1">
+                                                         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">From Sender Email</label>
+                                                         <input
+                                                             type="email"
+                                                             placeholder="no-reply@noun.edu.ng"
+                                                             disabled={!canWrite}
+                                                             value={settings.resendFromEmail || ''}
+                                                             onChange={e => setSettings({ ...settings, resendFromEmail: e.target.value })}
+                                                             className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                         />
+                                                     </div>
+
+                                                     <div className="md:col-span-2 border-t border-blue-100 pt-3">
+                                                         <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-2">Or Custom SMTP Server Setup</span>
+                                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                             <div className="space-y-1">
+                                                                 <label className="text-[10px] font-bold text-gray-500 uppercase">SMTP Host</label>
+                                                                 <input
+                                                                     type="text"
+                                                                     placeholder="smtp.gmail.com"
+                                                                     disabled={!canWrite}
+                                                                     value={settings.smtpHost || ''}
+                                                                     onChange={e => setSettings({ ...settings, smtpHost: e.target.value })}
+                                                                     className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                                 />
+                                                             </div>
+                                                             <div className="space-y-1">
+                                                                 <label className="text-[10px] font-bold text-gray-500 uppercase">SMTP Port</label>
+                                                                 <input
+                                                                     type="number"
+                                                                     placeholder="587"
+                                                                     disabled={!canWrite}
+                                                                     value={settings.smtpPort || 587}
+                                                                     onChange={e => setSettings({ ...settings, smtpPort: parseInt(e.target.value) || 587 })}
+                                                                     className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                                 />
+                                                             </div>
+                                                             <div className="space-y-1">
+                                                                 <label className="text-[10px] font-bold text-gray-500 uppercase">SMTP Username / Email</label>
+                                                                 <input
+                                                                     type="text"
+                                                                     placeholder="your-email@gmail.com"
+                                                                     disabled={!canWrite}
+                                                                     value={settings.smtpUser || ''}
+                                                                     onChange={e => setSettings({ ...settings, smtpUser: e.target.value })}
+                                                                     className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                                 />
+                                                             </div>
+                                                             <div className="space-y-1">
+                                                                 <label className="text-[10px] font-bold text-gray-500 uppercase">SMTP Password / App Secret</label>
+                                                                 <input
+                                                                     type="password"
+                                                                     placeholder="••••••••••••"
+                                                                     disabled={!canWrite}
+                                                                     value={settings.smtpPass || ''}
+                                                                     onChange={e => setSettings({ ...settings, smtpPass: e.target.value })}
+                                                                     className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                                 />
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                         )}
                                     </div>
 
                                     {/* Action Buttons Row */}

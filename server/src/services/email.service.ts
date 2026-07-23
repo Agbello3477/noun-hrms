@@ -7,74 +7,85 @@ import fs from 'fs';
 
 const SETTINGS_FILE = path.join(__dirname, '../../system_settings.json');
 
-const getMockEmailMode = (): boolean => {
+const getEmailSettings = (): any => {
     try {
         if (fs.existsSync(SETTINGS_FILE)) {
             const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-            const parsed = JSON.parse(data);
-            return parsed.mockEmailMode !== false;
+            return JSON.parse(data);
         }
     } catch (e) {
         console.error("Error reading system settings file for email:", e);
     }
-    return true; // default mockEmailMode is true
+    return {};
 };
-
-// Configure Resend
-const resendApiKey = process.env.RESEND_API_KEY;
-const resendFrom = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
-// Configure SMTP transporter (Mock for Dev, can use Gmail/SMTP)
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USER || 'ethereal_user',
-        pass: process.env.SMTP_PASS || 'ethereal_pass',
-    },
-});
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
     try {
-        console.log(`[EMAIL_SERVICE] Sending email to ${to}: Subject "${subject}"`);
-        
-        const mockMode = getMockEmailMode();
-        if (mockMode || process.env.SMTP_USER === 'your-email@example.com' || !process.env.SMTP_USER) {
-            console.log(`[EMAIL_SERVICE] [MOCK] Email HTML contents:\n${html}`);
+        console.log(`[EMAIL_SERVICE] Initiating dispatch to ${to} | Subject: "${subject}"`);
+
+        const settings = getEmailSettings();
+        const mockMode = settings.mockEmailMode !== undefined ? settings.mockEmailMode : true;
+
+        if (mockMode) {
+            console.log(`[EMAIL_SERVICE] [MOCK MODE ACTIVE] Email simulated to ${to}:\nSubject: ${subject}\nHTML:\n${html}`);
             return true;
         }
 
-        if (resend) {
-            const response = await resend.emails.send({
+        // 1. Resend API Integration
+        const resendKey = settings.resendApiKey || process.env.RESEND_API_KEY;
+        const resendFrom = settings.resendFromEmail || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
+        if (resendKey) {
+            console.log(`[EMAIL_SERVICE] Dispatching via Resend API to ${to}...`);
+            const resendClient = new Resend(resendKey);
+            const response = await resendClient.emails.send({
                 from: resendFrom,
                 to,
                 subject,
                 html
             });
+
             if (response.error) {
                 throw new Error(response.error.message);
             }
-            console.log(`[EMAIL_SERVICE] Email sent via Resend to ${to}. Message ID: ${response.data?.id}`);
+            console.log(`[EMAIL_SERVICE] Email sent via Resend API to ${to}. Message ID: ${response.data?.id}`);
             return true;
         }
 
+        // 2. Custom SMTP Transporter
+        const host = settings.smtpHost || process.env.SMTP_HOST;
+        const port = Number(settings.smtpPort || process.env.SMTP_PORT || 587);
+        const user = settings.smtpUser || process.env.SMTP_USER;
+        const pass = settings.smtpPass || process.env.SMTP_PASS;
 
+        const isPlaceholderUser = !user || user === 'your-email@example.com' || user === 'ethereal_user';
 
-        const info = await transporter.sendMail({
-            from: '"NOUN HRMS" <no-reply@noun.edu.ng>',
+        if (!host || isPlaceholderUser) {
+            console.log(`[EMAIL_SERVICE] [MOCK FALLBACK] Mock mode is OFF, but no real SMTP server or Resend API key configured in System Settings or .env. Logging email to console:\nSubject: ${subject}\nTo: ${to}\nHTML:\n${html}`);
+            return true;
+        }
+
+        console.log(`[EMAIL_SERVICE] Dispatching via SMTP (${host}:${port}) to ${to}...`);
+        const customTransporter = nodemailer.createTransport({
+            host,
+            port,
+            secure: port === 465,
+            auth: { user, pass }
+        });
+
+        const info = await customTransporter.sendMail({
+            from: settings.contactEmail ? `"NOUN HRMS" <${settings.contactEmail}>` : '"NOUN HRMS" <no-reply@noun.edu.ng>',
             to,
             subject,
             html,
         });
 
-        console.log('Message sent: %s', info.messageId);
+        console.log(`[EMAIL_SERVICE] Email sent successfully via SMTP to ${to}. Message ID: ${info.messageId}`);
         return true;
     } catch (error: any) {
-        console.error('Error sending email:', error);
-        console.log(`[EMAIL_SERVICE] [FALLBACK MOCK] Email successfully logged to console for ${to}:\nSubject: ${subject}\nHTML: ${html}`);
-        return true;
+        console.error(`[EMAIL_SERVICE] Failed to send email to ${to}:`, error);
+        console.log(`[EMAIL_SERVICE] [ERROR FALLBACK] Mock log for failed email dispatch:\nTo: ${to}\nSubject: ${subject}\nHTML:\n${html}`);
+        return false;
     }
 };
 
