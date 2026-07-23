@@ -390,8 +390,7 @@ export default function SettingsPage() {
                                              </div>
                                          </div>
 
-                                         {!settings.mockEmailMode && (
-                                             <div className="md:col-span-2 border border-blue-200/70 bg-blue-50/40 rounded-2xl p-5 space-y-4">
+                                         <div className="md:col-span-2 border border-blue-200/70 bg-blue-50/40 rounded-2xl p-5 space-y-4">
                                                  <div>
                                                      <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-2">
                                                          <Mail size={16} className="text-blue-600" />
@@ -475,8 +474,7 @@ export default function SettingsPage() {
                                                      </div>
                                                  </div>
                                              </div>
-                                         )}
-                                    </div>
+                                         </div>
 
                                     {/* Action Buttons Row */}
                                     <div className="pt-4 border-t border-gray-100 flex flex-wrap gap-3">
