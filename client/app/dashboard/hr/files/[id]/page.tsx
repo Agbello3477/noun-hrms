@@ -12,7 +12,8 @@ import QueryHistoryTab from '../../../../../components/hr/dossier/QueryHistoryTa
 import AperHistoryTab from '../../../../../components/hr/dossier/AperHistoryTab';
 
 export default function StaffDossierPage() {
-    const { id } = useParams();
+    const params = useParams();
+    const id = params?.id as string;
     const router = useRouter();
     const [staff, setStaff] = useState<any>(null);
     const [loading, setLoading] = useState(true);

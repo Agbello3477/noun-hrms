@@ -278,27 +278,6 @@ export default function DashboardLayout({
             
             <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                 <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-                
-                {/* Global Emergency Hotline Ribbon for All Dashboard Views */}
-                <div className="bg-red-600 text-white px-4 py-2 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-sm border-b border-red-700 z-10">
-                    <div className="flex items-center gap-2">
-                        <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                        </span>
-                        <span className="uppercase tracking-wider font-extrabold text-[11px]">🚨 Campus Emergency Response & Security Hotlines:</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] md:text-xs">
-                        <a href="tel:+2348031234567" className="hover:underline font-extrabold flex items-center gap-1 bg-white/10 hover:bg-white/20 px-2.5 py-0.5 rounded-md transition text-white">
-                            <span>🏥 Clinic Emergency:</span>
-                            <span className="underline">+234 803 123 4567</span>
-                        </a>
-                        <a href="tel:+2348037654321" className="hover:underline font-extrabold flex items-center gap-1 bg-white/10 hover:bg-white/20 px-2.5 py-0.5 rounded-md transition text-white">
-                            <span>🛡️ Security Control:</span>
-                            <span className="underline">+234 803 765 4321</span>
-                        </a>
-                    </div>
-                </div>
 
                 <main className="flex-1 overflow-auto p-4 md:p-8">
                     {children}

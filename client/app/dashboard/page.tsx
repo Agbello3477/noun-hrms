@@ -490,8 +490,6 @@ export default function DashboardHome() {
                     <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl"></div>
                 </div>
 
-                <EmergencyContacts hotlines={emergencyHotlines} />
-
                 {/* Overall University Statistics */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
@@ -793,8 +791,6 @@ export default function DashboardHome() {
                     <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
                 </div>
 
-                <EmergencyContacts hotlines={emergencyHotlines} />
-
                 {/* Manager Stats Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
                     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
@@ -1014,8 +1010,6 @@ export default function DashboardHome() {
                     <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
                 </div>
 
-                <EmergencyContacts hotlines={emergencyHotlines} />
-
                 {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
@@ -1161,8 +1155,6 @@ export default function DashboardHome() {
             <h1 className="mb-6 text-3xl font-bold text-gray-800">
                 HQ Registry Overview
             </h1>
-
-            <EmergencyContacts hotlines={emergencyHotlines} className="mb-6" />
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {/* Stat Card 1 */}

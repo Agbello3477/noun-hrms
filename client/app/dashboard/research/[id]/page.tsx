@@ -35,7 +35,8 @@ import {
 import Link from 'next/link';
 
 export default function ResearchWorkspace() {
-    const { id } = useParams();
+    const params = useParams();
+    const id = params?.id as string;
     const router = useRouter();
     const [project, setProject] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -56,6 +57,7 @@ export default function ResearchWorkspace() {
 
     useEffect(() => {
         setIsMounted(true);
+        if (!id) return;
         const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
         if (userStr) {
             try {
@@ -70,6 +72,7 @@ export default function ResearchWorkspace() {
     }, [id]);
 
     const fetchProject = async () => {
+        if (!id) return;
         try {
             const res = await api.get(`/api/research/${id}`);
             setProject(res.data);
