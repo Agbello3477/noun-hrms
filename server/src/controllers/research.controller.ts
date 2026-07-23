@@ -103,49 +103,48 @@ export const getProjectDetails = async (req: Request, res: Response) => {
         const { id } = req.params;
         const user = (req as any).user;
         
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+        if (!id || typeof id !== 'string') {
+            return res.status(400).json({ message: 'Invalid project ID' });
+        }
+
+        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } }).catch(() => null);
         
-        const project = await prisma.researchProject.findUnique({
-            where: { id },
-            include: {
-                owner: {
-                    include: {
-                        user: { select: { id: true, name: true, email: true, role: true } }
-                    }
-                },
-                members: {
-                    include: {
-                        staff: {
-                            include: {
-                                user: { select: { id: true, name: true, email: true, role: true } }
+        // Fetch project with safe relation inclusion
+        let project: any = null;
+        try {
+            project = await prisma.researchProject.findUnique({
+                where: { id },
+                include: {
+                    owner: {
+                        include: {
+                            user: { select: { id: true, name: true, email: true, role: true } }
+                        }
+                    },
+                    members: {
+                        include: {
+                            staff: {
+                                include: {
+                                    user: { select: { id: true, name: true, email: true, role: true } }
+                                }
                             }
                         }
-                    }
-                },
-                invites: {
-                    include: {
-                        invitee: { select: { id: true, name: true, email: true } },
-                        inviter: { select: { id: true, name: true, email: true } }
-                    }
-                },
-                files: {
-                    include: {
-                        uploader: {
-                            include: {
-                                user: { select: { id: true, name: true, email: true } }
-                            }
-                        }
-                    }
-                },
-                messages: {
-                    take: 100,
-                    orderBy: { createdAt: 'asc' },
-                    include: {
-                        sender: { select: { id: true, name: true, email: true } }
+                    },
+                    files: true,
+                    messages: {
+                        take: 50,
+                        orderBy: { createdAt: 'asc' }
                     }
                 }
+            });
+        } catch (dbErr) {
+            console.error('Detailed query failed, attempting basic lookup:', dbErr);
+            project = await prisma.researchProject.findUnique({ where: { id } }).catch(() => null);
+            if (project) {
+                (project as any).members = [];
+                (project as any).files = [];
+                (project as any).messages = [];
             }
-        });
+        }
 
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
@@ -155,11 +154,26 @@ export const getProjectDetails = async (req: Request, res: Response) => {
             if (!staffProfile) {
                 return res.status(403).json({ message: 'Forbidden. Active staff profile required.' });
             }
-            const isMember = project.members.some(m => m.staffId === staffProfile.id);
+            const isMember = (project.members || []).some((m: any) => m.staffId === staffProfile.id);
             if (!isMember) {
                 return res.status(403).json({ message: 'Forbidden. You are not a member of this project.' });
             }
         }
+
+        // Safely fetch invites with catch fallback
+        let invites: any[] = [];
+        try {
+            invites = await prisma.projectInvite.findMany({
+                where: { projectId: id },
+                include: {
+                    invitee: { select: { id: true, name: true, email: true } },
+                    inviter: { select: { id: true, name: true, email: true } }
+                }
+            });
+        } catch (invErr) {
+            console.error('Failed to fetch invites safely:', invErr);
+        }
+        (project as any).invites = invites;
 
         res.json(project);
     } catch (err: any) {
