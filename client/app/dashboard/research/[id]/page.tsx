@@ -48,14 +48,21 @@ export default function ResearchWorkspace() {
     const [inviteeId, setInviteeId] = useState('');
     const [allStaff, setAllStaff] = useState<any[]>([]);
 
+    const [isMounted, setIsMounted] = useState(false);
+
     // Edit workspace state
     const [editTitle, setEditTitle] = useState('');
     const [editAbstract, setEditAbstract] = useState('');
 
     useEffect(() => {
-        const userStr = localStorage.getItem('user');
+        setIsMounted(true);
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
         if (userStr) {
-            setCurrentUser(JSON.parse(userStr));
+            try {
+                setCurrentUser(JSON.parse(userStr));
+            } catch (e) {
+                // Ignore json parse error
+            }
         }
 
         fetchProject();
@@ -200,7 +207,7 @@ export default function ResearchWorkspace() {
         );
     }
 
-    if (loading) {
+    if (!isMounted || loading) {
         return (
             <div className="flex h-full min-h-[60vh] items-center justify-center bg-white">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
