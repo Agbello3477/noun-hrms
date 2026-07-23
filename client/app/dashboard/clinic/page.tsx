@@ -194,9 +194,22 @@ export default function ClinicDashboard() {
   };
 
   useEffect(() => {
-    fetchPatientFiles();
-    fetchEncounters();
-    fetchInventory();
+    const loadAllClinicData = async () => {
+      try {
+        const [patientsRes, encountersRes, inventoryRes] = await Promise.all([
+          api.get(`/api/clinic/patients?query=${searchQuery}`).catch(() => ({ data: [] })),
+          api.get('/api/clinic/encounters').catch(() => ({ data: [] })),
+          api.get('/api/clinic/inventory').catch(() => ({ data: [] }))
+        ]);
+        setPatientFiles(patientsRes.data || []);
+        setEncounters(encountersRes.data || []);
+        prevQueueCountRef.current = (encountersRes.data || []).length;
+        setInventory(inventoryRes.data || []);
+      } catch (err) {
+        console.error('Parallel clinic load error:', err);
+      }
+    };
+    loadAllClinicData();
   }, [searchQuery]);
 
   const handleCreatePatient = async (e: React.FormEvent) => {

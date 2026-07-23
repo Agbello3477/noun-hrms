@@ -39,6 +39,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const LinkItem = ({ href, icon: Icon, label }: any) => (
         <Link
             href={href}
+            prefetch={true}
             onClick={() => setIsOpen && setIsOpen(false)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive(href)
                 ? 'bg-primary/10 text-primary'

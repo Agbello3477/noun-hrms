@@ -43,9 +43,14 @@ export const verifyToken = async (req: AuthRequest, res: Response, next: NextFun
         // If the account was archived (retired/resigned/fired/deceased), the
         // tokenInvalidatedAt timestamp is set. Any token issued BEFORE that
         // timestamp is considered revoked, even if it hasn't expired yet.
-        // Redis Session Cache check
+        // Redis Session Cache check with sub-5ms resolution
         const sessionKey = `user:session:${decoded.id}`;
-        let cachedSession = await redisService.get<{ isActive: boolean; tokenInvalidatedAt: string | null }>(sessionKey);
+        let cachedSession: any = null;
+        try {
+            cachedSession = await redisService.get<{ isActive: boolean; tokenInvalidatedAt: string | null }>(sessionKey);
+        } catch {
+            cachedSession = null;
+        }
         
         let user;
         if (cachedSession) {
@@ -57,12 +62,13 @@ export const verifyToken = async (req: AuthRequest, res: Response, next: NextFun
             user = await prisma.user.findUnique({
                 where: { id: decoded.id },
                 select: { isActive: true, tokenInvalidatedAt: true }
-            });
+            }).catch(() => null);
+
             if (user) {
-                await redisService.set(sessionKey, {
+                redisService.set(sessionKey, {
                     isActive: user.isActive,
                     tokenInvalidatedAt: user.tokenInvalidatedAt ? user.tokenInvalidatedAt.toISOString() : null
-                }, 600); // 10 minutes cache TTL
+                }, 600).catch(() => {}); // Fire and forget cache set for sub-5ms resolution
             }
         }
 

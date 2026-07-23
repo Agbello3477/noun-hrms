@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
 import Sidebar from '../../components/dashboard/Sidebar';
 import Header from '../../components/dashboard/Header';
+import NavigationProgress from '@/components/ui/NavigationProgress';
 import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter';
 
@@ -254,6 +255,9 @@ export default function DashboardLayout({
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden relative">
+            <Suspense fallback={null}>
+                <NavigationProgress />
+            </Suspense>
             {/* Mobile Sidebar Overlay */}
             {isSidebarOpen && (
                 <div 

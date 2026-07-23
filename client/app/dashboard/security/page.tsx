@@ -117,13 +117,35 @@ export default function SecurityDashboard() {
   };
 
   useEffect(() => {
-    if (activeRole && ['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
-      fetchIncidents();
-      fetchRoster();
-    }
-    if (activeRole && ['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
-      fetchAllUsers();
-    }
+    if (!activeRole) return;
+    const loadSecurityData = async () => {
+      try {
+        const canViewSecurity = ['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole);
+        const canViewUsers = ['SECURITY_HEAD', 'SUPER_USER', 'ADMIN'].includes(activeRole);
+
+        const [incidentsRes, rosterRes, usersRes] = await Promise.all([
+          canViewSecurity ? api.get('/api/security/incidents').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+          canViewSecurity ? api.get('/api/security/roster').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+          canViewUsers ? api.get('/api/staff').catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
+        ]);
+
+        if (canViewSecurity) {
+          setIncidents(incidentsRes.data || []);
+          setRoster(rosterRes.data || []);
+        }
+        if (canViewUsers) {
+          setAllUsers((usersRes.data || []).map((s: any) => {
+            const uId = s.id || (s.user ? s.user.id : '');
+            const profile = s.staffProfile || s;
+            const name = `${profile.title ? profile.title + ' ' : ''}${profile.surname || ''} ${profile.otherNames || ''}`.trim() || s.name || s.email;
+            return { id: uId, name, role: s.role };
+          }));
+        }
+      } catch (err) {
+        console.error('Parallel security load error:', err);
+      }
+    };
+    loadSecurityData();
   }, [activeRole]);
 
   const fetchGear = async () => {

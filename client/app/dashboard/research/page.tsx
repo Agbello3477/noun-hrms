@@ -86,27 +86,29 @@ export default function ResearchDashboard() {
     const router = useRouter();
 
     useEffect(() => {
-        fetchProjects();
-        fetchInvites();
+        const loadAllResearchData = async () => {
+            try {
+                const [projectsRes, invitesRes] = await Promise.all([
+                    api.get('/api/research').catch(() => ({ data: [] })),
+                    api.get('/api/research/invites/mine').catch(() => ({ data: [] }))
+                ]);
+                setProjects(projectsRes.data || []);
+                setInvites(invitesRes.data || []);
+            } catch (err) {
+                console.error('Parallel research load error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadAllResearchData();
     }, []);
 
     const fetchProjects = async () => {
         try {
             const res = await api.get('/api/research');
-            setProjects(res.data);
+            setProjects(res.data || []);
         } catch (err) {
             console.error('Failed to fetch projects', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchInvites = async () => {
-        try {
-            const res = await api.get('/api/research/invites/mine');
-            setInvites(res.data);
-        } catch (err) {
-            // Non-fatal — invites panel just won't show
         }
     };
 
