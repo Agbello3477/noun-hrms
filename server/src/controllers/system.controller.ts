@@ -214,26 +214,32 @@ const DEFAULT_SETTINGS = {
     resendFromEmail: "no-reply@noun.edu.ng"
 };
 
+let memorySettingsCache: any = null;
+
 const readSettings = async () => {
     try {
-        try {
-            await fs.promises.access(SETTINGS_FILE);
-            const data = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-            return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
-        } catch {
-            return DEFAULT_SETTINGS;
+        if (memorySettingsCache) {
+            return { ...DEFAULT_SETTINGS, ...memorySettingsCache };
         }
-    } catch (e) {
-        console.error("Error reading system settings file:", e);
+        await fs.promises.access(SETTINGS_FILE);
+        const data = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
+        memorySettingsCache = JSON.parse(data);
+        return { ...DEFAULT_SETTINGS, ...memorySettingsCache };
+    } catch {
+        return { ...DEFAULT_SETTINGS, ...(memorySettingsCache || {}) };
     }
-    return DEFAULT_SETTINGS;
 };
 
 const writeSettings = async (settings: any) => {
+    memorySettingsCache = { ...settings };
     try {
+        const dir = path.dirname(SETTINGS_FILE);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
     } catch (e) {
-        console.error("Error writing system settings file:", e);
+        console.error("Warning: Could not persist system_settings.json to local disk (falling back to memory cache):", e);
     }
 };
 
@@ -248,9 +254,9 @@ export const getSystemSettings = async (req: Request, res: Response) => {
 
         const settings = await readSettings();
         res.json(settings);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error in getSystemSettings:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error?.message || 'Internal server error' });
     }
 };
 
@@ -266,6 +272,17 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
         const currentSettings = await readSettings();
         const newSettings = { ...currentSettings, ...req.body };
 
+        // Type Conversions & Fallbacks
+        if (req.body.promotionEligibilityYears !== undefined) {
+            newSettings.promotionEligibilityYears = Number(req.body.promotionEligibilityYears);
+        }
+        if (req.body.minAperScore !== undefined) {
+            newSettings.minAperScore = Number(req.body.minAperScore);
+        }
+        if (req.body.smtpPort !== undefined) {
+            newSettings.smtpPort = Number(req.body.smtpPort) || 587;
+        }
+
         // Simple validation rules
         if (newSettings.promotionEligibilityYears < 1 || newSettings.promotionEligibilityYears > 10) {
             return res.status(400).json({ message: "Promotion eligibility years must be between 1 and 10." });
@@ -276,23 +293,29 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
 
         await writeSettings(newSettings);
 
-        // Audit Log
-        await prisma.auditLog.create({
-            data: {
-                userId: user.id,
-                action: 'UPDATE_SYSTEM_SETTINGS',
-                resource: 'SYSTEM',
-                details: JSON.stringify({
-                    changedFields: Object.keys(req.body),
-                    ipAddress: req.ip
-                })
+        // Audit Log (wrapped safely to prevent settings update failure)
+        try {
+            if (user?.id) {
+                await prisma.auditLog.create({
+                    data: {
+                        userId: user.id,
+                        action: 'UPDATE_SYSTEM_SETTINGS',
+                        resource: 'SYSTEM',
+                        details: JSON.stringify({
+                            changedFields: Object.keys(req.body),
+                            ipAddress: req.ip
+                        })
+                    }
+                });
             }
-        });
+        } catch (auditErr) {
+            console.error('Non-fatal error logging audit event for system settings update:', auditErr);
+        }
 
         res.json({ message: "System settings updated successfully.", settings: newSettings });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error in updateSystemSettings:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error?.message || 'Internal server error' });
     }
 };
 
