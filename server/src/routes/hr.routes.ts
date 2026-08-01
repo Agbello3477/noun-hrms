@@ -28,7 +28,7 @@ payrollRouter.post('/export-ippis', requireRole(payrollGenRoles), exportIPPISDat
 payrollRouter.post('/export-bank-schedule', requireRole(payrollGenRoles), exportBankSchedule);
 payrollRouter.get('/stats', requireRole(payrollGenRoles), getPayrollStats);
 payrollRouter.get('/records', requireRole(payrollGenRoles), getPayrollRecords);
-const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN];
+const auditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR];
 
 payrollRouter.get('/pending', requireRole(auditRoles), getPendingPayroll);
 payrollRouter.get('/reconciliation', requireRole(auditRoles), getAuditReconciliation);

@@ -2,6 +2,8 @@
 import { Request, Response } from 'express';
 import { AperStatus, Role } from '@prisma/client';
 import prisma from '../prisma';
+import { notifyUser } from './notification.controller';
+import { sendAperSessionNotification } from '../services/email.service';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };
@@ -37,6 +39,9 @@ export const updateSession = async (req: Request, res: Response) => {
         const { id } = req.params;
         const { title, startDate, endDate, isActive } = req.body;
 
+        const existingSession = await prisma.aperSession.findUnique({ where: { id } });
+        const isTransitioningToActive = isActive === true && (!existingSession || !existingSession.isActive);
+
         // If activating, ensure only ONE is active? Not strict requirement but good practice
         if (isActive) {
             await prisma.aperSession.updateMany({
@@ -54,6 +59,57 @@ export const updateSession = async (req: Request, res: Response) => {
                 isActive
             }
         });
+
+        if (isTransitioningToActive) {
+            // Trigger notifications asynchronously to avoid blocking the API response
+            (async () => {
+                try {
+                    const activeUsers = await prisma.user.findMany({
+                        where: {
+                            isActive: true,
+                            staffProfile: {
+                                isNot: null
+                            }
+                        },
+                        include: {
+                            staffProfile: true
+                        }
+                    });
+
+                    const eligibleStaff = activeUsers.filter(u => u.staffProfile?.cadre !== 'ACADEMIC');
+
+                    for (const staffUser of eligibleStaff) {
+                        // 1. Send in-app notification
+                        const notificationTitle = 'Annual Performance Appraisal (APER) Session Opened';
+                        const notificationMessage = `The APER appraisal session "${session.title}" for ${session.year} has been opened. Please fill and submit your appraisal form.`;
+                        const link = '/dashboard/staff/aper';
+
+                        await notifyUser(
+                            staffUser.id,
+                            notificationTitle,
+                            notificationMessage,
+                            'INFO',
+                            link
+                        );
+
+                        // 2. Send email notification
+                        if (staffUser.email) {
+                            const name = staffUser.name || [staffUser.staffProfile?.title, staffUser.staffProfile?.surname, staffUser.staffProfile?.otherNames].filter(Boolean).join(' ') || 'Staff Member';
+                            await sendAperSessionNotification(
+                                staffUser.email,
+                                name,
+                                session.title,
+                                session.year,
+                                session.endDate
+                            );
+                        }
+                    }
+                } catch (notifyErr) {
+                    console.error('Error dispatching APER session notifications:', notifyErr);
+                }
+            })();
+        }
+
         res.json(session);
     } catch (error) {
         res.status(500).json({ message: 'Error updating session' });

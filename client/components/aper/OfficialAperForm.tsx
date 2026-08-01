@@ -1224,7 +1224,7 @@ export default function OfficialAperForm({
                                 PART 2B: To be completed by staff being assessed
                             </h4>
                             <p className="text-xs text-slate-600 font-semibold italic">
-                                "I certify that I have seen the content of this report. I have the following comment to add, after having discussed my disagreements over the rating, with my immediate supervisor."
+                                &quot;I certify that I have seen the content of this report. I have the following comment to add, after having discussed my disagreements over the rating, with my immediate supervisor.&quot;
                             </p>
 
                             <div>

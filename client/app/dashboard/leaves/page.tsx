@@ -7,13 +7,16 @@ import Link from 'next/link';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus, FileText } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
+import { useAuth } from '../../../hooks/useAuth';
 
 function LeavesContent() {
     const searchParams = useSearchParams();
     const openParam = searchParams.get('open');
+    const { user, refreshUser } = useAuth();
 
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [resuming, setResuming] = useState(false);
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
 
@@ -37,6 +40,21 @@ function LeavesContent() {
             console.error('Failed to fetch my leaves', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResumeFromLeave = async () => {
+        setResuming(true);
+        try {
+            await api.post('/api/leaves/resume');
+            alert('Successfully resumed from leave and restored status to Active!');
+            await refreshUser();
+            await fetchMyLeaves();
+        } catch (error: any) {
+            console.error('Failed to resume from leave:', error);
+            alert(error.response?.data?.message || 'Failed to record leave resumption.');
+        } finally {
+            setResuming(false);
         }
     };
 
@@ -114,6 +132,27 @@ function LeavesContent() {
                     </button>
                 </div>
             </div>
+
+            {user?.staffProfile?.status === 'ON_LEAVE' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+                    <div className="flex gap-3">
+                        <div className="h-10 w-10 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-none">
+                            <Clock size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-emerald-950 text-sm">You are currently marked On Leave</h3>
+                            <p className="text-xs text-emerald-700 font-medium">If you have returned early or officially resumed duty, record your resumption to restore your portal status to Active.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleResumeFromLeave}
+                        disabled={resuming}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-bold rounded-xl shadow transition-all flex-none"
+                    >
+                        {resuming ? 'Recording Resumption...' : 'Record Resumption'}
+                    </button>
+                </div>
+            )}
 
             {/* Quick Metrics Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -217,7 +256,7 @@ function LeavesContent() {
 
                                                     {leave.status === 'REJECTED' && leave.rejectionReason && (
                                                         <span className="text-[11px] text-red-500 max-w-[200px] whitespace-normal leading-tight italic">
-                                                            "{leave.rejectionReason}"
+                                                            &quot;{leave.rejectionReason}&quot;
                                                         </span>
                                                     )}
                                                 </div>

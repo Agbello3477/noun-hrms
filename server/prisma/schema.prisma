@@ -1024,6 +1024,8 @@ model ResearchProject {
   documents   ProjectDocument[]
   messages    ProjectMessage[]
   files       UploadedProjectFile[]
+  grants      ResearchGrant[]
+  ipRecords   IntellectualProperty[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1133,5 +1135,36 @@ model UserSession {
   createdAt  DateTime @default(now())
 
   @@map("user_sessions")
+}
+
+model ResearchGrant {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  grantorName     String
+  totalFunding    Float
+  disbursedAmount Float    @default(0)
+  startDate       DateTime
+  endDate         DateTime
+  milestones      Json?    // Array of { id, title, targetDate, status, releasedAmount }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("research_grants")
+}
+
+model IntellectualProperty {
+  id               String   @id @default(uuid())
+  projectId        String
+  project          ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  patentAppNumber  String?
+  inventors        Json?    // Array of { name, role: 'STAFF'|'STUDENT'|'OTHER', id? }
+  status           String   @default("PENDING") // PENDING, GRANTED, LICENSED
+  doiLink          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("intellectual_properties")
 }
 

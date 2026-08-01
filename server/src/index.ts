@@ -39,6 +39,7 @@ import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware'
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
 import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
+import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
 
 
 
@@ -180,4 +181,5 @@ server.listen(PORT, () => {
     schedulePromotionCron();
     scheduleRetirementCron();
     scheduleSessionCleanupCron();
+    scheduleLeaveResumptionCron();
 });

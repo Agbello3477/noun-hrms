@@ -221,7 +221,7 @@ export default function RegistryMemosPage() {
                                 <td colSpan={6} className="text-center py-12 text-gray-400">
                                     <Mail className="mx-auto text-gray-300 mb-3" size={48} />
                                     <p className="text-lg font-medium">No memos broadcasted yet</p>
-                                    <p className="text-sm">Click "New Memo" to create and broadcast your first general announcement.</p>
+                                    <p className="text-sm">Click &quot;New Memo&quot; to create and broadcast your first general announcement.</p>
                                 </td>
                             </tr>
                         ) : paginatedMemos.map((memo, index) => {

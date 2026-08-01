@@ -32,7 +32,13 @@ import {
     UserX,
     Bell,
     ShieldAlert,
-    Video
+    Video,
+    Landmark,
+    Award,
+    ShieldCheck,
+    FileSpreadsheet,
+    Plus,
+    Search
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,6 +56,27 @@ export default function ResearchWorkspace() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [inviteeId, setInviteeId] = useState('');
     const [allStaff, setAllStaff] = useState<any[]>([]);
+
+    const [activeTab, setActiveTab] = useState<'workspace' | 'grants-ip'>('workspace');
+    const [grants, setGrants] = useState<any[]>([]);
+    const [ipRecords, setIpRecords] = useState<any[]>([]);
+
+    // New Grant form state
+    const [showAddGrantModal, setShowAddGrantModal] = useState(false);
+    const [grantorName, setGrantorName] = useState('');
+    const [totalFunding, setTotalFunding] = useState('');
+    const [disbursedAmount, setDisbursedAmount] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    // New IP form state
+    const [showAddIpModal, setShowAddIpModal] = useState(false);
+    const [ipTitle, setIpTitle] = useState('');
+    const [patentNumber, setPatentNumber] = useState('');
+    const [inventorName, setInventorName] = useState('');
+    const [inventorRole, setInventorRole] = useState<'STAFF' | 'STUDENT' | 'OTHER'>('STAFF');
+    const [ipStatus, setIpStatus] = useState('PENDING');
+    const [doiLink, setDoiLink] = useState('');
 
     const [isMounted, setIsMounted] = useState(false);
 
@@ -89,7 +116,22 @@ export default function ResearchWorkspace() {
 
         fetchProject();
         fetchStaff();
+        fetchGrantsAndIp();
     }, [id]);
+
+    const fetchGrantsAndIp = async () => {
+        if (!id) return;
+        try {
+            const [grantsRes, ipRes] = await Promise.all([
+                api.get(`/api/research/${id}/grants`),
+                api.get(`/api/research/${id}/ip`)
+            ]);
+            setGrants(grantsRes.data);
+            setIpRecords(ipRes.data);
+        } catch (err) {
+            console.error('Failed to fetch grants or IP registry:', err);
+        }
+    };
 
     const fetchProject = async () => {
         if (!id) return;
@@ -207,6 +249,51 @@ export default function ResearchWorkspace() {
             router.push('/dashboard/research');
         } catch (err: any) {
             alert(err.response?.data?.message || 'Failed to delete workspace');
+        }
+    };
+
+    const handleAddGrant = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.post(`/api/research/${id}/grants`, {
+                grantorName,
+                totalFunding: Number(totalFunding),
+                disbursedAmount: Number(disbursedAmount || 0),
+                startDate,
+                endDate,
+                milestones: []
+            });
+            setShowAddGrantModal(false);
+            setGrantorName('');
+            setTotalFunding('');
+            setDisbursedAmount('');
+            setStartDate('');
+            setEndDate('');
+            fetchGrantsAndIp();
+        } catch (err) {
+            console.error('Failed to add grant:', err);
+        }
+    };
+
+    const handleAddIp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.post(`/api/research/${id}/ip`, {
+                title: ipTitle,
+                patentAppNumber: patentNumber,
+                inventors: [{ name: inventorName, role: inventorRole }],
+                status: ipStatus,
+                doiLink
+            });
+            setShowAddIpModal(false);
+            setIpTitle('');
+            setPatentNumber('');
+            setInventorName('');
+            setIpStatus('PENDING');
+            setDoiLink('');
+            fetchGrantsAndIp();
+        } catch (err) {
+            console.error('Failed to log IP:', err);
         }
     };
 
@@ -328,123 +415,256 @@ export default function ResearchWorkspace() {
                 </div>
             </div>
 
-            {/* Bottom 3-Column Split View */}
-            <div className="flex-1 flex gap-6 min-h-0">
-                
-                {/* COLUMN 1: Files & Team (Width: 25%) */}
-                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
-                    {/* Abstract Header */}
-                    <div className="p-5 border-b border-gray-200 bg-emerald-50/50 flex-shrink-0 flex justify-between items-start gap-2">
-                        <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
-                            <p className="text-xs text-gray-700 leading-relaxed line-clamp-4" title={project.abstract}>
-                                {project.abstract || 'No project description loaded.'}
-                            </p>
+            {/* Tab Navigation Switcher Bar */}
+            <div className="flex border-b border-gray-200">
+                <button
+                    onClick={() => setActiveTab('workspace')}
+                    className={`px-6 py-3 text-xs font-bold transition-all border-b-2 ${
+                        activeTab === 'workspace'
+                            ? 'border-emerald-700 text-emerald-800 font-extrabold'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    Research Workspace & Collaborative Editor
+                </button>
+                <button
+                    onClick={() => setActiveTab('grants-ip')}
+                    className={`px-6 py-3 text-xs font-bold transition-all border-b-2 ${
+                        activeTab === 'grants-ip'
+                            ? 'border-emerald-700 text-emerald-800 font-extrabold'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    Research Grants & IP Tracker
+                </button>
+            </div>
+
+            {activeTab === 'workspace' ? (
+                /* Bottom 3-Column Split View */
+                <div className="flex-1 flex gap-6 min-h-0">
+                    {/* COLUMN 1: Files & Team (Width: 25%) */}
+                    <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+                        {/* Abstract Header */}
+                        <div className="p-5 border-b border-gray-200 bg-emerald-50/50 flex-shrink-0 flex justify-between items-start gap-2">
+                            <div>
+                                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Project Synopsis</h4>
+                                <p className="text-xs text-gray-700 leading-relaxed line-clamp-4" title={project.abstract}>
+                                    {project.abstract || 'No project description loaded.'}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowEditModal(true)} className="p-1 text-gray-400 hover:text-emerald-700">
+                                <Edit3 size={13} />
+                            </button>
                         </div>
-                        <button onClick={() => setShowEditModal(true)} className="p-1 text-gray-400 hover:text-emerald-700">
-                            <Edit3 size={13} />
-                        </button>
+
+                        {/* Scrollable Members & Files */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-white">
+                            {/* Team Section */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
+                                        <Users size={14} className="mr-1.5 text-emerald-700" /> Core Team ({project.members?.length || 0})
+                                    </h3>
+                                    <button onClick={() => setShowInviteModal(true)} className="p-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                                        <UserPlus size={12} /> Invite
+                                    </button>
+                                </div>
+                                <div className="space-y-2.5">
+                                    {project.members?.map((m: any) => {
+                                        const name = m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Staff Member';
+                                        const isOwner = m.role === 'OWNER';
+                                        return (
+                                            <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-gray-50 transition group">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-sm flex-shrink-0">
+                                                        {m.staff?.surname?.[0] || 'U'}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-bold text-gray-800 truncate" title={name}>
+                                                            {name}
+                                                        </p>
+                                                        <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">{m.role}</p>
+                                                    </div>
+                                                </div>
+                                                {!isOwner && (
+                                                    <button
+                                                        onClick={() => handleRemoveMember(m.id, name)}
+                                                        className="p-1 text-gray-300 hover:text-red-600 rounded transition opacity-0 group-hover:opacity-100"
+                                                        title="Uninvite / Remove Collaborator"
+                                                    >
+                                                        <UserX size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Drive / Assets Section */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
+                                        <FileText size={14} className="mr-1.5 text-emerald-700" /> Shared Drive
+                                    </h3>
+                                    <label className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg cursor-pointer transition border border-emerald-200">
+                                        <FileUp size={14} />
+                                        <input type="file" className="hidden" onChange={handleFileUpload} />
+                                    </label>
+                                </div>
+                                
+                                {project.files?.length === 0 ? (
+                                    <p className="text-xs text-gray-400 italic">No project files uploaded yet.</p>
+                                ) : (
+                                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                                        {project.files?.map((f: any) => (
+                                            <div key={f.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition duration-150">
+                                                <span className="text-xs text-gray-700 truncate w-36 font-semibold" title={f.fileName}>
+                                                    {f.fileName}
+                                                </span>
+                                                <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-gray-400 hover:text-emerald-700 transition">
+                                                    <Download size={13} />
+                                                </a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Scrollable Members & Files */}
-                    <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-white">
-                        {/* Team Section */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
-                                    <Users size={14} className="mr-1.5 text-emerald-700" /> Core Team ({project.members?.length || 0})
-                                </h3>
-                                <button onClick={() => setShowInviteModal(true)} className="p-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
-                                    <UserPlus size={12} /> Invite
-                                </button>
-                            </div>
-                            <div className="space-y-2.5">
-                                {project.members?.map((m: any) => {
-                                    const name = m.staff ? `${m.staff.surname} ${m.staff.otherNames}` : 'Staff Member';
-                                    const isOwner = m.role === 'OWNER';
-                                    return (
-                                        <div key={m.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-gray-50 transition group">
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-sm flex-shrink-0">
-                                                    {m.staff?.surname?.[0] || 'U'}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs font-bold text-gray-800 truncate" title={name}>
-                                                        {name}
-                                                    </p>
-                                                    <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">{m.role}</p>
-                                                </div>
-                                            </div>
-                                            {!isOwner && (
-                                                <button
-                                                    onClick={() => handleRemoveMember(m.id, name)}
-                                                    className="p-1 text-gray-300 hover:text-red-600 rounded transition opacity-0 group-hover:opacity-100"
-                                                    title="Uninvite / Remove Collaborator"
-                                                >
-                                                    <UserX size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                    {/* COLUMN 2: Editor (Width: 50% - MS Word Style White Canvas) */}
+                    <div className="w-2/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+                        <CollaborativeEditor 
+                            projectId={id as string} 
+                            currentUserId={currentUser?.id || ''}
+                            currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
+                            projectTitle={project.title}
+                            isSolo={(project.members?.length || 0) <= 1}
+                        />
+                    </div>
+
+                    {/* COLUMN 3: Real-Time Team Chat (Width: 25%) */}
+                    <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+                        <ProjectChat 
+                            key={id as string}
+                            projectId={id as string} 
+                            currentUserId={currentUser?.id || ''} 
+                            currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
+                            initialMessages={project.messages}
+                            isSolo={(project.members?.length || 0) <= 1}
+                        />
+                    </div>
+                </div>
+            ) : (
+                /* Grants & IP Tracker Tab View */
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0 overflow-y-auto">
+                    {/* Sub-view 1: Research Grant Lifecycle */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-0">
+                        <div className="flex items-center justify-between border-b pb-3 mb-4">
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                <Landmark className="text-emerald-700" size={18} />
+                                Research Funding & Grants Lifecycle
+                            </h3>
+                            <button
+                                onClick={() => setShowAddGrantModal(true)}
+                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1"
+                            >
+                                <Plus size={14} /> Log Grant
+                            </button>
                         </div>
 
-                        {/* Drive / Assets Section */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-xs text-gray-500 uppercase tracking-wider flex items-center">
-                                    <FileText size={14} className="mr-1.5 text-emerald-700" /> Shared Drive
-                                </h3>
-                                <label className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg cursor-pointer transition border border-emerald-200">
-                                    <FileUp size={14} />
-                                    <input type="file" className="hidden" onChange={handleFileUpload} />
-                                </label>
-                            </div>
-                            
-                            {project.files?.length === 0 ? (
-                                <p className="text-xs text-gray-400 italic">No project files uploaded yet.</p>
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                            {grants.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic text-center py-12">No active grants logged for this workspace.</p>
                             ) : (
-                                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                                    {project.files?.map((f: any) => (
-                                        <div key={f.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition duration-150">
-                                            <span className="text-xs text-gray-700 truncate w-36 font-semibold" title={f.fileName}>
-                                                {f.fileName}
-                                            </span>
-                                            <a href={f.fileUrl} target="_blank" rel="noreferrer" className="p-1 text-gray-400 hover:text-emerald-700 transition">
-                                                <Download size={13} />
-                                            </a>
+                                grants.map((g) => {
+                                    const percentage = g.totalFunding > 0 ? (g.disbursedAmount / g.totalFunding) * 100 : 0;
+                                    return (
+                                        <div key={g.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-150 space-y-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h4 className="text-xs font-black text-slate-800">{g.grantorName}</h4>
+                                                    <span className="text-[10px] text-slate-400 font-semibold">
+                                                        {new Date(g.startDate).toLocaleDateString()} — {new Date(g.endDate).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-xs font-extrabold text-emerald-800">₦{g.totalFunding.toLocaleString()}</div>
+                                                    <span className="text-[10px] text-slate-400 font-semibold block">Disbursed: ₦{g.disbursedAmount.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                                    <span>Fund Release Progress</span>
+                                                    <span>{percentage.toFixed(0)}%</span>
+                                                </div>
+                                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                                    <div style={{ width: `${percentage}%` }} className="bg-emerald-700 h-full rounded-full" />
+                                                </div>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Sub-view 2: Intellectual Property & Patents */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-0">
+                        <div className="flex items-center justify-between border-b pb-3 mb-4">
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                <Award className="text-indigo-600" size={18} />
+                                IP & Patent Registry
+                            </h3>
+                            <button
+                                onClick={() => setShowAddIpModal(true)}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1"
+                            >
+                                <Plus size={14} /> Log IP
+                            </button>
+                        </div>
+
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                            {ipRecords.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic text-center py-12">No IP or patents registered for this project.</p>
+                            ) : (
+                                ipRecords.map((ip) => (
+                                    <div key={ip.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-150 space-y-3">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h4 className="text-xs font-black text-slate-800">{ip.title}</h4>
+                                                <span className="text-[10px] text-slate-400 font-bold block mt-0.5">Patent Ref: {ip.patentAppNumber || 'N/A'}</span>
+                                            </div>
+                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                                ip.status === 'GRANTED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                                            }`}>
+                                                {ip.status}
+                                            </span>
+                                        </div>
+
+                                        <div className="text-[11px] text-slate-500 font-medium">
+                                            Inventors: {Array.isArray(ip.inventors) ? ip.inventors.map((inv: any) => `${inv.name} (${inv.role})`).join(', ') : 'Not specified'}
+                                        </div>
+
+                                        {ip.doiLink && (
+                                            <a
+                                                href={ip.doiLink}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-[10px] text-indigo-600 font-bold hover:underline block"
+                                            >
+                                                DOI Link: {ip.doiLink}
+                                            </a>
+                                        )}
+                                    </div>
+                                ))
                             )}
                         </div>
                     </div>
                 </div>
-
-                {/* COLUMN 2: Editor (Width: 50% - MS Word Style White Canvas) */}
-                <div className="w-2/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
-                    <CollaborativeEditor 
-                        projectId={id as string} 
-                        currentUserId={currentUser?.id || ''}
-                        currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
-                        projectTitle={project.title}
-                        isSolo={(project.members?.length || 0) <= 1}
-                    />
-                </div>
-
-                {/* COLUMN 3: Real-Time Team Chat (Width: 25%) */}
-                <div className="w-1/4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col min-h-0 overflow-hidden">
-                    <ProjectChat 
-                        key={id as string}
-                        projectId={id as string} 
-                        currentUserId={currentUser?.id || ''} 
-                        currentUserName={currentUser?.name || currentUser?.surname || currentUser?.email || 'Collaborator'}
-                        initialMessages={project.messages}
-                        isSolo={(project.members?.length || 0) <= 1}
-                    />
-                </div>
-            </div>
+            )}
 
             {/* Invite Modal */}
             {showInviteModal && (
@@ -523,6 +743,181 @@ export default function ResearchWorkspace() {
                             <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
                                 <button type="button" onClick={() => setShowEditModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
                                 <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Log Research Grant Modal */}
+            {showAddGrantModal && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md space-y-4 animate-in scale-in-95 duration-200">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <Landmark size={18} className="text-emerald-700" />
+                                Log Research Grant
+                            </h2>
+                            <p className="text-xs text-gray-500">Record external funding sources for this research project.</p>
+                        </div>
+                        
+                        <form onSubmit={handleAddGrant} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Grantor Name</label>
+                                <input 
+                                    type="text"
+                                    required
+                                    placeholder="e.g. TETFund, World Bank, Google Research"
+                                    value={grantorName}
+                                    onChange={(e) => setGrantorName(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Total Funding (₦)</label>
+                                    <input 
+                                        type="number"
+                                        required
+                                        value={totalFunding}
+                                        onChange={(e) => setTotalFunding(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Initial Disbursement (₦)</label>
+                                    <input 
+                                        type="number"
+                                        value={disbursedAmount}
+                                        onChange={(e) => setDisbursedAmount(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Start Date</label>
+                                    <input 
+                                        type="date"
+                                        required
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">End Date</label>
+                                    <input 
+                                        type="date"
+                                        required
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                                <button type="button" onClick={() => setShowAddGrantModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
+                                <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Log Grant</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Register IP Modal */}
+            {showAddIpModal && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-350">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md space-y-4 animate-in scale-in-95 duration-200">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <Award size={18} className="text-indigo-600" />
+                                Register Intellectual Property
+                            </h2>
+                            <p className="text-xs text-gray-500">Log patent filings, copyright claims, or technical prototypes.</p>
+                        </div>
+                        
+                        <form onSubmit={handleAddIp} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">IP / Patent Title</label>
+                                <input 
+                                    type="text"
+                                    required
+                                    placeholder="e.g. Distributed Ledger for Academic Credential Verification"
+                                    value={ipTitle}
+                                    onChange={(e) => setIpTitle(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Patent/Filing App Num</label>
+                                    <input 
+                                        type="text"
+                                        placeholder="NG/PT/2026/089"
+                                        value={patentNumber}
+                                        onChange={(e) => setPatentNumber(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Filing Status</label>
+                                    <select
+                                        value={ipStatus}
+                                        onChange={(e) => setIpStatus(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm bg-white text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                    >
+                                        <option value="PENDING">Pending Approval</option>
+                                        <option value="GRANTED">Granted</option>
+                                        <option value="COMMERCIALIZED">Commercialized / Licensed</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Lead Inventor Name</label>
+                                    <input 
+                                        type="text"
+                                        required
+                                        placeholder="Dr. Abdalla..."
+                                        value={inventorName}
+                                        onChange={(e) => setInventorName(e.target.value)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Inventor Affiliation</label>
+                                    <select
+                                        value={inventorRole}
+                                        onChange={(e) => setInventorRole(e.target.value as any)}
+                                        className="w-full p-2.5 border border-gray-300 rounded-xl text-sm bg-white text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                    >
+                                        <option value="STAFF">Academic Staff</option>
+                                        <option value="STUDENT">Postgraduate Student</option>
+                                        <option value="OTHER">External Collaborator</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">DOI / Publication Link (Optional)</label>
+                                <input 
+                                    type="text"
+                                    placeholder="https://doi.org/..."
+                                    value={doiLink}
+                                    onChange={(e) => setDoiLink(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none text-gray-900"
+                                />
+                            </div>
+                            
+                            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                                <button type="button" onClick={() => setShowAddIpModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition">Cancel</button>
+                                <button type="submit" style={{ backgroundColor: '#006533', color: '#ffffff' }} className="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm transition hover:opacity-90">Register IP</button>
                             </div>
                         </form>
                     </div>

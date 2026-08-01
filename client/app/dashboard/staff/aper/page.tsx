@@ -17,6 +17,11 @@ export default function StaffAperPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
+        if (user?.staffProfile?.cadre === 'ACADEMIC') {
+            setLoading(false);
+            return;
+        }
+
         const init = async () => {
             try {
                 // Check active APER session
@@ -44,7 +49,7 @@ export default function StaffAperPage() {
             }
         };
         init();
-    }, []);
+    }, [user]);
 
     const handleSubmitAper = async (formData: any, isDraft = true) => {
         if (!activeSession) return;
@@ -79,6 +84,20 @@ export default function StaffAperPage() {
         return (
             <div className="flex h-96 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+            </div>
+        );
+    }
+
+    if (user?.staffProfile?.cadre === 'ACADEMIC') {
+        return (
+            <div className="p-8 max-w-2xl mx-auto text-center">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-8 shadow-sm">
+                    <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-slate-800 mb-2">Academic Appraisal is Closed</h2>
+                    <p className="text-sm text-slate-600 font-medium">
+                        Academic staff appraisals are managed directly through the Research Portfolio, Publication Workloads, and Departmental Review channels. Please visit the Research Forum or contact your Faculty Dean.
+                    </p>
+                </div>
             </div>
         );
     }

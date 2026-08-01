@@ -374,3 +374,146 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Error fetching manager dashboard stats' });
     }
 };
+
+// GET /api/analytics/vc-executive
+export const getVcExecutiveAnalytics = async (req: Request, res: Response) => {
+    const CACHE_KEY = 'vc:executive:analytics';
+    try {
+        // 1. Try Redis cache hit
+        const cached = await redisService.get(CACHE_KEY);
+        if (cached) {
+            return res.json(cached);
+        }
+
+        // 2. Fetch High-Level KPIs
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const [
+            totalActiveStaff,
+            staffDueForPromotion,
+            activeSecurityThreats,
+            todayClinicConsultations,
+            totalActiveResearchProjects
+        ] = await Promise.all([
+            prisma.user.count({ where: { isActive: true, role: { not: 'SUPER_USER' } } }),
+            prisma.staffProfile.count({ where: { isDueForPromotion: true, isDeleted: false } }),
+            prisma.securityIncident.count({ where: { status: { in: ['REPORTED', 'DISPATCHED'] } } }),
+            prisma.clinicEncounter.count({ where: { createdAt: { gte: startOfToday } } }),
+            prisma.researchProject.count({ where: { status: 'ONGOING' } })
+        ]);
+
+        // 3. Fetch Staff Distribution by Dept & State
+        const staffByDeptRaw = await prisma.staffProfile.groupBy({
+            by: ['department'],
+            where: { isDeleted: false, status: 'ACTIVE' },
+            _count: { id: true }
+        });
+        const staffByDept = staffByDeptRaw.map(d => ({
+            department: d.department || 'Unassigned',
+            count: d._count.id
+        }));
+
+        const staffByStateRaw = await prisma.staffProfile.groupBy({
+            by: ['stateOfOrigin'],
+            where: { isDeleted: false, status: 'ACTIVE' },
+            _count: { id: true }
+        });
+        const staffByState = staffByStateRaw.map(s => ({
+            state: s.stateOfOrigin || 'Not Specified',
+            count: s._count.id
+        }));
+
+        // 4. Fetch Security Incident Categories & High-Risk Zones
+        const incidentsByCategoryRaw = await prisma.securityIncident.groupBy({
+            by: ['category'],
+            _count: { id: true }
+        });
+        const incidentCategories = incidentsByCategoryRaw.map(c => ({
+            category: c.category,
+            count: c._count.id
+        }));
+
+        const highRiskZonesRaw = await prisma.securityIncident.groupBy({
+            by: ['location'],
+            _count: { id: true },
+            orderBy: { _count: { id: 'desc' } },
+            take: 10
+        });
+        const highRiskZones = highRiskZonesRaw.map(z => ({
+            location: z.location,
+            count: z._count.id
+        }));
+
+        // 5. Fetch Clinic Attendance Trends (Nurses -> Doctors -> Pharmacy)
+        // Group by month and encounter status
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const clinicEncounters = await prisma.clinicEncounter.findMany({
+            where: { createdAt: { gte: sixMonthsAgo } },
+            select: { status: true, createdAt: true }
+        });
+
+        // Map encounters to monthly breakdown
+        const monthlyClinicTrends: Record<string, { month: string, nurse: number, doctor: number, pharmacy: number }> = {};
+        for (let i = 0; i < 6; i++) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const mLabel = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+            monthlyClinicTrends[mLabel] = { month: mLabel, nurse: 0, doctor: 0, pharmacy: 0 };
+        }
+
+        clinicEncounters.forEach(e => {
+            const mLabel = new Date(e.createdAt).toLocaleString('default', { month: 'short', year: '2-digit' });
+            if (monthlyClinicTrends[mLabel]) {
+                if (e.status === 'TRIAGE') {
+                    monthlyClinicTrends[mLabel].nurse++;
+                } else if (e.status === 'CONSULTATION' || e.status === 'CLOSED') {
+                    monthlyClinicTrends[mLabel].doctor++;
+                } else if (e.status === 'PHARMACY_REQUESTED') {
+                    monthlyClinicTrends[mLabel].pharmacy++;
+                }
+            }
+        });
+
+        const clinicTrends = Object.values(monthlyClinicTrends).reverse();
+
+        // 6. Fetch Promotion Pipeline Progress
+        const promotionProgressRaw = await prisma.promotionLog.groupBy({
+            by: ['status'],
+            _count: { id: true }
+        });
+        const promotionProgress = {
+            pending: promotionProgressRaw.find(p => p.status === 'DUE_FOR_PROMOTION')?._count.id || 0,
+            cleared: promotionProgressRaw.find(p => p.status === 'PROMOTED')?._count.id || 0,
+            withdrawn: promotionProgressRaw.find(p => p.status === 'WITHDRAWN')?._count.id || 0
+        };
+
+        const result = {
+            kpis: {
+                totalActiveStaff,
+                staffDueForPromotion,
+                activeSecurityThreats,
+                todayClinicConsultations,
+                totalActiveResearchProjects
+            },
+            analytics: {
+                staffByDept,
+                staffByState,
+                incidentCategories,
+                highRiskZones,
+                clinicTrends,
+                promotionProgress
+            }
+        };
+
+        // Cache for 5 minutes (300 seconds)
+        await redisService.set(CACHE_KEY, result, 300);
+
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching VC Executive Analytics:', error);
+        res.status(500).json({ message: 'Error fetching executive dashboard stats' });
+    }
+};

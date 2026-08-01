@@ -15,22 +15,106 @@ export class PayrollService {
             throw new Error(`Staff ${staffId} profile incomplete (Level/Step missing)`);
         }
 
-        // Find matching Salary Level
-        // This assumes we have populated SalaryScales (e.g. CONTISS) and linked via naming convention or explicit link.
-        // For now, let's search globally across all scales for a match on Level/Step.
-        // In a real app, StaffProfile might link directly to a SalaryScale.
+        // Parse Level/Step to extract numeric values and determine Scale (CONUASS vs CONTISS)
+        let scaleName = 'CONTISS';
+        if (staff.level.toUpperCase().includes('CONUASS')) {
+            scaleName = 'CONUASS';
+        }
+
+        const levelMatch = staff.level.match(/\d+/);
+        const levelCode = levelMatch ? levelMatch[0].padStart(2, '0') : staff.level;
+
+        const stepMatch = staff.step.match(/\d+/);
+        const stepCode = stepMatch ? stepMatch[0].padStart(2, '0') : staff.step;
+
+        // Find scale ID
+        const scale = await prisma.salaryScale.findFirst({
+            where: { name: scaleName }
+        });
+
         const salaryLevel = await prisma.salaryLevel.findFirst({
             where: {
-                level: staff.level,
-                step: staff.step
+                scaleId: scale?.id,
+                level: levelCode,
+                step: stepCode
             }
         });
 
         if (!salaryLevel) {
-            throw new Error(`No Salary Scale found for Level ${staff.level} Step ${staff.step}`);
+            // Fallback to searching without scaleId
+            const fallback = await prisma.salaryLevel.findFirst({
+                where: {
+                    level: levelCode,
+                    step: stepCode
+                }
+            });
+            if (!fallback) {
+                throw new Error(`No Salary Scale found for Level ${staff.level} Step ${staff.step}`);
+            }
+            return fallback;
         }
 
         return salaryLevel;
+    }
+
+    /**
+     * Complete PAYE calculation engine according to Nigerian Tax Law (PITA Amendment)
+     */
+    static calculatePAYE(grossIncome: number, basicSalary: number, annualPension: number, annualNHF: number, annualNHIS: number): number {
+        const annualGross = grossIncome * 12;
+        
+        // 1. Consolidated Relief Allowance (CRA)
+        // CRA is ₦200,000 or 1% of Gross Income (whichever is higher) + 20% of Gross Income
+        const baseRelief = Math.max(200000, annualGross * 0.01);
+        const cra = baseRelief + (annualGross * 0.20);
+        
+        // 2. Tax Reliefs (Pension, NHF, NHIS)
+        const totalReliefs = cra + annualPension + annualNHF + annualNHIS;
+        
+        // 3. Taxable Income
+        const taxableIncome = Math.max(0, annualGross - totalReliefs);
+        
+        // 4. Progressive Tax Brackets
+        // First ₦300,000 @ 7%
+        // Next ₦300,000 @ 11%
+        // Next ₦500,000 @ 15%
+        // Next ₦500,000 @ 19%
+        // Next ₦1,600,000 @ 21%
+        // Above ₦3,200,000 @ 24%
+        let remaining = taxableIncome;
+        let annualTax = 0;
+
+        if (remaining > 0) {
+            const chunk = Math.min(remaining, 300000);
+            annualTax += chunk * 0.07;
+            remaining -= chunk;
+        }
+        if (remaining > 0) {
+            const chunk = Math.min(remaining, 300000);
+            annualTax += chunk * 0.11;
+            remaining -= chunk;
+        }
+        if (remaining > 0) {
+            const chunk = Math.min(remaining, 500000);
+            annualTax += chunk * 0.15;
+            remaining -= chunk;
+        }
+        if (remaining > 0) {
+            const chunk = Math.min(remaining, 500000);
+            annualTax += chunk * 0.19;
+            remaining -= chunk;
+        }
+        if (remaining > 0) {
+            const chunk = Math.min(remaining, 1600000);
+            annualTax += chunk * 0.21;
+            remaining -= chunk;
+        }
+        if (remaining > 0) {
+            annualTax += remaining * 0.24;
+        }
+
+        const monthlyPAYE = annualTax / 12;
+        return Math.round(monthlyPAYE * 100) / 100;
     }
 
     /**
@@ -56,7 +140,7 @@ export class PayrollService {
                 });
 
                 if (existing) {
-                    continue; // Skip or Update? Let's skip for safety.
+                    continue; // Skip already generated
                 }
 
                 // Calculate
@@ -64,9 +148,6 @@ export class PayrollService {
                 try {
                     salaryDetails = await this.calculateSalary(user.staffProfile.id);
                 } catch (e) {
-                    // If no scale found, skip this user but log error
-                    // Or maybe generate a zero-pay record?
-                    // Let's log and skip.
                     errors.push({ user: user.email, error: 'Salary Scale not defined' });
                     continue;
                 }
@@ -75,21 +156,27 @@ export class PayrollService {
 
                 // Allowances
                 const totalAllowances = rent + transport + meal + utility + entertainment;
-                const grossPay = consolidated; // Should match basic + allowances logic ideally
+                const grossPay = consolidated; 
 
-                // Statutory Deductions (Simplified Rules for Nigeria)
-                // Pension: 8% of (Basic + Housing + Transport) usually. 
-                // Tax (PAYE): Complex sliding scale. implementing a flat dummy rate for MVP or simplified logic.
+                // Statutory Deductions (Nigerian Payroll Rules)
+                // Pension: 8% of Gross (Employee), Employer pays 10%
+                const pension = Math.round((grossPay * 0.08) * 100) / 100;
 
-                // Simplified Logic: 
-                // Pension = 7.5% of Gross (Standard is 8% of BHT, let's use 8% Gross for simplicity or 0 for now)
-                const pension = grossPay * 0.08;
+                // NHF: 2.5% of Basic Salary
+                const nhf = Math.round((basicSalary * 0.025) * 100) / 100;
 
-                // Tax: Arbitrary 10% for MVP
-                const tax = grossPay * 0.10;
+                // NHIS: 1.75% of Basic Salary
+                const nhis = Math.round((basicSalary * 0.0175) * 100) / 100;
 
-                const totalDeductions = pension + tax;
-                const netPay = grossPay - totalDeductions;
+                // Annual Relief Totals for PAYE Tax Calc
+                const annualPension = pension * 12;
+                const annualNHF = nhf * 12;
+                const annualNHIS = nhis * 12;
+
+                const tax = this.calculatePAYE(grossPay, basicSalary, annualPension, annualNHF, annualNHIS);
+
+                const totalDeductions = Math.round((pension + nhf + nhis + tax) * 100) / 100;
+                const netPay = Math.round((grossPay - totalDeductions) * 100) / 100;
 
                 const record = await prisma.payroll.create({
                     data: {
@@ -101,7 +188,7 @@ export class PayrollService {
                         grossPay,
                         tax,
                         pension,
-                        otherDeductions: 0,
+                        otherDeductions: Math.round((nhf + nhis) * 100) / 100, // NHF + NHIS mapped to otherDeductions
                         totalDeductions,
                         netPay,
                         status: 'PENDING'
@@ -125,7 +212,7 @@ export class PayrollService {
     static async approvePayroll(month: string, year: number) {
         return prisma.payroll.updateMany({
             where: { month, year },
-            data: { status: 'PAID', paymentDate: new Date() }
+            data: { status: 'APPROVED', paymentDate: new Date() }
         });
     }
 
@@ -162,7 +249,6 @@ export class PayrollService {
                 record.user.id,
                 `"${record.user.name}"`, // Quote name to handle commas
                 profile?.department || 'N/A',
-                // specific IPPIS number field isn't in schema yet, using placeholder or staff ID
                 profile?.ippisNumber || 'N/A',
                 profile?.level || 'N/A',
                 profile?.step || 'N/A',
@@ -173,9 +259,8 @@ export class PayrollService {
                 record.pension,
                 record.totalDeductions,
                 record.netPay,
-                // Bank details not in schema yet, placeholder
-                'Access Bank',
-                '0000000000'
+                profile?.bankName || 'Access Bank',
+                profile?.accountNumber || '0000000000'
             ].join(',');
         });
 

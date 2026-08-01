@@ -1,9 +1,16 @@
 import { Router } from 'express';
-import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics } from '../controllers/analytics.controller';
+import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics, getVcExecutiveAnalytics } from '../controllers/analytics.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
+
+// VC Executive Command Dashboard
+router.get('/vc-executive',
+    verifyToken,
+    requireRole([Role.VICE_CHANCELLOR, Role.SUPER_USER]),
+    getVcExecutiveAnalytics
+);
 
 // Only HR Admin, Super User, and maybe Audit/Director can see global analytics
 router.get('/dashboard',

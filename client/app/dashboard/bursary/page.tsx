@@ -295,7 +295,7 @@ export default function BursaryDashboardPage() {
                                                 </span>
                                                 {v.auditComment && (
                                                     <div className="text-[10px] font-medium text-gray-500 italic mt-1.5">
-                                                        "Comment: {v.auditComment}"
+                                                        &quot;Comment: {v.auditComment}&quot;
                                                     </div>
                                                 )}
                                             </td>

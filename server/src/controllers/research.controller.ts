@@ -797,3 +797,254 @@ export const exportDocument = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+// HELPER: Validate project membership
+const checkProjectAccess = async (projectId: string, userId: string, role: string) => {
+    const isGlobalAdmin = ['SUPER_USER', 'VICE_CHANCELLOR', 'ADMIN', 'HR_ADMIN', 'BURSARY'].includes(role);
+    const staffProfile = await prisma.staffProfile.findUnique({ where: { userId } }).catch(() => null);
+
+    const project = await prisma.researchProject.findUnique({
+        where: { id: projectId },
+        include: { members: true }
+    });
+
+    if (!project) return null;
+
+    if (!isGlobalAdmin) {
+        if (!staffProfile) return null;
+        const isMember = project.members.some(m => m.staffId === staffProfile.id);
+        if (!isMember) return null;
+    }
+
+    return project;
+};
+
+// 7. GET /api/research/:id/grants
+export const getGrants = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const grants = await prisma.researchGrant.findMany({
+            where: { projectId: id },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json(grants);
+    } catch (err) {
+        console.error('getGrants error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 8. POST /api/research/:id/grants
+export const createGrant = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { grantorName, totalFunding, disbursedAmount, startDate, endDate, milestones } = req.body;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const grant = await prisma.researchGrant.create({
+            data: {
+                projectId: id,
+                grantorName,
+                totalFunding: Number(totalFunding),
+                disbursedAmount: Number(disbursedAmount || 0),
+                startDate: new Date(startDate),
+                endDate: new Date(endDate),
+                milestones: milestones ? milestones : []
+            }
+        });
+
+        res.status(201).json(grant);
+    } catch (err) {
+        console.error('createGrant error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 9. PUT /api/research/:id/grants/:grantId
+export const updateGrant = async (req: Request, res: Response) => {
+    try {
+        const { id, grantId } = req.params;
+        const { grantorName, totalFunding, disbursedAmount, startDate, endDate, milestones } = req.body;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const updateData: any = {};
+        if (grantorName) updateData.grantorName = grantorName;
+        if (totalFunding !== undefined) updateData.totalFunding = Number(totalFunding);
+        if (disbursedAmount !== undefined) updateData.disbursedAmount = Number(disbursedAmount);
+        if (startDate) updateData.startDate = new Date(startDate);
+        if (endDate) updateData.endDate = new Date(endDate);
+        if (milestones) updateData.milestones = milestones;
+
+        const grant = await prisma.researchGrant.update({
+            where: { id: grantId },
+            data: updateData
+        });
+
+        res.json(grant);
+    } catch (err) {
+        console.error('updateGrant error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 10. GET /api/research/:id/ip
+export const getIpRegistry = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const ipRecords = await prisma.intellectualProperty.findMany({
+            where: { projectId: id },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json(ipRecords);
+    } catch (err) {
+        console.error('getIpRegistry error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 11. POST /api/research/:id/ip
+export const createIpRecord = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { title, patentAppNumber, inventors, status, doiLink } = req.body;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const ipRecord = await prisma.intellectualProperty.create({
+            data: {
+                projectId: id,
+                title,
+                patentAppNumber,
+                inventors: inventors || [],
+                status: status || 'PENDING',
+                doiLink
+            }
+        });
+
+        res.status(201).json(ipRecord);
+    } catch (err) {
+        console.error('createIpRecord error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 12. PUT /api/research/:id/ip/:ipId
+export const updateIpRecord = async (req: Request, res: Response) => {
+    try {
+        const { id, ipId } = req.params;
+        const { title, patentAppNumber, inventors, status, doiLink } = req.body;
+        const user = (req as any).user;
+
+        const project = await checkProjectAccess(id, user.id, user.role);
+        if (!project) {
+            return res.status(403).json({ message: 'Access denied or project not found' });
+        }
+
+        const updateData: any = {};
+        if (title) updateData.title = title;
+        if (patentAppNumber !== undefined) updateData.patentAppNumber = patentAppNumber;
+        if (inventors) updateData.inventors = inventors;
+        if (status) updateData.status = status;
+        if (doiLink !== undefined) updateData.doiLink = doiLink;
+
+        const ipRecord = await prisma.intellectualProperty.update({
+            where: { id: ipId },
+            data: updateData
+        });
+
+        res.json(ipRecord);
+    } catch (err) {
+        console.error('updateIpRecord error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// 13. GET /api/research/reports/impact
+export const getResearchImpactReport = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const isAuthorized = ['SUPER_USER', 'VICE_CHANCELLOR', 'BURSARY', 'ADMIN'].includes(user.role);
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Forbidden. Executive reports require elevated credentials.' });
+        }
+
+        const grants = await prisma.researchGrant.findMany({
+            include: {
+                project: {
+                    select: {
+                        title: true,
+                        owner: {
+                            select: {
+                                surname: true,
+                                otherNames: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const totalFunding = grants.reduce((sum, g) => sum + g.totalFunding, 0);
+        const disbursedAmount = grants.reduce((sum, g) => sum + g.disbursedAmount, 0);
+
+        const projectStats = await prisma.researchProject.groupBy({
+            by: ['status'],
+            _count: { id: true }
+        });
+
+        const patentCount = await prisma.intellectualProperty.count();
+
+        res.json({
+            summary: {
+                totalGrants: grants.length,
+                totalFunding,
+                disbursedAmount,
+                patentsCount: patentCount,
+                projectsStatus: projectStats
+            },
+            grants: grants.map(g => ({
+                id: g.id,
+                projectTitle: g.project.title,
+                ownerName: `${g.project.owner.surname || ''} ${g.project.owner.otherNames || ''}`.trim(),
+                grantorName: g.grantorName,
+                totalFunding: g.totalFunding,
+                disbursedAmount: g.disbursedAmount,
+                startDate: g.startDate,
+                endDate: g.endDate
+            }))
+        });
+    } catch (err) {
+        console.error('getResearchImpactReport error:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};

@@ -487,3 +487,118 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+export const resumeFromLeave = async (req: Request, res: Response) => {
+    try {
+        const { staffId } = req.body;
+        // @ts-ignore
+        const requesterId = req.user.id;
+        // @ts-ignore
+        const requesterRole = req.user.role;
+
+        // If no staffId provided, default to the logged-in user's own profile
+        let targetStaffId = staffId;
+        if (!targetStaffId) {
+            const myProfile = await prisma.staffProfile.findUnique({
+                where: { userId: requesterId }
+            });
+            if (!myProfile) return res.status(404).json({ message: 'Staff profile not found' });
+            targetStaffId = myProfile.id;
+        }
+
+        const staff = await prisma.staffProfile.findUnique({
+            where: { id: targetStaffId },
+            include: { user: true }
+        });
+        if (!staff) return res.status(404).json({ message: 'Staff profile not found' });
+
+        if (staff.status !== 'ON_LEAVE') {
+            return res.status(400).json({ message: 'Staff member is not currently on leave' });
+        }
+
+        // Authorize: Only the staff member themselves, HR Admins, Admins, Super Users, or Deans/Unit Heads can resume
+        const isSelf = staff.userId === requesterId;
+        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(requesterRole);
+        
+        let isAuthorized = isSelf || isHR;
+
+        if (!isAuthorized) {
+            // Check Unit Head / Supervisor boundary
+            const supervisorProfile = await prisma.staffProfile.findUnique({
+                where: { userId: requesterId }
+            });
+            if (supervisorProfile) {
+                if (supervisorProfile.centerId && staff.centerId === supervisorProfile.centerId) {
+                    isAuthorized = true;
+                } else if (supervisorProfile.unitId && staff.unitId === supervisorProfile.unitId) {
+                    isAuthorized = true;
+                }
+            }
+        }
+
+        if (!isAuthorized) {
+            return res.status(403).json({ message: 'Unauthorized to resume this staff member from leave' });
+        }
+
+        // Update StaffProfile status to ACTIVE
+        await prisma.staffProfile.update({
+            where: { id: targetStaffId },
+            data: { status: 'ACTIVE' }
+        });
+
+        // Find the active APPROVED leave request and set its endDate to now if it was in the future
+        const now = new Date();
+        const activeLeave = await prisma.leaveRequest.findFirst({
+            where: {
+                staffId: targetStaffId,
+                status: 'APPROVED',
+                endDate: { gte: now }
+            },
+            orderBy: { endDate: 'desc' }
+        });
+
+        if (activeLeave) {
+            const start = new Date(activeLeave.startDate);
+            start.setHours(0, 0, 0, 0);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const newEndDate = today > start ? today : start;
+            const duration = Math.round((newEndDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+            await prisma.leaveRequest.update({
+                where: { id: activeLeave.id },
+                data: {
+                    endDate: newEndDate,
+                    durationDays: duration
+                }
+            });
+        }
+
+        // Send confirmation in-app notification
+        const notificationTitle = 'Resumed From Leave';
+        const notificationMessage = `${staff.user.name || 'Staff Member'} has successfully resumed from leave and status is now ACTIVE.`;
+        
+        await notifyUser(staff.userId, notificationTitle, notificationMessage, 'INFO', '/dashboard/leaves');
+
+        // Notify HR Admins
+        const hrAdmins = await prisma.user.findMany({
+            where: {
+                role: { in: ['HR_ADMIN', 'SUPER_USER'] },
+                isActive: true
+            }
+        });
+        for (const admin of hrAdmins) {
+            if (admin.id !== staff.userId) {
+                await notifyUser(admin.id, `Staff Resumed: ${staff.user.name || 'Staff'}`, notificationMessage, 'INFO', `/dashboard/staff/${staff.id}`);
+            }
+        }
+
+        res.json({ message: 'Successfully resumed from leave and restored status to ACTIVE' });
+
+    } catch (error: any) {
+        console.error('Error during leave resumption:', error);
+        res.status(500).json({ message: 'Error during leave resumption' });
+    }
+};

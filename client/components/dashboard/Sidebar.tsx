@@ -89,6 +89,16 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
             <nav className="flex-1 space-y-1 px-3 py-4">
                 <LinkItem href="/dashboard" icon={LayoutDashboard} label="Overview" />
 
+                {/* VC Executive Section */}
+                {(isVC || isSuperUser) && (
+                    <>
+                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Executive
+                        </div>
+                        <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />
+                    </>
+                )}
+
                 {/* Core HR (Registry & Admins) */}
                 {isRegistry && (
                     <>
@@ -156,7 +166,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/received-files" icon={FolderOpen} label="Received Files" />
                     </>
                 )}
-                <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
+                {user?.staffProfile?.cadre !== 'ACADEMIC' && (
+                    <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
+                )}
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
                 <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Applications" />

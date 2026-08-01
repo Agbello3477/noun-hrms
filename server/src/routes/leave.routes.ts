@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { applyForLeave, getMyLeaves, getUnitPendingLeaves, updateLeaveStatus, getActiveLeaves } from '../controllers/leave.controller';
+import { applyForLeave, getMyLeaves, getUnitPendingLeaves, updateLeaveStatus, getActiveLeaves, resumeFromLeave } from '../controllers/leave.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 import { validate, leaveApplySchema } from '../middleware/validation';
@@ -10,6 +10,7 @@ router.use(verifyToken);
 
 // All Staff
 router.post('/apply', validate(leaveApplySchema), applyForLeave);
+router.post('/resume', resumeFromLeave);
 router.get('/me', getMyLeaves);
 router.get('/active', getActiveLeaves);
 
