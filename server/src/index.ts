@@ -1,5 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+const nodeEnv = process.env.NODE_ENV || 'development';
+dotenv.config({ path: path.resolve(process.cwd(), `.env.${nodeEnv}`) });
+dotenv.config(); // Fallback to standard .env
 
 import express from 'express';
 import cors from 'cors';
@@ -104,8 +108,35 @@ app.use('/api/vouchers', voucherRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/meetings', meetingRoutes);
 
+import prisma from './prisma';
+import { redisService } from './services/redis.service';
+
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'UP', service: 'NOUN-HRMS-API', timestamp: new Date().toISOString() });
+});
+
+app.get('/healthz', async (req, res) => {
+    try {
+        // 1. Verify PostgreSQL Database connectivity
+        await prisma.$queryRaw`SELECT 1`;
+
+        // 2. Verify Redis connectivity
+        const isRedisConnected = await redisService.ping();
+
+        res.status(200).json({
+            status: 'HEALTHY',
+            database: 'CONNECTED',
+            redis: isRedisConnected ? 'CONNECTED' : 'DISCONNECTED',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        console.error('🔥 HEALTHCHECK FAILED:', error);
+        res.status(500).json({
+            status: 'UNHEALTHY',
+            error: error.message || 'Database connection error',
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 app.get('/', (req, res) => {

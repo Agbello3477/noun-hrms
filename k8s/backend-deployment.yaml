@@ -40,6 +40,16 @@ spec:
         app: noun-backend
         tier: api
     spec:
+      initContainers:
+        - name: db-migration
+          image: noun-hrms-server:latest
+          imagePullPolicy: IfNotPresent
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef:
+                name: noun-hrms-config
+            - secretRef:
+                name: noun-hrms-secret
       containers:
         - name: backend-container
           image: noun-hrms-server:latest
@@ -61,14 +71,14 @@ spec:
               memory: "512Mi"
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: /healthz
               port: 5055
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: /healthz
               port: 5055
             initialDelaySeconds: 30
             periodSeconds: 15

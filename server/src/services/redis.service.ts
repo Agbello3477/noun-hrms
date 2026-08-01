@@ -88,6 +88,16 @@ class RedisService {
             console.error('Redis clear pattern error:', error);
         }
     }
+
+    async ping(): Promise<boolean> {
+        if (!this.isEnabled || !this.client) return false;
+        try {
+            await this.client.ping();
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
 }
 
 export const redisService = new RedisService();

@@ -1,0 +1,156 @@
+name: Multi-Environment CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - staging
+  pull_request:
+    branches:
+      - main
+      - develop
+      - staging
+
+jobs:
+  build-and-test:
+    name: Build & Integration Testing
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: admin123
+          POSTGRES_DB: noun_hrms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install All Dependencies
+        run: npm run install:all
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        working-directory: ./server
+
+      - name: Run Database Migrations (Test DB)
+        run: npx prisma migrate deploy
+        working-directory: ./server
+        env:
+          DATABASE_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
+
+      - name: Run Backend Integration Tests
+        run: npm run test
+        working-directory: ./server
+        env:
+          DATABASE_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
+          REDIS_URL: "redis://localhost:6379"
+          JWT_SECRET: "ci_testing_jwt_secret"
+          NODE_ENV: "test"
+
+      - name: Build Next.js Client
+        run: npm run build --workspace=client
+        env:
+          NEXT_PUBLIC_API_URL: "https://noun-hrms-staging.onrender.com"
+
+  deploy-staging:
+    name: Deploy to Staging Environment
+    needs: build-and-test
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm run install:all
+
+      - name: Build Staging Client (Next.js)
+        run: npm run build --workspace=client
+        env:
+          NEXT_PUBLIC_API_URL: "https://noun-hrms-staging.onrender.com"
+
+      - name: Deploy Frontend to Firebase Hosting (Staging Channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NOUNHRMS }}
+          channelId: staging
+          projectId: nounhrms
+
+      - name: Trigger Backend Staging Deploy (Render)
+        if: env.RENDER_DEPLOY_HOOK_STAGING != ''
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
+        env:
+          RENDER_DEPLOY_HOOK_STAGING: ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
+
+  deploy-production:
+    name: Deploy to Production Environment
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm run install:all
+
+      - name: Build Production Client (Next.js)
+        run: npm run build --workspace=client
+        env:
+          NEXT_PUBLIC_API_URL: "https://noun-hrms.onrender.com"
+
+      - name: Deploy Frontend to Firebase Hosting (Live Channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NOUNHRMS }}
+          channelId: live
+          projectId: nounhrms
+
+      - name: Trigger Backend Production Deploy (Render)
+        if: env.RENDER_DEPLOY_HOOK_PRODUCTION != ''
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_PRODUCTION }}
+        env:
+          RENDER_DEPLOY_HOOK_PRODUCTION: ${{ secrets.RENDER_DEPLOY_HOOK_PRODUCTION }}
