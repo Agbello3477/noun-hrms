@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 import { AperStatus, Role } from '@prisma/client';
 import prisma from '../prisma';
 import { notifyUser } from './notification.controller';
-import { sendAperSessionNotification } from '../services/email.service';
+import { sendPushNotification } from '../services/fcm.service';
+import { jobQueueService } from '../services/jobQueue.service';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };
@@ -78,30 +79,46 @@ export const updateSession = async (req: Request, res: Response) => {
 
                     const eligibleStaff = activeUsers.filter(u => u.staffProfile?.cadre !== 'ACADEMIC');
 
-                    for (const staffUser of eligibleStaff) {
-                        // 1. Send in-app notification
+                    const notificationsData = eligibleStaff.map(staffUser => ({
+                        userId: staffUser.id,
+                        title: 'Annual Performance Appraisal (APER) Session Opened',
+                        message: `The APER appraisal session "${session.title}" for ${session.year} has been opened. Please fill and submit your appraisal form.`,
+                        type: 'INFO',
+                        link: '/dashboard/staff/aper'
+                    }));
+
+                    // 1. Bulk insert in-app notifications
+                    if (notificationsData.length > 0) {
+                        await prisma.notification.createMany({
+                            data: notificationsData
+                        });
+
+                        // Dispatch bulk FCM notifications asynchronously
                         const notificationTitle = 'Annual Performance Appraisal (APER) Session Opened';
                         const notificationMessage = `The APER appraisal session "${session.title}" for ${session.year} has been opened. Please fill and submit your appraisal form.`;
                         const link = '/dashboard/staff/aper';
-
-                        await notifyUser(
-                            staffUser.id,
+                        sendPushNotification(
+                            eligibleStaff.map(u => u.id),
                             notificationTitle,
                             notificationMessage,
-                            'INFO',
                             link
-                        );
+                        ).catch(err => {
+                            console.error('Failed to dispatch bulk FCM push notifications:', err);
+                        });
+                    }
 
-                        // 2. Send email notification
+                    // 2. Queue emails asynchronously in Redis job queue
+                    for (const staffUser of eligibleStaff) {
                         if (staffUser.email) {
                             const name = staffUser.name || [staffUser.staffProfile?.title, staffUser.staffProfile?.surname, staffUser.staffProfile?.otherNames].filter(Boolean).join(' ') || 'Staff Member';
-                            await sendAperSessionNotification(
-                                staffUser.email,
+                            
+                            await jobQueueService.enqueue('SEND_APER_EMAIL', {
+                                email: staffUser.email,
                                 name,
-                                session.title,
-                                session.year,
-                                session.endDate
-                            );
+                                sessionTitle: session.title,
+                                year: session.year,
+                                endDate: session.endDate.toISOString()
+                            });
                         }
                     }
                 } catch (notifyErr) {

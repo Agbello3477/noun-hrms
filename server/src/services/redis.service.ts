@@ -98,6 +98,33 @@ class RedisService {
             return false;
         }
     }
+
+    isOnline(): boolean {
+        return this.isEnabled && this.client !== null;
+    }
+
+    async lpush(key: string, value: string): Promise<number | null> {
+        if (!this.isEnabled || !this.client) return null;
+        try {
+            return await this.client.lpush(key, value);
+        } catch (error) {
+            console.error('Redis lpush error:', error);
+            return null;
+        }
+    }
+
+    async brpop(key: string, timeoutSeconds: number): Promise<[string, string] | null> {
+        if (!this.isEnabled || !this.client) return null;
+        try {
+            return await this.client.brpop(key, timeoutSeconds);
+        } catch (error) {
+            // Ignore connection timeouts
+            if (!(error instanceof Error && error.message.includes('Connection is closed'))) {
+                console.error('Redis brpop error:', error);
+            }
+            return null;
+        }
+    }
 }
 
 export const redisService = new RedisService();

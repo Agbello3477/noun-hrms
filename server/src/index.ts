@@ -38,6 +38,10 @@ import voucherRoutes from './routes/voucher.routes';
 import gearRoutes from './routes/gear.routes';
 import researchRoutes from './routes/research.routes';
 import meetingRoutes from './routes/meeting.routes';
+import observabilityRoutes from './routes/observability.routes';
+import { observabilityMiddleware } from './middleware/observability.middleware';
+import { jobQueueService } from './services/jobQueue.service';
+import { scheduleSyntheticMonitoring } from './jobs/syntheticMonitoring';
 import { authRateLimit, apiRateLimit } from './middleware/rate-limit.middleware';
 import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
@@ -49,6 +53,9 @@ import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
 const app = express();
 app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
 const PORT = process.env.PORT || 5000;
+
+// Apply observability context tracing as the very first middleware
+app.use(observabilityMiddleware);
 
 app.use(helmet());
 app.use(cookieParser());
@@ -106,6 +113,7 @@ app.use('/api/security', securityRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/observability', observabilityRoutes);
 
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
@@ -207,9 +215,13 @@ wss.on('connection', setupDocSocket);
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    // Start background queue worker
+    jobQueueService.startWorker();
+    
     // Start background scheduled jobs
     schedulePromotionCron();
     scheduleRetirementCron();
     scheduleSessionCleanupCron();
     scheduleLeaveResumptionCron();
+    scheduleSyntheticMonitoring();
 });

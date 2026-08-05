@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { getAllStaff, createStaff, getStaffById, getUnitStaff, getAcademicStaff, getTransferredStaff, deleteStaffNoId } from '../controllers/staff.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
+import { cacheMiddleware } from '../middleware/cache.middleware';
 
 const router = Router();
 
@@ -39,10 +40,10 @@ const unitRoles = [
     Role.ADMIN // Admin can debug
 ];
 
-router.get('/', requireRole(viewRoles), getAllStaff);
-router.get('/academic', requireRole(viewRoles), getAcademicStaff);
-router.get('/unit', requireRole(unitRoles), getUnitStaff);
-router.get('/transferred', requireRole([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.ADMIN]), getTransferredStaff);
+router.get('/', requireRole(viewRoles), cacheMiddleware(15), getAllStaff);
+router.get('/academic', requireRole(viewRoles), cacheMiddleware(15), getAcademicStaff);
+router.get('/unit', requireRole(unitRoles), cacheMiddleware(15), getUnitStaff);
+router.get('/transferred', requireRole([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.ADMIN]), cacheMiddleware(15), getTransferredStaff);
 
 // ─── Promotion Monitoring Module ─────────────────────────────────────────────
 // IMPORTANT: These must be registered BEFORE /:id to prevent route shadowing
