@@ -50,9 +50,14 @@ import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
 
 
 
+import compression from 'compression';
+
 const app = express();
 app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
 const PORT = process.env.PORT || 5000;
+
+// Enable response compression (Gzip/Brotli) for all payloads
+app.use(compression());
 
 // Apply observability context tracing as the very first middleware
 app.use(observabilityMiddleware);
