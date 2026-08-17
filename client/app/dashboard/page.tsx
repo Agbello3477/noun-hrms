@@ -130,7 +130,7 @@ export default function DashboardHome() {
 
     useEffect(() => {
         const fetchAllStaff = async () => {
-            if (user?.role !== 'VICE_CHANCELLOR') return;
+            if (user?.role !== 'VICE_CHANCELLOR' || memoRecipientType !== 'INDIVIDUAL' || allStaff.length > 0) return;
             try {
                 setLoadingStaff(true);
                 const { data } = await api.get('/api/staff');
@@ -142,7 +142,7 @@ export default function DashboardHome() {
             }
         };
         fetchAllStaff();
-    }, [user]);
+    }, [user, memoRecipientType, allStaff.length]);
 
     const handleVCUploadSignature = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -256,6 +256,20 @@ export default function DashboardHome() {
     const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
 
     useEffect(() => {
+        // Restore cached dashboard data instantly from sessionStorage for 0ms load speed
+        try {
+            const cachedAnalytics = sessionStorage.getItem('noun_dashboard_analytics');
+            if (cachedAnalytics) setAnalytics(JSON.parse(cachedAnalytics));
+            const cachedActivities = sessionStorage.getItem('noun_dashboard_activities');
+            if (cachedActivities) setActivities(JSON.parse(cachedActivities));
+            const cachedManager = sessionStorage.getItem('noun_dashboard_manager');
+            if (cachedManager) setManagerStats(JSON.parse(cachedManager));
+        } catch {
+            // Ignore cache parse errors
+        }
+    }, []);
+
+    useEffect(() => {
         const fetchNotifications = async (silent = false) => {
             if (isRegistry || !user) return;
             try {
@@ -271,8 +285,8 @@ export default function DashboardHome() {
 
         fetchNotifications(false);
         const interval = setInterval(() => {
-            fetchNotifications(true);
-        }, 30000);
+            if (!document.hidden) fetchNotifications(true);
+        }, 120000); // 2 minutes interval
 
         return () => clearInterval(interval);
     }, [user, isRegistry]);
@@ -349,6 +363,10 @@ export default function DashboardHome() {
 
                 if (analyticsRes && analyticsRes.data) {
                     setAnalytics(analyticsRes.data);
+                    try {
+                        sessionStorage.setItem('noun_dashboard_analytics', JSON.stringify(analyticsRes.data));
+                        sessionStorage.setItem('noun_dashboard_activities', JSON.stringify(combined));
+                    } catch {}
                 }
             } catch (error) {
                 console.error('Failed to fetch registry activity data', error);
@@ -359,8 +377,8 @@ export default function DashboardHome() {
 
         fetchRegistryDashboardData();
         const interval = setInterval(() => {
-            fetchRegistryDashboardData();
-        }, 15000); // Poll every 15s to capture updates immediately
+            if (!document.hidden) fetchRegistryDashboardData();
+        }, 120000); // 2 minutes interval
 
         return () => clearInterval(interval);
     }, [user, isRegistry]);
@@ -394,6 +412,9 @@ export default function DashboardHome() {
                 setLoadingManagerStats(true);
                 const { data } = await api.get('/api/analytics/manager');
                 setManagerStats(data);
+                try {
+                    sessionStorage.setItem('noun_dashboard_manager', JSON.stringify(data));
+                } catch {}
             } catch (error) {
                 console.error('Failed to fetch manager dashboard stats', error);
             } finally {
@@ -403,8 +424,8 @@ export default function DashboardHome() {
 
         fetchManagerStats();
         const interval = setInterval(() => {
-            fetchManagerStats();
-        }, 30000); // Poll manager stats every 30s
+            if (!document.hidden) fetchManagerStats();
+        }, 120000); // 2 minutes interval
         return () => clearInterval(interval);
     }, [user, isUnitManager]);
 
