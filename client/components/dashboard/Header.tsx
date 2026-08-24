@@ -168,6 +168,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                 <VoipCallModal
                     isOpen={isVoipModalOpen}
                     onClose={() => setIsVoipModalOpen(false)}
+                    onOpen={() => setIsVoipModalOpen(true)}
                     onMissedCallCountChange={setMissedCallCount}
                 />
 

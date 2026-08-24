@@ -55,7 +55,8 @@ export default function VideoConferenceModal({
             if (!containerRef.current || apiRef.current) return;
 
             try {
-                const domain = 'meet.jit.si';
+                // Use open Jitsi instance that doesn't require moderator login or 8x8 account
+                const domain = 'meet.ffrn.de';
                 const options = {
                     roomName: sanitizeRoomName,
                     width: '100%',
@@ -70,9 +71,11 @@ export default function VideoConferenceModal({
                         startWithVideoMuted: false,
                         prejoinPageEnabled: false,
                         disableDeepLinking: true,
+                        enableWelcomePage: false,
+                        enableClosePage: false,
                         toolbarButtons: [
                             'microphone', 'camera', 'desktop', 'fullscreen',
-                            'f省', 'hangup', 'chat', 'raisehand', 'tileview'
+                            'hangup', 'chat', 'raisehand', 'tileview', 'settings'
                         ]
                     },
                     interfaceConfigOverwrite: {
@@ -106,7 +109,7 @@ export default function VideoConferenceModal({
         // Load Jitsi script if not present
         if (!window.JitsiMeetExternalAPI) {
             const script = document.createElement('script');
-            script.src = 'https://meet.jit.si/external_api.js';
+            script.src = 'https://meet.ffrn.de/external_api.js';
             script.async = true;
             script.onload = () => initJitsi();
             document.body.appendChild(script);

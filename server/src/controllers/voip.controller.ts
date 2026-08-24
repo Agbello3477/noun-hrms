@@ -197,3 +197,47 @@ export const getIceServers = async (req: Request, res: Response) => {
 
   res.status(200).json({ iceServers });
 };
+
+// GET /api/voip/my-extension - Returns current authenticated user's 4-digit VoIP extension (auto-assigns if missing)
+export const getMyExtension = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: true, message: 'Unauthorized' });
+    }
+
+    let profile = await prisma.staffProfile.findUnique({
+      where: { userId: user.id },
+      include: {
+        unit: { select: { name: true } },
+        studyCenter: { select: { name: true } }
+      }
+    });
+
+    if (!profile) {
+      return res.status(404).json({ error: true, message: 'Staff profile not found' });
+    }
+
+    if (!profile.voipExtension) {
+      const newExt = await generateVoipExtension(user.role, profile.unit?.name);
+      profile = await prisma.staffProfile.update({
+        where: { id: profile.id },
+        data: { voipExtension: newExt },
+        include: {
+          unit: { select: { name: true } },
+          studyCenter: { select: { name: true } }
+        }
+      });
+    }
+
+    res.status(200).json({
+      extension: profile.voipExtension,
+      name: user.name,
+      rank: profile.rank || 'Staff',
+      department: profile.unit?.name || profile.studyCenter?.name || 'Main Campus'
+    });
+  } catch (error: any) {
+    console.error('Error fetching my extension:', error);
+    res.status(500).json({ error: true, message: 'Failed to fetch extension' });
+  }
+};

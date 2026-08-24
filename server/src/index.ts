@@ -188,8 +188,12 @@ const server = http.createServer(app);
 // Setup Socket.io for Chat & VoIP Signaling
 const io = new SocketIOServer(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:3000',
-        credentials: true
+        origin: (origin, callback) => {
+            // Allow all frontend origins including Firebase and localhost
+            callback(null, true);
+        },
+        credentials: true,
+        methods: ['GET', 'POST']
     }
 });
 setupChatSocket(io);

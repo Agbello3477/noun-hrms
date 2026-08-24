@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import api from '../../lib/api';
+import api, { getSocketUrl } from '../../lib/api';
 import { VoipPeerManager, stopMediaStreamTracks } from '../../lib/webrtc';
 import { 
   Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Search, 
@@ -25,6 +25,7 @@ interface VoipUser {
 interface VoipCallModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
   initialExtension?: string;
   onMissedCallCountChange?: (count: number) => void;
 }
@@ -37,7 +38,7 @@ interface MissedCall {
   missedAt: string;
 }
 
-export default function VoipCallModal({ isOpen, onClose, initialExtension, onMissedCallCountChange }: VoipCallModalProps) {
+export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtension, onMissedCallCountChange }: VoipCallModalProps) {
   const { user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
 
@@ -48,13 +49,14 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'keypad' | 'directory' | 'ptt' | 'missed'>('keypad');
+  const [onlineExtensions, setOnlineExtensions] = useState<Set<string>>(new Set());
 
   // Active Call States
   const [callState, setCallState] = useState<'IDLE' | 'INITIATING' | 'RINGING' | 'INCOMING' | 'CONNECTED' | 'REJECTED' | 'ENDED'>('IDLE');
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [peerInfo, setPeerInfo] = useState<{ name: string; rank: string; extension: string; department?: string } | null>(null);
   
-  // Call Controls
+  // Call Controls (Loudspeaker ON by default)
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [callDuration, setCallDuration] = useState<number>(0);
@@ -81,26 +83,39 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
     onMissedCallCountChange?.(newMissedCount);
   }, [newMissedCount, onMissedCallCountChange]);
 
-  // Initialize Socket.io connection for VoIP Signaling
+  // Adjust volume on loudspeaker mode change
+  useEffect(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+    }
+  }, [isSpeakerOn]);
+
+  // Initialize Socket.io connection for VoIP Signaling using production-safe getSocketUrl()
   useEffect(() => {
     if (!user) return;
 
     const token = localStorage.getItem('token');
-    const socketUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    const socketUrl = getSocketUrl();
+    console.log('[VoIP UI] Connecting to signaling server:', socketUrl);
     
     const socketInstance = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling']
     });
 
-    // KEY FIX: Re-register extension on every connect/reconnect so the
-    // server extension room is always populated, even after network drops.
+    // Re-register extension on every connect/reconnect
     socketInstance.on('connect', () => {
       console.log('[VoIP UI] Signaling socket connected');
       if (myExtensionRef.current) {
         socketInstance.emit('VOIP_REGISTER_EXTENSION', { extension: myExtensionRef.current });
-        console.log(`[VoIP UI] Re-registered extension ${myExtensionRef.current} after (re)connect`);
+        console.log(`[VoIP UI] Registered extension ${myExtensionRef.current} on connect`);
       }
+      // Query online extensions
+      socketInstance.emit('VOIP_GET_ONLINE_EXTENSIONS', (exts: string[]) => {
+        if (Array.isArray(exts)) {
+          setOnlineExtensions(new Set(exts));
+        }
+      });
     });
 
     setSocket(socketInstance);
@@ -110,6 +125,23 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
     };
   }, [user]);
 
+  // Fetch logged in user's guaranteed extension
+  const fetchMyExtension = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/voip/my-extension');
+      if (data?.extension) {
+        myExtensionRef.current = data.extension;
+        setUserExtension(data.extension);
+        if (socket?.connected) {
+          socket.emit('VOIP_REGISTER_EXTENSION', { extension: data.extension });
+          console.log(`[VoIP UI] Registered my extension ${data.extension} from /my-extension`);
+        }
+      }
+    } catch (err) {
+      console.error('[VoIP UI] Failed to get my extension', err);
+    }
+  }, [socket]);
+
   // Fetch directory and user's 4-digit extension
   const fetchDirectory = useCallback(async () => {
     try {
@@ -117,15 +149,15 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
       const { data } = await api.get('/api/voip/directory');
       setDirectory(data || []);
 
-      // Find logged in user's profile extension
-      const myProfile = (data || []).find((p: VoipUser) => p.userId === user?.id);
-      if (myProfile?.extension) {
-        myExtensionRef.current = myProfile.extension;
-        setUserExtension(myProfile.extension);
-        // Register immediately if socket is already connected
-        if (socket?.connected) {
-          socket.emit('VOIP_REGISTER_EXTENSION', { extension: myProfile.extension });
-          console.log(`[VoIP UI] Registered extension ${myProfile.extension} after directory fetch`);
+      // If user extension not yet set, check directory
+      if (!myExtensionRef.current) {
+        const myProfile = (data || []).find((p: VoipUser) => p.userId === user?.id);
+        if (myProfile?.extension) {
+          myExtensionRef.current = myProfile.extension;
+          setUserExtension(myProfile.extension);
+          if (socket?.connected) {
+            socket.emit('VOIP_REGISTER_EXTENSION', { extension: myProfile.extension });
+          }
         }
       }
     } catch (err) {
@@ -137,9 +169,10 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
 
   useEffect(() => {
     if (user) {
+      fetchMyExtension();
       fetchDirectory();
     }
-  }, [user, fetchDirectory]);
+  }, [user, fetchMyExtension, fetchDirectory]);
 
   useEffect(() => {
     if (initialExtension) {
@@ -207,6 +240,39 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
       }, 3000);
     });
 
+    // Call Unavailable (User is Offline / Not Registered)
+    socket.on('CALL_UNAVAILABLE', (data: { targetExtension: string; reason?: string; message?: string }) => {
+      console.log('[VoIP UI] Target unavailable:', data);
+      setCallError(data.message || `Extension ${data.targetExtension} is currently offline and unavailable.`);
+      setCallState('REJECTED');
+      cleanupCallHardware();
+      setTimeout(() => {
+        setCallState('IDLE');
+        setCallError('');
+      }, 4000);
+    });
+
+    // Call Failed
+    socket.on('CALL_FAILED', (data: { reason?: string }) => {
+      setCallError(data.reason || 'Call failed.');
+      setCallState('REJECTED');
+      cleanupCallHardware();
+      setTimeout(() => {
+        setCallState('IDLE');
+        setCallError('');
+      }, 4000);
+    });
+
+    // Real-time Extension Online/Offline Event
+    socket.on('VOIP_EXTENSION_STATUS_CHANGED', (data: { extension: string; isOnline: boolean }) => {
+      setOnlineExtensions(prev => {
+        const next = new Set(prev);
+        if (data.isOnline) next.add(data.extension);
+        else next.delete(data.extension);
+        return next;
+      });
+    });
+
     // Call Timeout
     socket.on('CALL_TIMEOUT', () => {
       setCallError('No answer after 10 seconds.');
@@ -270,6 +336,9 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
       socket.off('CALL_RINGING');
       socket.off('CALL_ACCEPTED');
       socket.off('CALL_REJECTED');
+      socket.off('CALL_UNAVAILABLE');
+      socket.off('CALL_FAILED');
+      socket.off('VOIP_EXTENSION_STATUS_CHANGED');
       socket.off('CALL_TIMEOUT');
       socket.off('CALL_ENDED');
       socket.off('ICE_CANDIDATE');
@@ -317,7 +386,7 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
       const iceRes = await api.get('/api/voip/ice-servers');
       const iceServers = iceRes.data.iceServers || [];
 
-      // Initialize WebRTC Peer Manager
+      // Initialize WebRTC Peer Manager with Loudspeaker by default
       peerManagerRef.current = new VoipPeerManager(
         iceServers,
         (candidate) => {
@@ -326,6 +395,7 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
         (remoteStream) => {
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
             remoteAudioRef.current.play().catch(console.error);
           }
         }
@@ -350,6 +420,9 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
   const handleAcceptCall = async () => {
     if (!currentCallId || !socket || !incomingOfferSdpRef.current) return;
 
+    // Automatically open full modal dialer interface for callee
+    onOpen?.();
+
     try {
       const iceRes = await api.get('/api/voip/ice-servers');
       const iceServers = iceRes.data.iceServers || [];
@@ -364,6 +437,7 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
         (remoteStream) => {
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
             remoteAudioRef.current.play().catch(console.error);
           }
         }
@@ -513,9 +587,26 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
 
                 {/* Call Status Badge */}
                 <div className="mt-4">
-                  {callState === 'INITIATING' && <span className="text-xs text-amber-400 font-bold bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">Dialing...</span>}
-                  {callState === 'RINGING' && <span className="text-xs text-blue-400 font-bold bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 animate-pulse">Ringing...</span>}
-                  {callState === 'CONNECTED' && <span className="text-sm font-mono font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">{formatDuration(callDuration)}</span>}
+                  {callState === 'INITIATING' && (
+                    <span className="text-xs text-amber-400 font-bold bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 animate-pulse flex items-center gap-1.5 justify-center">
+                      <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" /> Checking Availability & Dialing...
+                    </span>
+                  )}
+                  {callState === 'RINGING' && (
+                    <span className="text-xs text-blue-400 font-bold bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/20 animate-pulse flex items-center gap-1.5 justify-center">
+                      <span className="h-2 w-2 rounded-full bg-blue-400 animate-ping" /> Ringing Target Extension...
+                    </span>
+                  )}
+                  {callState === 'CONNECTED' && (
+                    <span className="text-sm font-mono font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 flex items-center gap-1.5 justify-center">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> {formatDuration(callDuration)} • Loudspeaker Active
+                    </span>
+                  )}
+                  {callState === 'REJECTED' && (
+                    <span className="text-xs text-red-400 font-bold bg-red-500/10 px-3 py-1.5 rounded-full border border-red-500/20 flex items-center gap-1.5 justify-center">
+                      <AlertCircle size={13} /> {callError || 'User Unavailable / Offline'}
+                    </span>
+                  )}
                   {callState === 'ENDED' && <span className="text-xs text-slate-400 font-bold">Call Ended</span>}
                 </div>
 
@@ -659,23 +750,32 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension, onMis
                           No matching extension found.
                         </div>
                       ) : (
-                        filteredDirectory.map((staff) => (
-                          <div
-                            key={staff.id}
-                            className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <h4 className="text-xs font-bold text-slate-900 truncate">{staff.name}</h4>
-                              <p className="text-[10px] text-slate-500 truncate">{staff.rank} • {staff.department}</p>
-                            </div>
-                            <button
-                              onClick={() => handleInitiateCall(staff.extension)}
-                              className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition"
+                        filteredDirectory.map((staff) => {
+                          const isOnline = onlineExtensions.has(staff.extension);
+                          return (
+                            <div
+                              key={staff.id}
+                              className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition"
                             >
-                              <Phone size={12} /> Ext {staff.extension}
-                            </button>
-                          </div>
-                        ))
+                              <div className="min-w-0 pr-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`h-2 w-2 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500 shadow-sm shadow-emerald-400 animate-pulse' : 'bg-slate-300'}`} />
+                                  <h4 className="text-xs font-bold text-slate-900 truncate">{staff.name}</h4>
+                                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${isOnline ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                    {isOnline ? 'Available' : 'Offline'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5 ml-4">{staff.rank} • {staff.department}</p>
+                              </div>
+                              <button
+                                onClick={() => handleInitiateCall(staff.extension)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shrink-0 ${isOnline ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm' : 'bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200'}`}
+                              >
+                                <Phone size={12} /> Ext {staff.extension}
+                              </button>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                   </div>

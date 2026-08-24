@@ -1,17 +1,22 @@
 import axios from 'axios';
 
-const LIVE_API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://noun-hrms.onrender.com').replace(/"/g, '').replace(/'/g, '').trim();
-
-let apiBaseUrl = LIVE_API_URL;
-if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        const localPort = process.env.NEXT_PUBLIC_PORT || '5000';
-        apiBaseUrl = `http://localhost:${localPort}`;
+export const getApiBaseUrl = (): string => {
+    let base = (process.env.NEXT_PUBLIC_API_URL || 'https://noun-hrms.onrender.com').replace(/"/g, '').replace(/'/g, '').trim();
+    if (typeof window !== 'undefined') {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            const localPort = process.env.NEXT_PUBLIC_PORT || '5000';
+            base = `http://localhost:${localPort}`;
+        }
     }
-}
+    return base;
+};
+
+export const getSocketUrl = (): string => {
+    return getApiBaseUrl();
+};
 
 const api = axios.create({
-    baseURL: apiBaseUrl,
+    baseURL: getApiBaseUrl(),
     timeout: 60000, // 60s timeout to accommodate Render cold-starts and slow connections
     headers: {
         'Content-Type': 'application/json',
@@ -50,7 +55,7 @@ api.interceptors.response.use(
 // Non-blocking pre-flight API warming probe to wake up Render instance
 export const warmupBackendApi = (): void => {
     if (typeof window !== 'undefined') {
-        fetch(`${apiBaseUrl}/healthz`, { method: 'GET', mode: 'cors' }).catch(() => {
+        fetch(`${getApiBaseUrl()}/healthz`, { method: 'GET', mode: 'cors' }).catch(() => {
             // Silent warming attempt
         });
     }

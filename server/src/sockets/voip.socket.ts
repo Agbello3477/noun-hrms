@@ -28,8 +28,23 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       const ext = data?.extension;
       if (ext) {
         socket.join(`voip_ext_${ext}`);
-        console.log(`[VoIP Socket] User ${user.id} registered extension ${ext} on socket ${socket.id}`);
+        console.log(`[VoIP Socket] User ${user.id} (${user.name}) registered extension ${ext} on socket ${socket.id}`);
+        // Notify others or refresh status
+        io.emit('VOIP_EXTENSION_STATUS_CHANGED', { extension: ext, isOnline: true });
       }
+    });
+
+    // Check which extensions are currently online in real-time
+    socket.on('VOIP_GET_ONLINE_EXTENSIONS', (callback: (onlineExtensions: string[]) => void) => {
+      if (typeof callback !== 'function') return;
+      const onlineExts: string[] = [];
+      const rooms = io.sockets.adapter.rooms;
+      for (const [roomName, roomSet] of rooms.entries()) {
+        if (roomName.startsWith('voip_ext_') && roomSet.size > 0) {
+          onlineExts.push(roomName.replace('voip_ext_', ''));
+        }
+      }
+      callback(onlineExts);
     });
 
     // Initiate Call
@@ -64,6 +79,7 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       if (!targetRoom || targetRoom.size === 0) {
         return socket.emit('CALL_UNAVAILABLE', {
           targetExtension,
+          reason: 'OFFLINE',
           message: `Extension ${targetExtension} is currently offline or un-registered.`
         });
       }
