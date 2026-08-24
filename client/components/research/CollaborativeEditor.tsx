@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import api from '@/lib/api';
+import api, { getSocketUrl, getApiBaseUrl } from '@/lib/api';
 import { 
     Save, Loader2, CheckCircle2, AlertCircle, Bold, Italic, List, ListOrdered, 
     Heading2, Heading3, Quote, Undo, Redo, Edit3, BookOpen, Bookmark, 
@@ -61,6 +61,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const socketRef = useRef<Socket | null>(null);
+    const editorRef = useRef<any>(null);
     const [isOnline, setIsOnline] = useState(true);
 
     useEffect(() => {
@@ -83,8 +84,8 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
-        const socket = io(rawBaseUrl, {
+        const socketUrl = getSocketUrl();
+        const socket = io(socketUrl, {
             auth: { token },
             withCredentials: true,
             reconnectionAttempts: 10,
@@ -115,6 +116,15 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         socket.on('user-doc-saved', (data: { userId: string; userName: string; timestamp: string }) => {
             setLastContributor(data.userName);
             setLastSaved(data.timestamp);
+        });
+
+        // Real-Time Document Content / Template Update from Peers
+        socket.on('user-doc-updated', (data: { userId: string; userName: string; contentHtml: string; timestamp: string }) => {
+            if (data.contentHtml !== undefined && editorRef.current) {
+                editorRef.current.commands.setContent(data.contentHtml);
+                setLastContributor(data.userName);
+                setLastSaved(data.timestamp);
+            }
         });
 
         socketRef.current = socket;
@@ -183,6 +193,10 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
             }, 2500);
         },
     });
+
+    useEffect(() => {
+        editorRef.current = editor;
+    }, [editor]);
 
     useEffect(() => {
         if (!editor) return;
@@ -269,6 +283,13 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
 
         editor.commands.setContent(content);
         handleSave(content);
+        if (socketRef.current) {
+            socketRef.current.emit('doc-updated', {
+                projectId,
+                contentHtml: content,
+                userName: currentUserName || 'Collaborator'
+            });
+        }
         setShowTemplateModal(false);
     };
 
@@ -389,7 +410,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         setExporting(true);
         try {
             const token = localStorage.getItem('token');
-            const endpoint = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055'}/api/research/${projectId}/export?format=${format}&doubleSpaced=${doubleSpaced}`;
+            const endpoint = `${getApiBaseUrl()}/api/research/${projectId}/export?format=${format}&doubleSpaced=${doubleSpaced}`;
             
             const response = await fetch(endpoint, {
                 headers: {

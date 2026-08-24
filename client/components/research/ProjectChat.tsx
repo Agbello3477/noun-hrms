@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Send, User as UserIcon, Lock } from 'lucide-react';
+import { Send, User as UserIcon, Lock, Clock } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import { getSocketUrl } from '@/lib/api';
 
 interface Message {
     id: string;
@@ -11,7 +12,12 @@ interface Message {
     createdAt: string;
     sender: {
         name: string;
-        staffProfile?: { passportUrl: string };
+        staffProfile?: {
+            surname?: string;
+            otherNames?: string;
+            rank?: string;
+            passportUrl?: string;
+        };
     };
 }
 
@@ -37,15 +43,22 @@ export default function ProjectChat({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Keep messages synced when initialMessages prop updates
+    useEffect(() => {
+        if (initialMessages && initialMessages.length > 0) {
+            setMessages(initialMessages);
+        }
+    }, [initialMessages]);
+
     useEffect(() => {
         if (isSolo) return; // Skip socket listener if it is a solo project space
 
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5055';
+        const socketUrl = getSocketUrl();
         
-        const socket = io(rawBaseUrl, {
+        const socket = io(socketUrl, {
             auth: { token },
             withCredentials: true
         });
@@ -127,6 +140,31 @@ export default function ProjectChat({
         setInput('');
     };
 
+    const getSenderDisplayName = (msg: Message, isMe: boolean) => {
+        if (isMe) return 'You';
+        const profile = msg.sender?.staffProfile;
+        if (profile?.surname || profile?.otherNames) {
+            return `${profile.surname || ''} ${profile.otherNames || ''}`.trim() || msg.sender?.name || 'Collaborator';
+        }
+        return msg.sender?.name || 'Collaborator';
+    };
+
+    const getSenderRank = (msg: Message) => {
+        const profile = msg.sender?.staffProfile;
+        return profile?.rank ? `(${profile.rank})` : '';
+    };
+
+    const formatMessageTime = (dateStr: string) => {
+        if (!dateStr) return '';
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return '';
+        }
+    };
+
     const typingNames = Object.values(typingUsers);
 
     return (
@@ -169,6 +207,7 @@ export default function ProjectChat({
                 ) : (
                     messages.map((msg, idx) => {
                         const isMe = msg.senderId === currentUserId;
+                        const timeStr = formatMessageTime(msg.createdAt);
                         return (
                             <div key={msg.id || idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`flex max-w-[85%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -182,7 +221,21 @@ export default function ProjectChat({
                                         )}
                                     </div>
                                     <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                        <span className="text-[10px] text-gray-400 mb-1 font-bold">{isMe ? 'You' : (msg.sender?.name || 'Peer')}</span>
+                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                            <span className={`text-[11px] font-extrabold ${isMe ? 'text-emerald-800' : 'text-slate-800'}`}>
+                                                {getSenderDisplayName(msg, isMe)}
+                                            </span>
+                                            {!isMe && getSenderRank(msg) && (
+                                                <span className="text-[9px] text-slate-500 font-medium">
+                                                    {getSenderRank(msg)}
+                                                </span>
+                                            )}
+                                            {timeStr && (
+                                                <span className="text-[9px] text-slate-400 font-normal">
+                                                    • {timeStr}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div 
                                             style={isMe ? { backgroundColor: '#006533', color: '#ffffff' } : { backgroundColor: '#f1f5f9', color: '#0f172a' }}
                                             className={`p-3 rounded-2xl shadow-sm text-xs leading-relaxed border ${isMe ? 'border-emerald-800' : 'border-gray-200'}`}

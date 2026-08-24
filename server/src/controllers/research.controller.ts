@@ -134,8 +134,25 @@ export const getProjectDetails = async (req: Request, res: Response) => {
                     },
                     files: true,
                     messages: {
-                        take: 50,
-                        orderBy: { createdAt: 'asc' }
+                        take: 100,
+                        orderBy: { createdAt: 'asc' },
+                        include: {
+                            sender: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                    staffProfile: {
+                                        select: {
+                                            surname: true,
+                                            otherNames: true,
+                                            rank: true,
+                                            passportUrl: true
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             });

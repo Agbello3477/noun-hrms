@@ -73,6 +73,9 @@ export const setupChatSocket = (io: SocketIOServer) => {
                                 email: true,
                                 staffProfile: {
                                     select: {
+                                        surname: true,
+                                        otherNames: true,
+                                        rank: true,
                                         passportUrl: true
                                     }
                                 }
@@ -117,12 +120,24 @@ export const setupChatSocket = (io: SocketIOServer) => {
             });
         });
 
+        // Real-Time Document Saved Confirmation
         socket.on('doc-saved', (data: { projectId: string; userName?: string; timestamp?: string }) => {
             const senderName = data.userName || user.name || user.email || 'A collaborator';
             io.to(`project_${data.projectId}`).emit('user-doc-saved', {
                 userId: user.id,
                 userName: senderName,
                 timestamp: data.timestamp || new Date().toLocaleTimeString()
+            });
+        });
+
+        // Real-Time Document Content / Template Update (Broadcast to all peers)
+        socket.on('doc-updated', (data: { projectId: string; contentHtml: string; userName?: string }) => {
+            const senderName = data.userName || user.name || user.email || 'A collaborator';
+            socket.to(`project_${data.projectId}`).emit('user-doc-updated', {
+                userId: user.id,
+                userName: senderName,
+                contentHtml: data.contentHtml,
+                timestamp: new Date().toLocaleTimeString()
             });
         });
 
