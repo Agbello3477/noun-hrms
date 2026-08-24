@@ -23,11 +23,12 @@ async function main() {
 
     await prisma.staffProfile.upsert({
         where: { userId: adminUser.id },
-        update: {},
+        update: { voipExtension: '1001' },
         create: {
             userId: adminUser.id,
             department: Department.REGISTRY_MAIN,
-            level: 'Director'
+            level: 'Director',
+            voipExtension: '1001'
         }
     });
 
@@ -59,7 +60,8 @@ async function main() {
                 create: {
                     department: Department.REGISTRY_HR,
                     level: 'Senior Admin Officer',
-                    centerId: abujaCenter.id
+                    centerId: abujaCenter.id,
+                    voipExtension: '1002'
                 }
             }
         }
