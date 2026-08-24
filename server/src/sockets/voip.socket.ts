@@ -85,8 +85,16 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         const session = activeCalls.get(callId);
         if (session && session.status === 'INITIATED') {
           session.status = 'ENDED';
+          // Notify caller of timeout
           io.to(`voip_user_${user.id}`).emit('CALL_TIMEOUT', { callId, message: 'No answer from target extension after 10 seconds.' });
-          io.to(`voip_ext_${targetExtension}`).emit('CALL_TIMEOUT', { callId });
+          // Notify callee of a missed call so they can display notification
+          io.to(`voip_ext_${targetExtension}`).emit('CALL_MISSED', {
+            callId,
+            callerExtension: callerExt,
+            callerName: displayName,
+            callerRank: callerRank || callerProfile?.rank || 'Staff',
+            missedAt: new Date().toISOString()
+          });
           activeCalls.delete(callId);
           userActiveCall.delete(user.id);
         }

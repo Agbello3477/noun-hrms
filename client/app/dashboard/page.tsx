@@ -50,6 +50,43 @@ const EmergencyContacts = ({ hotlines, className }: { hotlines?: any; className?
     );
 };
 
+// ─── Shared Helper: Map raw API responses to timeline activity format ──────────
+// This prevents the identical mapping logic from being duplicated across
+// fetchRegistryDashboardData() and handleVCSendMemo() refresh blocks.
+function mapActivitiesToTimeline(memos: any[], transfers: any[], queries: any[]) {
+    const mappedMemos = memos.map((m: any) => {
+        const isDirect = !!m.recipient;
+        return {
+            id: `memo-${m.id}`,
+            type: 'MEMO',
+            title: isDirect ? `Direct Memo Sent to ${m.recipient.name}` : 'Memo Broadcast Sent',
+            description: isDirect
+                ? `Direct memo: "${m.title}" sent to ${m.recipient.name} (${m.recipient.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
+                : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
+            createdAt: m.createdAt,
+            color: isDirect ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' : 'border-primary bg-primary/10 text-primary-dark'
+        };
+    });
+    const mappedTransfers = transfers.map((t: any) => ({
+        id: `transfer-${t.id}`,
+        type: 'TRANSFER',
+        title: 'Staff Transfer Approved',
+        description: `${t.staff?.name || 'Staff member'} transferred to ${t.newCenterId || 'Headquarters'}`,
+        createdAt: t.createdAt,
+        color: 'border-orange-500 bg-orange-50/40 text-orange-700'
+    }));
+    const mappedQueries = queries.map((q: any) => ({
+        id: `query-${q.id}`,
+        type: 'QUERY',
+        title: 'Disciplinary Query Issued',
+        description: `Query "${q.title}" issued to ${q.staff?.user?.name || 'Staff member'}`,
+        createdAt: q.createdAt,
+        color: 'border-blue-500 bg-blue-50/40 text-blue-700'
+    }));
+    return [...mappedMemos, ...mappedTransfers, ...mappedQueries]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
 export default function DashboardHome() {
     const { user, isLoading } = useAuth();
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -124,9 +161,17 @@ export default function DashboardHome() {
 
     useEffect(() => {
         if (user?.staffProfile?.signatureUrl) {
-            setCurrentSigUrl(user.staffProfile.signatureUrl);
+            // Auth context includes signatureUrl — use it directly
+            setCurrentSigUrl(getImageUrl(user.staffProfile.signatureUrl));
+        } else if (isVC && user) {
+            // Fallback: fetch fresh profile if signatureUrl missing from auth context
+            api.get('/api/auth/me').then(({ data }) => {
+                if (data?.staffProfile?.signatureUrl) {
+                    setCurrentSigUrl(getImageUrl(data.staffProfile.signatureUrl));
+                }
+            }).catch(() => {});
         }
-    }, [user]);
+    }, [user, isVC]);
 
     useEffect(() => {
         const fetchAllStaff = async () => {
@@ -159,7 +204,7 @@ export default function DashboardHome() {
             const { data } = await api.post('/api/staff/signature', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            setCurrentSigUrl(data.signatureUrl);
+            setCurrentSigUrl(getImageUrl(data.signatureUrl));
             setSigSuccess('Signature uploaded successfully!');
         } catch (error: any) {
             console.error('Failed to upload signature', error);
@@ -204,47 +249,13 @@ export default function DashboardHome() {
             setMemoContent('');
             setSelectedRecipients([]);
             setMemoAttachment(null);
-            // Refresh memos timeline
-            const [memosRes, transfersRes, queriesRes, analyticsRes] = await Promise.all([
+            // Refresh memos timeline using shared helper (avoids code duplication)
+            const [memosRes, transfersRes, queriesRes] = await Promise.all([
                 api.get('/api/memos').catch(() => ({ data: [] })),
                 api.get('/api/registry/transfers').catch(() => ({ data: [] })),
                 api.get('/api/queries').catch(() => ({ data: [] })),
-                api.get('/api/analytics/dashboard').catch(() => ({ data: null }))
             ]);
-            const fetchedMemos = (memosRes.data || []).map((m: any) => {
-                const isDirect = !!m.recipient;
-                return {
-                    id: `memo-${m.id}`,
-                    type: 'MEMO',
-                    title: isDirect ? `Direct Memo Sent to ${m.recipient.name}` : 'Memo Broadcast Sent',
-                    description: isDirect 
-                        ? `Direct memo: "${m.title}" sent to ${m.recipient.name} (${m.recipient.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
-                        : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
-                    createdAt: m.createdAt,
-                    color: isDirect 
-                        ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
-                        : 'border-primary bg-primary/10 text-primary-dark'
-                };
-            });
-            const fetchedTransfers = (transfersRes.data || []).map((t: any) => ({
-                id: `transfer-${t.id}`,
-                type: 'TRANSFER',
-                title: 'Staff Transfer Approved',
-                description: `${t.staff?.name || 'Staff member'} transferred to ${t.newCenterId || 'Headquarters'}`,
-                createdAt: t.createdAt,
-                color: 'border-orange-500 bg-orange-50/40 text-orange-700'
-            }));
-            const fetchedQueries = (queriesRes.data || []).map((q: any) => ({
-                id: `query-${q.id}`,
-                type: 'QUERY',
-                title: 'Disciplinary Query Issued',
-                description: `Query "${q.title}" issued to ${q.staff?.user?.name || 'Staff member'}`,
-                createdAt: q.createdAt,
-                color: 'border-blue-500 bg-blue-50/40 text-blue-700'
-            }));
-            const combined = [...fetchedMemos, ...fetchedTransfers, ...fetchedQueries]
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setActivities(combined);
+            setActivities(mapActivitiesToTimeline(memosRes.data || [], transfersRes.data || [], queriesRes.data || []));
         } catch (error: any) {
             console.error('Failed to send memo', error);
             setMemoError(error.response?.data?.message || 'Failed to send memo. Please check inputs.');
@@ -318,44 +329,8 @@ export default function DashboardHome() {
                     api.get('/api/analytics/dashboard').catch(() => ({ data: null }))
                 ]);
 
-                const fetchedMemos = (memosRes.data || []).map((m: any) => {
-                    const isDirect = !!m.recipient;
-                    return {
-                        id: `memo-${m.id}`,
-                        type: 'MEMO',
-                        title: isDirect ? `Direct Memo Sent to ${m.recipient.name}` : 'Memo Broadcast Sent',
-                        description: isDirect 
-                            ? `Direct memo: "${m.title}" sent to ${m.recipient.name} (${m.recipient.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
-                            : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
-                        createdAt: m.createdAt,
-                        color: isDirect 
-                            ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' 
-                            : 'border-primary bg-primary/10 text-primary-dark'
-                    };
-                });
-
-                const fetchedTransfers = (transfersRes.data || []).map((t: any) => ({
-                    id: `transfer-${t.id}`,
-                    type: 'TRANSFER',
-                    title: 'Staff Transfer Approved',
-                    description: `${t.staff?.name || 'Staff member'} transferred to ${t.newCenterId || 'Headquarters'}`,
-                    createdAt: t.createdAt,
-                    color: 'border-orange-500 bg-orange-50/40 text-orange-700'
-                }));
-
-                const fetchedQueries = (queriesRes.data || []).map((q: any) => ({
-                    id: `query-${q.id}`,
-                    type: 'QUERY',
-                    title: 'Disciplinary Query Issued',
-                    description: `Query "${q.title}" issued to ${q.staff?.user?.name || 'Staff member'}`,
-                    createdAt: q.createdAt,
-                    color: 'border-blue-500 bg-blue-50/40 text-blue-700'
-                }));
-
-                // Combine and sort by date desc, showing all activities in a thread
-                const combined = [...fetchedMemos, ...fetchedTransfers, ...fetchedQueries]
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
+                // Map all responses using shared helper (eliminates 40 lines of duplicate code)
+                const combined = mapActivitiesToTimeline(memosRes.data || [], transfersRes.data || [], queriesRes.data || []);
                 setActivities(combined);
 
                 const pendingActions = (transfersRes.data || []).length + (queriesRes.data || []).filter((q: any) => q.status === 'PENDING').length;
@@ -577,9 +552,17 @@ export default function DashboardHome() {
 
                         {/* Signature Preview Panel */}
                         <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center min-h-[160px] bg-slate-50/50">
-                            {currentSigUrl ? (
+                        {currentSigUrl ? (
                                 <div className="text-center space-y-3">
-                                    <img src={getImageUrl(currentSigUrl)} alt="VC Signature" className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm" />
+                                    <img 
+                                        src={currentSigUrl} 
+                                        alt="VC Signature" 
+                                        className="max-h-[90px] object-contain border bg-white rounded p-1 mx-auto shadow-sm"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                            setCurrentSigUrl('');
+                                        }}
+                                    />
                                     <span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">Active Signature</span>
                                 </div>
                             ) : (

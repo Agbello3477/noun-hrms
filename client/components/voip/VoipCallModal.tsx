@@ -26,9 +26,18 @@ interface VoipCallModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialExtension?: string;
+  onMissedCallCountChange?: (count: number) => void;
 }
 
-export default function VoipCallModal({ isOpen, onClose, initialExtension }: VoipCallModalProps) {
+interface MissedCall {
+  callId: string;
+  callerExtension: string;
+  callerName: string;
+  callerRank: string;
+  missedAt: string;
+}
+
+export default function VoipCallModal({ isOpen, onClose, initialExtension, onMissedCallCountChange }: VoipCallModalProps) {
   const { user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
 
@@ -38,7 +47,7 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
   const [directory, setDirectory] = useState<VoipUser[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'keypad' | 'directory' | 'ptt'>('keypad');
+  const [activeTab, setActiveTab] = useState<'keypad' | 'directory' | 'ptt' | 'missed'>('keypad');
 
   // Active Call States
   const [callState, setCallState] = useState<'IDLE' | 'INITIATING' | 'RINGING' | 'INCOMING' | 'CONNECTED' | 'REJECTED' | 'ENDED'>('IDLE');
@@ -55,11 +64,22 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
   const [isPttTalking, setIsPttTalking] = useState<boolean>(false);
   const [activePttSpeaker, setActivePttSpeaker] = useState<string | null>(null);
 
+  // Missed Call State
+  const [missedCalls, setMissedCalls] = useState<MissedCall[]>([]);
+  const [newMissedCount, setNewMissedCount] = useState<number>(0);
+
   // References
   const peerManagerRef = useRef<VoipPeerManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const incomingOfferSdpRef = useRef<any>(null);
+  // Always-current extension ref for use inside socket connect callbacks
+  const myExtensionRef = useRef<string>('');
+
+  // Propagate missed call count to parent (for Header badge)
+  useEffect(() => {
+    onMissedCallCountChange?.(newMissedCount);
+  }, [newMissedCount, onMissedCallCountChange]);
 
   // Initialize Socket.io connection for VoIP Signaling
   useEffect(() => {
@@ -73,8 +93,14 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
       transports: ['websocket', 'polling']
     });
 
+    // KEY FIX: Re-register extension on every connect/reconnect so the
+    // server extension room is always populated, even after network drops.
     socketInstance.on('connect', () => {
       console.log('[VoIP UI] Signaling socket connected');
+      if (myExtensionRef.current) {
+        socketInstance.emit('VOIP_REGISTER_EXTENSION', { extension: myExtensionRef.current });
+        console.log(`[VoIP UI] Re-registered extension ${myExtensionRef.current} after (re)connect`);
+      }
     });
 
     setSocket(socketInstance);
@@ -94,9 +120,12 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
       // Find logged in user's profile extension
       const myProfile = (data || []).find((p: VoipUser) => p.userId === user?.id);
       if (myProfile?.extension) {
+        myExtensionRef.current = myProfile.extension;
         setUserExtension(myProfile.extension);
-        if (socket) {
+        // Register immediately if socket is already connected
+        if (socket?.connected) {
           socket.emit('VOIP_REGISTER_EXTENSION', { extension: myProfile.extension });
+          console.log(`[VoIP UI] Registered extension ${myProfile.extension} after directory fetch`);
         }
       }
     } catch (err) {
@@ -214,6 +243,28 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
       setActivePttSpeaker(null);
     });
 
+    // Missed Call — fires when an incoming call was not answered before 10s timeout
+    socket.on('CALL_MISSED', (data: { callId: string; callerExtension: string; callerName: string; callerRank: string; missedAt: string }) => {
+      const missed: MissedCall = {
+        callId: data.callId,
+        callerExtension: data.callerExtension,
+        callerName: data.callerName,
+        callerRank: data.callerRank,
+        missedAt: data.missedAt
+      };
+      setMissedCalls(prev => [missed, ...prev]);
+      setNewMissedCount(prev => prev + 1);
+
+      // Trigger browser desktop notification
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(`📞 Missed Call — Ext ${data.callerExtension}`, {
+          body: `${data.callerName} (${data.callerRank}) tried to reach you`,
+          icon: '/noun_logo.png',
+          tag: `voip-missed-${data.callId}`
+        });
+      }
+    });
+
     return () => {
       socket.off('INCOMING_CALL');
       socket.off('CALL_RINGING');
@@ -224,6 +275,7 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
       socket.off('ICE_CANDIDATE');
       socket.off('SECURITY_PTT_TALK_START');
       socket.off('SECURITY_PTT_TALK_STOP');
+      socket.off('CALL_MISSED');
     };
   }, [socket]);
 
@@ -523,6 +575,17 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
                       <Radio size={14} className="text-red-500" /> Security PTT
                     </button>
                   )}
+                  <button
+                    onClick={() => { setActiveTab('missed'); setNewMissedCount(0); }}
+                    className={`flex-1 py-2 rounded-lg transition flex items-center justify-center gap-1.5 relative ${activeTab === 'missed' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    Missed
+                    {newMissedCount > 0 && (
+                      <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-1 ring-white">
+                        {newMissedCount > 9 ? '9+' : newMissedCount}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* TAB 1: Keypad Dialer */}
@@ -658,6 +721,54 @@ export default function VoipCallModal({ isOpen, onClose, initialExtension }: Voi
                     >
                       {isPttTalking ? 'TRANSMITTING...' : 'HOLD TO TALK'}
                     </button>
+                  </div>
+                )}
+
+                {/* TAB 4: Missed Calls Log */}
+                {activeTab === 'missed' && (
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Missed Calls</h4>
+                      {missedCalls.length > 0 && (
+                        <button
+                          onClick={() => setMissedCalls([])}
+                          className="text-[10px] text-slate-400 hover:text-red-500 font-medium transition"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                      {missedCalls.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                          <PhoneOff size={32} className="mb-3 text-slate-300" />
+                          <p className="text-xs font-medium">No missed calls</p>
+                        </div>
+                      ) : (
+                        missedCalls.map((mc) => (
+                          <div key={mc.callId} className="flex items-center justify-between p-3 rounded-xl border border-red-100 bg-red-50/50">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-8 w-8 rounded-full bg-red-100 border border-red-200 flex items-center justify-center shrink-0">
+                                <PhoneOff size={14} className="text-red-500" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{mc.callerName}</p>
+                                <p className="text-[10px] text-slate-500">Ext: <span className="font-extrabold text-slate-700">{mc.callerExtension}</span> · {mc.callerRank}</p>
+                                <p className="text-[9px] text-red-400 font-medium mt-0.5">
+                                  {new Date(mc.missedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleInitiateCall(mc.callerExtension)}
+                              className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition shrink-0"
+                            >
+                              <Phone size={11} /> Call Back
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
 

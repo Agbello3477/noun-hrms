@@ -16,6 +16,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
     const [isOpen, setIsOpen] = useState(false);
     const [showPersistentModal, setShowPersistentModal] = useState(false);
     const [isVoipModalOpen, setIsVoipModalOpen] = useState(false);
+    const [missedCallCount, setMissedCallCount] = useState(0);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const notifiedIdsRef = useRef<Set<string>>(new Set());
 
@@ -70,10 +71,10 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
 
     useEffect(() => {
         if (user) fetchNotifications();
-        // Poll every 60s
+        // Poll every 60s — NOT tied to pathname to avoid re-fetching on every route change
         const interval = setInterval(fetchNotifications, 60000);
         return () => clearInterval(interval);
-    }, [user, pathname]); // Re-fetch on navigation too
+    }, [user]); // Removed pathname — prevents extra API call on every navigation
 
     // Synchronize persistent modal trigger with unreadCount
     useEffect(() => {
@@ -148,19 +149,26 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
 
                 {/* VoIP Internal Intercom Phone Button */}
                 <button
-                    onClick={() => setIsVoipModalOpen(true)}
+                    onClick={() => { setIsVoipModalOpen(true); setMissedCallCount(0); }}
                     className="relative p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 transition-colors shadow-sm flex items-center justify-center"
                     title="Open VoIP Extension Intercom"
                 >
                     <Phone size={18} className="text-emerald-700" />
-                    <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-bold text-white ring-1 ring-white">
-                        ✓
-                    </span>
+                    {missedCallCount > 0 ? (
+                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-1 ring-white animate-pulse">
+                            {missedCallCount > 9 ? '9+' : missedCallCount}
+                        </span>
+                    ) : (
+                        <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-bold text-white ring-1 ring-white">
+                            ✓
+                        </span>
+                    )}
                 </button>
 
                 <VoipCallModal
                     isOpen={isVoipModalOpen}
                     onClose={() => setIsVoipModalOpen(false)}
+                    onMissedCallCountChange={setMissedCallCount}
                 />
 
                 {/* Notification Bell */}
