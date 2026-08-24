@@ -319,6 +319,36 @@ export default function SecurityDashboard() {
         )}
       </div>
 
+      {/* Security VoIP Walkie-Talkie Intercom Quick Dispatch Bar */}
+      {['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole) && (
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-red-600/20 border border-red-500/40 text-red-400 flex items-center justify-center font-bold shadow-sm">
+              <Shield size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                Security Dispatch Walkie-Talkie PTT Intercom
+                <span className="bg-red-500/20 text-red-400 text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md border border-red-500/30">Ext 2001 (HQ Dispatch)</span>
+              </h3>
+              <p className="text-xs text-slate-400">Direct peer-to-peer WebRTC Opus voice channels (<span className="text-emerald-400 font-semibold">&lt;40 kbps</span>)</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const event = new CustomEvent('open-voip-modal', { detail: { extension: '2001' } });
+                window.dispatchEvent(event);
+              }}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition"
+            >
+              📞 Call Security Dispatch (2001)
+            </button>
+          </div>
+        </div>
+      )}
+
       {msg.text && (
         <div className={`p-4 rounded-xl border text-sm font-semibold ${
           msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'

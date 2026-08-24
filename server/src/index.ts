@@ -112,6 +112,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/aper', aperRoutes);
 app.use('/api/memos', memoRoutes);
 app.use('/api/system', systemRoutes);
+import voipRoutes from './routes/voip.routes';
+import { setupVoipSocket } from './sockets/voip.socket';
+
 app.use('/api/clinic', clinicRoutes);
 app.use('/api/security/gear', gearRoutes);
 app.use('/api/security', securityRoutes);
@@ -119,6 +122,7 @@ app.use('/api/vouchers', voucherRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/observability', observabilityRoutes);
+app.use('/api/voip', voipRoutes);
 
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
@@ -181,7 +185,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Create HTTP Server
 const server = http.createServer(app);
 
-// Setup Socket.io for Chat
+// Setup Socket.io for Chat & VoIP Signaling
 const io = new SocketIOServer(server, {
     cors: {
         origin: process.env.CLIENT_URL || 'http://localhost:3000',
@@ -189,6 +193,7 @@ const io = new SocketIOServer(server, {
     }
 });
 setupChatSocket(io);
+setupVoipSocket(io);
 
 // Setup WebSockets for Yjs Document Collaboration
 const wss = new WebSocketServer({ noServer: true });

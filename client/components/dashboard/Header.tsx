@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, ChevronRight } from 'lucide-react';
+import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, ChevronRight, Phone } from 'lucide-react';
 import api from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import VoipCallModal from '../voip/VoipCallModal';
 
 export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }) {
     const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const [showPersistentModal, setShowPersistentModal] = useState(false);
+    const [isVoipModalOpen, setIsVoipModalOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const notifiedIdsRef = useRef<Set<string>>(new Set());
 
@@ -143,6 +145,23 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                     <span className="text-red-300 text-[10px]">|</span>
                     <a href="tel:+2348037654321" className="hover:underline text-red-700 font-extrabold text-[11px] md:text-xs">Security (+234 803 765 4321)</a>
                 </div>
+
+                {/* VoIP Internal Intercom Phone Button */}
+                <button
+                    onClick={() => setIsVoipModalOpen(true)}
+                    className="relative p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 transition-colors shadow-sm flex items-center justify-center"
+                    title="Open VoIP Extension Intercom"
+                >
+                    <Phone size={18} className="text-emerald-700" />
+                    <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-bold text-white ring-1 ring-white">
+                        ✓
+                    </span>
+                </button>
+
+                <VoipCallModal
+                    isOpen={isVoipModalOpen}
+                    onClose={() => setIsVoipModalOpen(false)}
+                />
 
                 {/* Notification Bell */}
                 <div className="relative" ref={dropdownRef}>

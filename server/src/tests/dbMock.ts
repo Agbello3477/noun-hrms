@@ -176,6 +176,33 @@ export const enableDbMock = async () => {
             };
         };
 
+        (prisma.staffProfile as any).findFirst = async (args: any) => {
+            const ext = args?.where?.voipExtension;
+            const p = staffProfiles.find(p => p.voipExtension === ext || (ext && p.voipExtension?.includes(ext)));
+            const userObj = p ? users.find(u => u.id === p.userId) : null;
+            const fallbackUser = { id: mockUserId, name: 'Capt. VoIP Test', email: 'voip_tester_1001@noun.edu.ng', role: 'SUPER_USER', isActive: true };
+            if (!p) {
+                if (ext === '1001') {
+                    return {
+                        id: mockProfileId,
+                        userId: mockUserId,
+                        surname: 'Test',
+                        otherNames: 'VoIP',
+                        rank: 'Director',
+                        voipExtension: '1001',
+                        status: 'ACTIVE',
+                        isDeleted: false,
+                        user: fallbackUser
+                    };
+                }
+                return null;
+            }
+            return {
+                ...p,
+                user: userObj || fallbackUser
+            };
+        };
+
         (prisma.staffProfile as any).findMany = async (args: any) => {
             if (staffProfiles.length === 0) {
                 return [

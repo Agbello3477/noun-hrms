@@ -365,6 +365,61 @@ export default function ClinicDashboard() {
         )}
       </div>
 
+      {/* Clinic Intercom VoIP Quick-Dial Bar */}
+      <div className="bg-emerald-900 text-white rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl border border-emerald-800">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 flex items-center justify-center font-bold">
+            <Heart size={20} className="text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              Clinic Direct Intercom Extensions
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md border border-emerald-400/30">Opus P2P VoIP</span>
+            </h3>
+            <p className="text-xs text-emerald-200/80">One-click internal extension dials between triage, doctor, lab, and pharmacy consoles</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              const event = new CustomEvent('open-voip-modal', { detail: { extension: '3001' } });
+              window.dispatchEvent(event);
+            }}
+            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-700 transition"
+          >
+            📞 Nurse Triage (3001)
+          </button>
+          <button
+            onClick={() => {
+              const event = new CustomEvent('open-voip-modal', { detail: { extension: '3002' } });
+              window.dispatchEvent(event);
+            }}
+            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-700 transition"
+          >
+            📞 Doctor Console (3002)
+          </button>
+          <button
+            onClick={() => {
+              const event = new CustomEvent('open-voip-modal', { detail: { extension: '3003' } });
+              window.dispatchEvent(event);
+            }}
+            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-700 transition"
+          >
+            📞 Laboratory (3003)
+          </button>
+          <button
+            onClick={() => {
+              const event = new CustomEvent('open-voip-modal', { detail: { extension: '3004' } });
+              window.dispatchEvent(event);
+            }}
+            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-700 transition"
+          >
+            📞 Pharmacy (3004)
+          </button>
+        </div>
+      </div>
+
       {msg.text && (
         <div className={`p-4 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
           msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'

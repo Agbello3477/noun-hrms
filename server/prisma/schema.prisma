@@ -182,6 +182,7 @@ model StaffProfile {
   
   gender      String?
   phone       String?
+  voipExtension String? @unique // 4-digit internal VoIP extension (e.g., "1001")
   emailPersonal String? // Official email is in User model
   
   stateOfOrigin String?
