@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build": "prisma db push --accept-data-loss && prisma generate && tsc",
+    "build": "prisma generate && tsc",
     "db:push": "prisma db push --accept-data-loss",
-    "start": "node dist/index.js",
+    "start": "prisma db push --accept-data-loss && node dist/index.js",
     "seed": "ts-node --transpile-only prisma/seed.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "ts-node --transpile-only -r dotenv/config src/tests/payroll.test.ts && ts-node --transpile-only -r dotenv/config src/tests/retirement.test.ts && ts-node --transpile-only -r dotenv/config src/tests/fcm.test.ts && ts-node --transpile-only -r dotenv/config src/tests/bursary.test.ts && ts-node --transpile-only -r dotenv/config src/tests/inventory.test.ts && ts-node --transpile-only -r dotenv/config src/tests/compliance.test.ts && ts-node --transpile-only -r dotenv/config src/tests/export.test.ts && ts-node --transpile-only -r dotenv/config src/tests/aper.test.ts && ts-node --transpile-only -r dotenv/config src/tests/leaveResumption.test.ts && ts-node --transpile-only -r dotenv/config src/tests/voip.test.ts"
