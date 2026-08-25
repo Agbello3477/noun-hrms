@@ -51,8 +51,6 @@ export default function ProjectChat({
     }, [initialMessages]);
 
     useEffect(() => {
-        if (isSolo) return; // Skip socket listener if it is a solo project space
-
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -100,7 +98,7 @@ export default function ProjectChat({
         return () => {
             socket.disconnect();
         };
-    }, [projectId, currentUserId, isSolo]);
+    }, [projectId, currentUserId]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -269,18 +267,16 @@ export default function ProjectChat({
             <form onSubmit={handleSend} className="p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0 mt-auto flex gap-2">
                 <input
                     type="text"
-                    disabled={isSolo}
                     value={input}
                     onChange={handleInputChange}
-                    placeholder={isSolo ? "Chat locked (Solo Space)" : "Type a message..."}
-                    className="flex-grow p-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 text-gray-900 disabled:bg-gray-100 disabled:text-gray-400"
+                    placeholder="Type a message to collaborators..."
+                    className="flex-grow p-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 text-gray-900"
                 />
                 <button
                     type="submit"
-                    disabled={isSolo}
                     style={{ backgroundColor: '#006533', color: '#ffffff' }}
                     className="p-2.5 text-white rounded-xl hover:opacity-90 transition shadow-sm flex items-center justify-center disabled:opacity-50"
-                    title={isSolo ? "Chat locked" : "Send Message"}
+                    title="Send Message"
                 >
                     <Send size={15} />
                 </button>

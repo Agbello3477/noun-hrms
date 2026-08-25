@@ -79,8 +79,6 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
 
     // Socket.io Connection for Document Collaboration Events
     useEffect(() => {
-        if (isSolo) return; // Skip socket connection for solo space
-
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -132,7 +130,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
         return () => {
             socket.disconnect();
         };
-    }, [projectId, currentUserId, isSolo]);
+    }, [projectId, currentUserId]);
 
     const handleDocTyping = useCallback(() => {
         if (!socketRef.current) return;
@@ -151,8 +149,9 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
     }, [projectId, currentUserName]);
 
     const handleSave = useCallback(async (html?: string) => {
-        if (!editor) return;
-        const contentHtml = html ?? editor.getHTML();
+        const contentHtml = html ?? editorRef.current?.getHTML() ?? '';
+        if (!contentHtml && !html && !editorRef.current) return;
+
         setSaveStatus('saving');
         try {
             const res = await api.put(`/api/research/${projectId}/document`, { contentHtml });
@@ -165,6 +164,11 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
                     projectId,
                     userName: currentUserName || 'Collaborator',
                     timestamp: savedTime
+                });
+                socketRef.current.emit('doc-updated', {
+                    projectId,
+                    contentHtml,
+                    userName: currentUserName || 'Collaborator'
                 });
             }
 
@@ -222,10 +226,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
     }, [editor, projectId]);
 
     // Template Selection Handler
-    const handleTemplateSelect = (templateId: string) => {
-        if (!editor) return;
-        if (!confirm("Are you sure you want to load this template? It will replace the current document content.")) return;
-
+    const handleTemplateSelect = async (templateId: string) => {
         let content = '';
         if (templateId === 'journal') {
             content = `
@@ -281,16 +282,14 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
             `;
         }
 
-        editor.commands.setContent(content);
-        handleSave(content);
-        if (socketRef.current) {
-            socketRef.current.emit('doc-updated', {
-                projectId,
-                contentHtml: content,
-                userName: currentUserName || 'Collaborator'
-            });
+        if (editorRef.current) {
+            editorRef.current.commands.setContent(content);
+        } else if (editor) {
+            editor.commands.setContent(content);
         }
+
         setShowTemplateModal(false);
+        await handleSave(content);
     };
 
     // BibTeX Metadata Parser

@@ -499,7 +499,10 @@ export const saveDocument = async (req: Request, res: Response) => {
         const { id } = req.params;
         const { contentHtml } = req.body;
         const user = (req as any).user;
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId: user.id } });
+
+        if (!user || !user.id) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
 
         const project = await prisma.researchProject.findUnique({
             where: { id },
@@ -507,10 +510,27 @@ export const saveDocument = async (req: Request, res: Response) => {
         });
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        if (user.role !== 'SUPER_USER' && user.role !== 'VICE_CHANCELLOR' && staffProfile) {
-            const member = project.members.find(m => m.staffId === staffProfile.id);
-            if (!member) return res.status(403).json({ message: 'Forbidden' });
-            if (member.role === 'VIEWER') return res.status(403).json({ message: 'Viewers cannot edit the document' });
+        const staffProfile = await prisma.staffProfile.findFirst({
+            where: { OR: [{ userId: user.id }, { id: user.id }] }
+        });
+
+        const isGlobalAdmin = ['SUPER_USER', 'VICE_CHANCELLOR', 'DEPUTY_VICE_CHANCELLOR', 'ADMIN', 'HR_ADMIN', 'HQ_ADMIN', 'REGISTRY_HEAD'].includes(user.role);
+
+        if (!isGlobalAdmin) {
+            const isOwner = staffProfile && project.ownerId === staffProfile.id;
+            const member = staffProfile && project.members.find(m => m.staffId === staffProfile.id);
+
+            // Allow if owner, member (non-viewer), or academic staff in workspace
+            if (!isOwner && !member && !project.members.some(m => staffProfile && m.staffId === staffProfile.id)) {
+                // If project has no members list yet, allow owner
+                if (!isOwner) {
+                    return res.status(403).json({ message: 'Forbidden. You are not a collaborator on this document.' });
+                }
+            }
+
+            if (member && member.role === 'VIEWER') {
+                return res.status(403).json({ message: 'Viewers cannot edit the document' });
+            }
         }
 
         // Find existing doc or prepare to create
@@ -526,9 +546,9 @@ export const saveDocument = async (req: Request, res: Response) => {
             });
 
         res.json({ message: 'Saved', updatedAt: doc.updatedAt });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error' });
+    } catch (err: any) {
+        console.error('Error saving project document:', err);
+        res.status(500).json({ message: err?.message || 'Internal server error' });
     }
 };
 
