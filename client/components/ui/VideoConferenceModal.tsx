@@ -34,6 +34,7 @@ export default function VideoConferenceModal({
     const [isAudioMuted, setIsAudioMuted] = useState(false);
     const [isVideoMuted, setIsVideoMuted] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [useDirectIframe, setUseDirectIframe] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
@@ -46,17 +47,18 @@ export default function VideoConferenceModal({
                 apiRef.current = null;
             }
             setIsLoaded(false);
+            setUseDirectIframe(false);
             return;
         }
 
         const sanitizeRoomName = `noun-hrms-${roomName.replace(/[^a-zA-Z0-9-_]/g, '')}`;
+        let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
         const initJitsi = () => {
             if (!containerRef.current || apiRef.current) return;
 
             try {
-                // Use open Jitsi instance that doesn't require moderator login or 8x8 account
-                const domain = 'meet.ffrn.de';
+                const domain = 'jitsi.riot.im';
                 const options = {
                     roomName: sanitizeRoomName,
                     width: '100%',
@@ -102,22 +104,39 @@ export default function VideoConferenceModal({
                     }
                 });
             } catch (err) {
-                console.error('Failed to initialize Jitsi Meet API:', err);
+                console.error('Failed to initialize Jitsi Meet API, falling back to direct stream:', err);
+                setUseDirectIframe(true);
+                setIsLoaded(true);
             }
         };
 
-        // Load Jitsi script if not present
-        if (!window.JitsiMeetExternalAPI) {
+        // If external API takes more than 2.5s, activate direct embedded stream
+        fallbackTimer = setTimeout(() => {
+            if (!apiRef.current) {
+                setUseDirectIframe(true);
+                setIsLoaded(true);
+            }
+        }, 2500);
+
+        // Load Jitsi script only once using element ID
+        const existingScript = document.getElementById('jitsi-external-api-script');
+        if (!window.JitsiMeetExternalAPI && !existingScript) {
             const script = document.createElement('script');
-            script.src = 'https://meet.ffrn.de/external_api.js';
+            script.id = 'jitsi-external-api-script';
+            script.src = 'https://jitsi.riot.im/external_api.js';
             script.async = true;
             script.onload = () => initJitsi();
-            document.body.appendChild(script);
-        } else {
+            script.onerror = () => {
+                setUseDirectIframe(true);
+                setIsLoaded(true);
+            };
+            document.head.appendChild(script);
+        } else if (window.JitsiMeetExternalAPI) {
             initJitsi();
         }
 
         return () => {
+            if (fallbackTimer) clearTimeout(fallbackTimer);
             if (apiRef.current) {
                 try {
                     apiRef.current.dispose();
@@ -214,7 +233,16 @@ export default function VideoConferenceModal({
                             <p className="text-sm font-semibold text-emerald-400">Initializing Secure WebRTC Video Stream...</p>
                         </div>
                     )}
-                    <div ref={containerRef} className="w-full h-full" />
+                    {useDirectIframe ? (
+                        <iframe
+                            src={`https://jitsi.riot.im/noun-hrms-${roomName.replace(/[^a-zA-Z0-9-_]/g, '')}#config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&userInfo.displayName=${encodeURIComponent(userName || 'NOUN User')}`}
+                            allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                            className="w-full h-full border-0"
+                            onLoad={() => setIsLoaded(true)}
+                        />
+                    ) : (
+                        <div ref={containerRef} className="w-full h-full" />
+                    )}
                 </div>
 
                 {/* Quick Floating Controls Bar */}
