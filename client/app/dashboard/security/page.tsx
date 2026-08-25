@@ -239,8 +239,11 @@ export default function SecurityDashboard() {
     }
   };
 
+  const [isSubmittingIncident, setIsSubmittingIncident] = useState(false);
+
   const handleReportIncident = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmittingIncident(true);
     try {
       await api.post('/api/security/incidents', newIncident);
       setMsg({ type: 'success', text: 'Incident reported successfully. Security Head notified.' });
@@ -248,8 +251,11 @@ export default function SecurityDashboard() {
       if (['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole)) {
         fetchIncidents();
       }
-    } catch (err) {
-      setMsg({ type: 'error', text: 'Failed to submit incident report' });
+    } catch (err: any) {
+      console.error('Incident report submission error:', err);
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to submit incident report' });
+    } finally {
+      setIsSubmittingIncident(false);
     }
   };
 
@@ -756,9 +762,11 @@ export default function SecurityDashboard() {
 
               <button
                 type="submit"
-                className="w-full bg-nounGreen text-white font-bold text-sm py-2.5 rounded-lg shadow-sm"
+                disabled={isSubmittingIncident}
+                style={{ backgroundColor: '#006533', color: '#ffffff' }}
+                className="w-full text-white font-bold text-sm py-2.5 rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50 transition"
               >
-                Transmit Incident Report
+                {isSubmittingIncident ? 'Transmitting Incident Report...' : 'Transmit Incident Report'}
               </button>
             </form>
           </div>

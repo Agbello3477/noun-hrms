@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../prisma-replica';
+import prisma from '../prisma';
 import { Role } from '@prisma/client';
 import { sendPushNotification } from '../services/fcm.service';
 
@@ -89,48 +89,84 @@ export const getIncidents = async (req: AuthRequest, res: Response) => {
 
 export const createIncident = async (req: AuthRequest, res: Response) => {
     const { title, description, category, location, attachmentUrl, isAnonymous } = req.body;
-    const reporterId = req.user?.id;
+    const user = req.user;
+
+    if (!title || !description || !location) {
+        return res.status(400).json({ message: 'Headline, location, and description are required' });
+    }
 
     try {
+        // Verify user exists in database for valid FK relation if not anonymous
+        let validReporterId: string | null = null;
+        let reporterDisplayName: string | undefined = undefined;
+
+        if (!isAnonymous && user?.id) {
+            const existingUser = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { id: true, name: true, email: true }
+            });
+            if (existingUser) {
+                validReporterId = existingUser.id;
+                reporterDisplayName = existingUser.name || existingUser.email;
+            }
+        } else if (isAnonymous) {
+            reporterDisplayName = 'Anonymous Reporter';
+        }
+
         const incident = await prisma.securityIncident.create({
             data: {
-                title,
-                description,
-                category,
-                location,
-                attachmentUrl,
-                reporterId: isAnonymous ? null : (reporterId || null),
-                reporterName: isAnonymous ? 'Anonymous Reporter' : undefined
+                title: title.trim(),
+                description: description.trim(),
+                category: category || 'SUSPICIOUS_ACTIVITY',
+                location: location.trim(),
+                attachmentUrl: attachmentUrl?.trim() || null,
+                reporterId: validReporterId,
+                reporterName: reporterDisplayName
             }
         });
 
-        // Trigger real-time alert system notification to the Security Head
-        const securityHeads = await prisma.user.findMany({
-            where: { role: Role.SECURITY_HEAD }
-        });
+        // Trigger real-time alert notifications asynchronously in background
+        (async () => {
+            try {
+                const securityHeads = await prisma.user.findMany({
+                    where: { 
+                        OR: [
+                            { role: Role.SECURITY_HEAD },
+                            { role: Role.SUPER_USER },
+                            { role: Role.ADMIN }
+                        ]
+                    }
+                });
 
-        for (const head of securityHeads) {
-            await prisma.notification.create({
-                data: {
-                    userId: head.id,
-                    title: `New Incident Reported: ${category}`,
-                    message: `An incident has been reported at ${location}. Priority needs evaluation.`,
-                    type: 'WARNING',
-                    link: `/dashboard/security/command`
+                for (const head of securityHeads) {
+                    await prisma.notification.create({
+                        data: {
+                            userId: head.id,
+                            title: `🚨 Incident Reported: ${category || 'Security Alert'}`,
+                            message: `${title} at ${location}. Priority evaluation required.`,
+                            type: 'WARNING',
+                            link: `/dashboard/security`
+                        }
+                    });
                 }
-            });
-        }
 
-        sendPushNotification(
-            securityHeads.map(h => h.id),
-            `New Incident Reported: ${category}`,
-            `An incident has been reported at ${location}. Priority needs evaluation.`,
-            `/dashboard/security/command`
-        ).catch(err => console.error('FCM push failed:', err));
+                if (securityHeads.length > 0) {
+                    sendPushNotification(
+                        securityHeads.map(h => h.id),
+                        `🚨 Incident Reported: ${category || 'Security Alert'}`,
+                        `${title} at ${location}. Priority evaluation required.`,
+                        `/dashboard/security`
+                    ).catch(err => console.error('FCM push failed:', err));
+                }
+            } catch (notifyErr) {
+                console.error('Failed to dispatch incident notifications:', notifyErr);
+            }
+        })();
 
         res.status(201).json(incident);
     } catch (error: any) {
-        res.status(500).json({ message: 'Failed to record incident report' });
+        console.error('Failed to record incident report:', error);
+        res.status(500).json({ message: error?.message || 'Failed to record incident report' });
     }
 };
 

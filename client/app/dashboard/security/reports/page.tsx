@@ -25,14 +25,8 @@ export default function SecurityReportsPage() {
 
   const fetchReports = async () => {
     try {
-      // Security Head and VC pull reports from backend
-      const res = await api.get('/api/security/incidents'); // Reuse endpoints or pull
-      // To satisfy retrieving consolidated reports specifically:
-      // Let's create an endpoint in security controller for reports if it doesn't exist,
-      // or we can fetch them via a generic fetch since we mapped reports.
-      // Wait, let's make sure we expose GET /reports on backend routing so it is clean!
       const reportRes = await api.get('/api/security/reports');
-      setReports(reportRes.data);
+      setReports(Array.isArray(reportRes.data) ? reportRes.data : []);
     } catch (err) {
       console.error('Failed to fetch consolidated reports:', err);
     } finally {
