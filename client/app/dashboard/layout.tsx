@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
@@ -9,6 +9,18 @@ import Header from '../../components/dashboard/Header';
 import NavigationProgress from '@/components/ui/NavigationProgress';
 import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter';
+import dynamic from 'next/dynamic';
+import { getSocketUrl } from '../../lib/api';
+import io, { Socket } from 'socket.io-client';
+import { IncomingVideoCallData } from '@/components/ui/IncomingVideoCallModal';
+
+const IncomingVideoCallModal = dynamic(() => import('@/components/ui/IncomingVideoCallModal'), {
+    ssr: false
+});
+
+const VideoConferenceModal = dynamic(() => import('@/components/ui/VideoConferenceModal'), {
+    ssr: false
+});
 
 function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise<void> }) {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -194,11 +206,76 @@ export default function DashboardLayout({
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+    // Global Incoming Video Call State
+    const [incomingVideoCall, setIncomingVideoCall] = useState<IncomingVideoCallData | null>(null);
+    const [activeVideoModal, setActiveVideoModal] = useState<{
+        isOpen: boolean;
+        roomName: string;
+        title: string;
+    } | null>(null);
+    const globalSocketRef = useRef<Socket | null>(null);
+
     const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token');
 
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Global socket listener for incoming WhatsApp-style video calls
+    useEffect(() => {
+        if (!user || typeof window === 'undefined') return;
+
+        const token = localStorage.getItem('token');
+        const socketUrl = getSocketUrl();
+        const socketInstance = io(socketUrl, {
+            auth: { token },
+            transports: ['websocket', 'polling']
+        });
+
+        globalSocketRef.current = socketInstance;
+
+        socketInstance.on('connect', () => {
+            console.log('[Dashboard Layout] Global video signaling socket connected');
+        });
+
+        socketInstance.on('VIDEO_CALL_INCOMING', (callData: IncomingVideoCallData) => {
+            console.log('[Dashboard Layout] Received incoming video call alert:', callData);
+            if (callData.callerUserId !== user.id) {
+                setIncomingVideoCall(callData);
+            }
+        });
+
+        socketInstance.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
+            setIncomingVideoCall((prev) => (prev?.roomName === data?.roomName ? null : prev));
+        });
+
+        return () => {
+            socketInstance.disconnect();
+            globalSocketRef.current = null;
+        };
+    }, [user]);
+
+    const handleAcceptVideoCall = (callData: IncomingVideoCallData) => {
+        if (globalSocketRef.current) {
+            globalSocketRef.current.emit('VIDEO_CALL_ACCEPTED', { roomName: callData.roomName });
+        }
+        setIncomingVideoCall(null);
+        setActiveVideoModal({
+            isOpen: true,
+            roomName: callData.roomName,
+            title: callData.title || `Video Call with ${callData.callerName}`
+        });
+    };
+
+    const handleDeclineVideoCall = (callData: IncomingVideoCallData) => {
+        if (globalSocketRef.current) {
+            globalSocketRef.current.emit('VIDEO_CALL_DECLINED', {
+                roomName: callData.roomName,
+                callerUserId: callData.callerUserId
+            });
+        }
+        setIncomingVideoCall(null);
+    };
 
     useEffect(() => {
         if (!isLoading && !user) {
@@ -274,6 +351,33 @@ export default function DashboardLayout({
                         </main>
                     </div>
                 </>
+            )}
+
+            {/* Global WhatsApp-style Incoming Video Call Banner */}
+            {mounted && incomingVideoCall && (
+                <IncomingVideoCallModal
+                    incomingCall={incomingVideoCall}
+                    onAccept={handleAcceptVideoCall}
+                    onDecline={handleDeclineVideoCall}
+                />
+            )}
+
+            {/* Global Video Conference Meeting Overlay */}
+            {mounted && activeVideoModal?.isOpen && (
+                <VideoConferenceModal
+                    isOpen={activeVideoModal.isOpen}
+                    onClose={() => {
+                        if (globalSocketRef.current) {
+                            globalSocketRef.current.emit('VIDEO_CALL_ENDED', { roomName: activeVideoModal.roomName });
+                        }
+                        setActiveVideoModal(null);
+                    }}
+                    roomName={activeVideoModal.roomName}
+                    userName={user?.name || (user?.email ? user.email.split('@')[0] : 'Colleague')}
+                    userEmail={user?.email || ''}
+                    title={activeVideoModal.title}
+                    subtitle="Encrypted real-time WebRTC peer meeting"
+                />
             )}
         </div>
     );

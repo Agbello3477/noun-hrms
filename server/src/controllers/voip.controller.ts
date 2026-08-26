@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { Role } from '@prisma/client';
+import path from 'path';
+import fs from 'fs';
 
-// Generate or assign 4-digit extension based on staff role/department if missing
-const generateVoipExtension = async (role: Role, departmentName?: string | null): Promise<string> => {
-  let basePrefix = 1; // 1xxx Default / Admin / Registry
+// Helper to determine the 4-digit prefix based on role
+const getPrefixForRole = (role: Role): number => {
   if (role === Role.SECURITY_HEAD || role === Role.SECURITY_OFFICER) {
-    basePrefix = 2; // 2xxx Security
+    return 2; // 2xxx Security
   } else if (
     role === Role.CLINIC_HEAD ||
     role === Role.CLINIC_DOCTOR ||
@@ -14,12 +15,67 @@ const generateVoipExtension = async (role: Role, departmentName?: string | null)
     role === Role.CLINIC_LAB_SCIENTIST ||
     role === Role.CLINIC_PHARMACIST
   ) {
-    basePrefix = 3; // 3xxx Clinic Intercom
+    return 3; // 3xxx Clinic Intercom
   } else if (role === Role.STUDY_CENTER_MANAGER) {
-    basePrefix = 4; // 4xxx Study Centers / Operations
+    return 4; // 4xxx Study Centers / Operations
   }
+  return 1; // 1xxx Default / Academic / Admin / Registry
+};
 
-  // Find existing extensions with this prefix to get next number
+/**
+ * Self-healing deduplication routine:
+ * Finds any staff profiles with duplicate or missing VoIP extensions and assigns unique numbers sequentially.
+ */
+export const repairAndDeduplicateExtensions = async () => {
+  try {
+    const allProfiles = await prisma.staffProfile.findMany({
+      where: { isDeleted: false },
+      include: {
+        user: { select: { id: true, role: true, isActive: true } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const usedExtensions = new Set<string>();
+    const toUpdate: { id: string; role: Role; currentExt: string | null }[] = [];
+
+    for (const profile of allProfiles) {
+      const ext = profile.voipExtension;
+      if (!ext || usedExtensions.has(ext) || ext.length !== 4) {
+        toUpdate.push({ id: profile.id, role: profile.user?.role || Role.STAFF, currentExt: ext });
+      } else {
+        usedExtensions.add(ext);
+      }
+    }
+
+    if (toUpdate.length > 0) {
+      console.log(`[VoIP Controller] Found ${toUpdate.length} profiles requiring extension deduplication/assignment.`);
+
+      for (const item of toUpdate) {
+        const prefix = getPrefixForRole(item.role);
+        let candidate = prefix * 1000 + 1;
+        while (usedExtensions.has(`${candidate}`) && candidate < (prefix + 1) * 1000 - 1) {
+          candidate++;
+        }
+        const assignedExt = `${candidate}`;
+        usedExtensions.add(assignedExt);
+
+        await prisma.staffProfile.update({
+          where: { id: item.id },
+          data: { voipExtension: assignedExt }
+        });
+      }
+      console.log(`[VoIP Controller] Extension deduplication complete. All profiles have unique 4-digit extensions.`);
+    }
+  } catch (err) {
+    console.error('[VoIP Controller] Error during extension deduplication:', err);
+  }
+};
+
+// Generate next available 4-digit extension atomically
+const generateVoipExtension = async (role: Role): Promise<string> => {
+  const basePrefix = getPrefixForRole(role);
+
   const existingProfiles = await prisma.staffProfile.findMany({
     where: {
       voipExtension: {
@@ -46,7 +102,10 @@ const generateVoipExtension = async (role: Role, departmentName?: string | null)
 // GET /api/voip/directory - Returns 4-digit extension directory
 export const getVoipDirectory = async (req: Request, res: Response) => {
   try {
-    const { query, department } = req.query as { query?: string; department?: string };
+    const { query } = req.query as { query?: string };
+
+    // Run deduplication check if needed
+    await repairAndDeduplicateExtensions();
 
     const whereClause: any = {
       isDeleted: false,
@@ -83,42 +142,24 @@ export const getVoipDirectory = async (req: Request, res: Response) => {
           select: { name: true }
         }
       },
-      take: 100,
+      take: 150,
       orderBy: { surname: 'asc' }
     });
 
-    // Auto-assign extensions to any profile missing a voipExtension
-    const updatedProfiles = await Promise.all(
-      profiles.map(async (profile) => {
-        if (!profile.voipExtension) {
-          const newExt = await generateVoipExtension(profile.user.role, profile.unit?.name);
-          try {
-            const updated = await prisma.staffProfile.update({
-              where: { id: profile.id },
-              data: { voipExtension: newExt }
-            });
-            profile.voipExtension = updated.voipExtension;
-          } catch {
-            // In case of race condition, ignore and keep unassigned
-          }
-        }
+    const formattedProfiles = profiles.map((profile) => ({
+      id: profile.id,
+      userId: profile.userId,
+      name: profile.user.name || `${profile.surname || ''} ${profile.otherNames || ''}`.trim(),
+      email: profile.user.email,
+      role: profile.user.role,
+      rank: profile.rank || 'Staff',
+      extension: profile.voipExtension || '1000',
+      department: profile.unit?.name || profile.studyCenter?.name || 'Main Campus',
+      status: profile.status || 'ACTIVE',
+      passportUrl: profile.passportUrl
+    }));
 
-        return {
-          id: profile.id,
-          userId: profile.userId,
-          name: profile.user.name || `${profile.surname || ''} ${profile.otherNames || ''}`.trim(),
-          email: profile.user.email,
-          role: profile.user.role,
-          rank: profile.rank || 'Staff',
-          extension: profile.voipExtension || '1000',
-          department: profile.unit?.name || profile.studyCenter?.name || 'Main Campus',
-          status: profile.status || 'ACTIVE',
-          passportUrl: profile.passportUrl
-        };
-      })
-    );
-
-    res.status(200).json(updatedProfiles);
+    res.status(200).json(formattedProfiles);
   } catch (error: any) {
     console.error('Error fetching VoIP directory:', error);
     res.status(500).json({ error: true, message: 'Failed to fetch VoIP directory' });
@@ -134,7 +175,7 @@ export const lookupExtension = async (req: Request, res: Response) => {
       return res.status(400).json({ error: true, message: 'Invalid extension number' });
     }
 
-    let profile = await prisma.staffProfile.findFirst({
+    const profile = await prisma.staffProfile.findFirst({
       where: {
         voipExtension: extension,
         isDeleted: false
@@ -198,7 +239,7 @@ export const getIceServers = async (req: Request, res: Response) => {
   res.status(200).json({ iceServers });
 };
 
-// GET /api/voip/my-extension - Returns current authenticated user's 4-digit VoIP extension (auto-assigns if missing)
+// GET /api/voip/my-extension - Returns current authenticated user's 4-digit VoIP extension
 export const getMyExtension = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -219,7 +260,7 @@ export const getMyExtension = async (req: Request, res: Response) => {
     }
 
     if (!profile.voipExtension) {
-      const newExt = await generateVoipExtension(user.role, profile.unit?.name);
+      const newExt = await generateVoipExtension(user.role);
       profile = await prisma.staffProfile.update({
         where: { id: profile.id },
         data: { voipExtension: newExt },
@@ -239,5 +280,206 @@ export const getMyExtension = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching my extension:', error);
     res.status(500).json({ error: true, message: 'Failed to fetch extension' });
+  }
+};
+
+// ─── Phase 17: Voicemail & Voice Note Endpoints ──────────────────────────────
+
+// POST /api/voip/voicemail - Save audio voicemail / voice note
+export const saveVoicemail = async (req: any, res: Response) => {
+  try {
+    const callerUser = req.user;
+    const { recipientExtension, durationSeconds } = req.body;
+    const audioFile = req.file;
+
+    if (!callerUser) {
+      return res.status(401).json({ error: true, message: 'Authentication required' });
+    }
+
+    if (!recipientExtension) {
+      return res.status(400).json({ error: true, message: 'Recipient extension is required' });
+    }
+
+    if (!audioFile) {
+      return res.status(400).json({ error: true, message: 'Audio file is required' });
+    }
+
+    // Lookup recipient profile
+    const recipientProfile = await prisma.staffProfile.findFirst({
+      where: { voipExtension: recipientExtension, isDeleted: false },
+      include: { user: { select: { id: true, name: true } } }
+    });
+
+    if (!recipientProfile || !recipientProfile.user) {
+      return res.status(404).json({ error: true, message: `Extension ${recipientExtension} not found` });
+    }
+
+    // Lookup caller extension
+    const callerProfile = await prisma.staffProfile.findUnique({
+      where: { userId: callerUser.id },
+      select: { voipExtension: true, surname: true, otherNames: true }
+    });
+    const callerExt = callerProfile?.voipExtension || '1000';
+    const callerDisplayName = callerUser.name || `${callerProfile?.surname || ''} ${callerProfile?.otherNames || ''}`.trim() || 'Colleague';
+
+    const audioUrl = `/uploads/${audioFile.filename}`;
+
+    // Create Voicemail record
+    const voicemail = await prisma.voicemail.create({
+      data: {
+        callerUserId: callerUser.id,
+        recipientUserId: recipientProfile.user.id,
+        callerExtension: callerExt,
+        recipientExtension: recipientExtension,
+        audioUrl,
+        durationSeconds: parseInt(durationSeconds || '0', 10),
+        isListened: false
+      },
+      include: {
+        callerUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                surname: true,
+                otherNames: true,
+                rank: true,
+                passportUrl: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Create in-app Notification for recipient
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: recipientProfile.user.id,
+          title: '🎙️ New Voice Note / Voicemail',
+          message: `${callerDisplayName} (Ext: ${callerExt}) left a ${durationSeconds || 'short'}s voice note for you.`,
+          type: 'INFO',
+          link: '/dashboard'
+        }
+      });
+    } catch (notifErr) {
+      console.warn('[VoIP Voicemail] Could not create notification record:', notifErr);
+    }
+
+    return res.status(201).json({
+      message: 'Voice note saved and sent successfully',
+      voicemail
+    });
+  } catch (error: any) {
+    console.error('Error saving voicemail:', error);
+    return res.status(500).json({ error: true, message: 'Failed to save voicemail' });
+  }
+};
+
+// GET /api/voip/voicemails - Get all received voicemails for authenticated user
+export const getVoicemails = async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: true, message: 'Authentication required' });
+    }
+
+    const voicemails = await prisma.voicemail.findMany({
+      where: { recipientUserId: user.id },
+      include: {
+        callerUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                surname: true,
+                otherNames: true,
+                rank: true,
+                passportUrl: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    return res.status(200).json(voicemails);
+  } catch (error: any) {
+    console.error('Error fetching voicemails:', error);
+    return res.status(500).json({ error: true, message: 'Failed to fetch voicemails' });
+  }
+};
+
+// PUT /api/voip/voicemails/:id/listened - Mark voicemail as listened
+export const markVoicemailListened = async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const voicemail = await prisma.voicemail.findUnique({
+      where: { id }
+    });
+
+    if (!voicemail) {
+      return res.status(404).json({ error: true, message: 'Voicemail not found' });
+    }
+
+    if (voicemail.recipientUserId !== user.id) {
+      return res.status(403).json({ error: true, message: 'Access denied' });
+    }
+
+    const updated = await prisma.voicemail.update({
+      where: { id },
+      data: { isListened: true }
+    });
+
+    return res.status(200).json(updated);
+  } catch (error: any) {
+    console.error('Error updating voicemail status:', error);
+    return res.status(500).json({ error: true, message: 'Failed to update voicemail' });
+  }
+};
+
+// DELETE /api/voip/voicemails/:id - Delete a voicemail
+export const deleteVoicemail = async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const voicemail = await prisma.voicemail.findUnique({
+      where: { id }
+    });
+
+    if (!voicemail) {
+      return res.status(404).json({ error: true, message: 'Voicemail not found' });
+    }
+
+    if (voicemail.recipientUserId !== user.id && voicemail.callerUserId !== user.id) {
+      return res.status(403).json({ error: true, message: 'Access denied' });
+    }
+
+    // Try deleting the physical audio file
+    if (voicemail.audioUrl && voicemail.audioUrl.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '../../', voicemail.audioUrl);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    await prisma.voicemail.delete({
+      where: { id }
+    });
+
+    return res.status(200).json({ message: 'Voicemail deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting voicemail:', error);
+    return res.status(500).json({ error: true, message: 'Failed to delete voicemail' });
   }
 };

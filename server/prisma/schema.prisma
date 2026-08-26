@@ -77,6 +77,10 @@ model User {
   projectMessages    ProjectMessage[]
   sessions           UserSession[]
 
+  // Phase 17: Voicemail & Voice Notes
+  sentVoicemails     Voicemail[]    @relation("SentVoicemails")
+  receivedVoicemails Voicemail[]    @relation("ReceivedVoicemails")
+
   @@map("users")
 }
 
@@ -1167,5 +1171,23 @@ model IntellectualProperty {
   updatedAt        DateTime @updatedAt
 
   @@map("intellectual_properties")
+}
+
+model Voicemail {
+  id                 String   @id @default(uuid())
+  callerUserId       String
+  callerUser         User     @relation("SentVoicemails", fields: [callerUserId], references: [id], onDelete: Cascade)
+  recipientUserId    String
+  recipientUser      User     @relation("ReceivedVoicemails", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  callerExtension    String
+  recipientExtension String
+  audioUrl           String
+  durationSeconds    Int      @default(0)
+  isListened         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  @@index([recipientUserId])
+  @@index([recipientExtension])
+  @@map("voicemails")
 }
 

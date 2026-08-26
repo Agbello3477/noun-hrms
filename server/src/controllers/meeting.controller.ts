@@ -70,11 +70,38 @@ export const generateMeetingToken = async (req: any, res: Response) => {
 
         const roomName = `noun-${module}-${targetId}-${roomHash}`;
 
+        let projectTitle = 'Academic Project';
+        let memberUserIds: string[] = [];
+
+        if (module === 'research') {
+            const project = await prisma.researchProject.findUnique({
+                where: { id: targetId },
+                include: {
+                    members: {
+                        include: {
+                            staff: { select: { userId: true } }
+                        }
+                    },
+                    owner: { select: { id: true } }
+                }
+            });
+
+            if (project) {
+                projectTitle = project.title;
+                if (project.owner?.id) memberUserIds.push(project.owner.id);
+                project.members.forEach(m => {
+                    if (m.staff?.userId) memberUserIds.push(m.staff.userId);
+                });
+            }
+        }
+
         return res.json({
             roomName,
             module,
             targetId,
-            userName: req.user?.email ? req.user.email.split('@')[0] : 'User',
+            projectTitle,
+            memberUserIds: Array.from(new Set(memberUserIds)),
+            userName: req.user?.name || (req.user?.email ? req.user.email.split('@')[0] : 'User'),
             userRole,
             tokenIssuedAt: new Date().toISOString()
         });

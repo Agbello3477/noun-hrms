@@ -16,20 +16,34 @@ const activeCalls = new Map<string, ActiveCallSession>();
 const userActiveCall = new Map<string, string>(); // userId -> callId
 
 export const setupVoipSocket = (io: SocketIOServer) => {
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', async (socket: Socket) => {
     const user = (socket as any).user;
     if (!user) return;
 
     // Join user's personal signaling room
     socket.join(`voip_user_${user.id}`);
 
-    // Register 4-digit VoIP Extension
+    // Automatically lookup and register user's VoIP extension on socket connection
+    try {
+      const staff = await prisma.staffProfile.findUnique({
+        where: { userId: user.id },
+        select: { voipExtension: true }
+      });
+      if (staff?.voipExtension) {
+        socket.join(`voip_ext_${staff.voipExtension}`);
+        console.log(`[VoIP Socket] Automatically registered user ${user.id} to extension ${staff.voipExtension}`);
+        io.emit('VOIP_EXTENSION_STATUS_CHANGED', { extension: staff.voipExtension, isOnline: true });
+      }
+    } catch (err) {
+      console.error('[VoIP Socket] Error auto-registering extension:', err);
+    }
+
+    // Register 4-digit VoIP Extension (explicit client fallback)
     socket.on('VOIP_REGISTER_EXTENSION', async (data: { extension: string }) => {
       const ext = data?.extension;
       if (ext) {
         socket.join(`voip_ext_${ext}`);
         console.log(`[VoIP Socket] User ${user.id} (${user.name}) registered extension ${ext} on socket ${socket.id}`);
-        // Notify others or refresh status
         io.emit('VOIP_EXTENSION_STATUS_CHANGED', { extension: ext, isOnline: true });
       }
     });
@@ -196,6 +210,87 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         candidate: data.candidate,
         callId: data.callId
       });
+    });
+
+    // ─── Real-Time WhatsApp-Style Video Conference Signaling ───────────────────
+    socket.on('VIDEO_CALL_INITIATE', (payload: {
+      roomName: string;
+      title?: string;
+      callerName?: string;
+      callerRole?: string;
+      callerAvatar?: string;
+      targetUserIds?: string[];
+      module?: string;
+      targetId?: string;
+    }) => {
+      const { roomName, title, callerName, callerRole, callerAvatar, targetUserIds, module, targetId } = payload;
+      const callerInfo = {
+        callerUserId: user.id,
+        callerName: callerName || user.name || 'Staff Colleague',
+        callerRole: callerRole || user.role || 'Academic Staff',
+        callerAvatar: callerAvatar || null,
+        roomName,
+        title: title || 'Video Conference Meeting',
+        module: module || 'research',
+        targetId: targetId || null,
+        timestamp: new Date().toISOString()
+      };
+
+      console.log(`[Video Call Signaling] ${callerInfo.callerName} initiated video call in room ${roomName}`);
+
+      if (Array.isArray(targetUserIds) && targetUserIds.length > 0) {
+        // Send directly to targeted peer users (excluding caller)
+        targetUserIds.forEach((targetUid) => {
+          if (targetUid !== user.id) {
+            io.to(`voip_user_${targetUid}`).emit('VIDEO_CALL_INCOMING', callerInfo);
+          }
+        });
+      } else {
+        // Broadcast to all connected clients except initiator
+        socket.broadcast.emit('VIDEO_CALL_INCOMING', callerInfo);
+      }
+    });
+
+    socket.on('VIDEO_CALL_ACCEPTED', (data: { roomName: string }) => {
+      console.log(`[Video Call Signaling] User ${user.id} (${user.name}) accepted video call in room ${data?.roomName}`);
+      socket.broadcast.emit('VIDEO_CALL_PEER_ACCEPTED', {
+        roomName: data?.roomName,
+        userId: user.id,
+        userName: user.name || 'Peer Colleague'
+      });
+    });
+
+    socket.on('VIDEO_CALL_DECLINED', (data: { roomName: string; callerUserId?: string }) => {
+      console.log(`[Video Call Signaling] User ${user.id} (${user.name}) declined video call in room ${data?.roomName}`);
+      if (data?.callerUserId) {
+        io.to(`voip_user_${data.callerUserId}`).emit('VIDEO_CALL_PEER_DECLINED', {
+          roomName: data.roomName,
+          userId: user.id,
+          userName: user.name || 'Peer Colleague'
+        });
+      }
+    });
+
+    socket.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
+      console.log(`[Video Call Signaling] Video call ended in room ${data?.roomName}`);
+      socket.broadcast.emit('VIDEO_CALL_ENDED', {
+        roomName: data?.roomName,
+        userId: user.id
+      });
+    });
+
+    // ─── Real-Time Voicemail Notification Relay ─────────────────────────────────
+    socket.on('VOICEMAIL_SENT', (data: {
+      recipientUserId: string;
+      recipientExtension: string;
+      voicemail: any;
+    }) => {
+      if (data?.recipientUserId) {
+        io.to(`voip_user_${data.recipientUserId}`).emit('VOICEMAIL_RECEIVED', data.voicemail);
+      }
+      if (data?.recipientExtension) {
+        io.to(`voip_ext_${data.recipientExtension}`).emit('VOICEMAIL_RECEIVED', data.voicemail);
+      }
     });
 
     // Security Walkie-Talkie Push-to-Talk (PTT)
