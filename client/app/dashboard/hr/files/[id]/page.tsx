@@ -11,9 +11,9 @@ import TransferHistoryTab from '../../../../../components/hr/dossier/TransferHis
 import QueryHistoryTab from '../../../../../components/hr/dossier/QueryHistoryTab';
 import AperHistoryTab from '../../../../../components/hr/dossier/AperHistoryTab';
 
-export default function StaffDossierPage() {
-    const params = useParams();
-    const id = params?.id as string;
+export default function StaffDossierPage({ params }: { params?: { id?: string } }) {
+    const routeParams = useParams();
+    const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
     const [staff, setStaff] = useState<any>(null);
     const [loading, setLoading] = useState(true);

@@ -6,9 +6,8 @@ import api from '@/lib/api';
 import dynamic from 'next/dynamic';
 import EditorSkeleton from '@/components/ui/EditorSkeleton';
 import ChatSkeleton from '@/components/ui/ChatSkeleton';
-import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 
-// Dynamically import TipTap Word-style editor and Socket.IO chat with ssr: false
+// Dynamically import TipTap Word-style editor, Socket.IO chat, and Video Conference with ssr: false
 const CollaborativeEditor = dynamic(() => import('@/components/research/CollaborativeEditor'), {
     ssr: false,
     loading: () => <EditorSkeleton />
@@ -18,6 +17,11 @@ const ProjectChat = dynamic(() => import('@/components/research/ProjectChat'), {
     ssr: false,
     loading: () => <ChatSkeleton />
 });
+
+const VideoConferenceModal = dynamic(() => import('@/components/ui/VideoConferenceModal'), {
+    ssr: false
+});
+
 import { 
     FileText, 
     Users, 
@@ -42,9 +46,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-export default function ResearchWorkspace() {
-    const params = useParams();
-    const id = params?.id as string;
+export default function ResearchWorkspace({ params }: { params?: { id?: string } }) {
+    const routeParams = useParams();
+    const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
     const [project, setProject] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -304,7 +308,7 @@ export default function ResearchWorkspace() {
                     <ShieldAlert size={36} />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
-                <p className="text-gray-505 max-w-md mb-8 leading-relaxed text-sm">
+                <p className="text-gray-500 max-w-md mb-8 leading-relaxed text-sm">
                     You do not have the required permissions to view this project or resource. Access has been locked for security.
                 </p>
                 <Link

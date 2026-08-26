@@ -19,14 +19,14 @@ export function middleware(request: NextRequest) {
 
   const cspDirectives = [
     "default-src 'self'",
-    // Whitelist JSZip (cdnjs) and Jitsi (meet.jit.si) script loads
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://meet.jit.si https://cdnjs.cloudflare.com",
+    // Whitelist JSZip (cdnjs) and Jitsi (jitsi.riot.im, meet.jit.si) script loads
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://jitsi.riot.im https://meet.jit.si https://cdnjs.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
     // Whitelist image sources and placeholder images
     "img-src 'self' data: https://via.placeholder.com",
     "font-src 'self' data:",
     // Whitelist Jitsi video iframe embeds
-    "frame-src 'self' https://meet.jit.si",
+    "frame-src 'self' https://jitsi.riot.im https://meet.jit.si",
     // Whitelist API connection channels, sockets, and FCM registries
     `connect-src 'self' ${apiBaseUrl} ${wsProto}://${apiDomain} https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com`,
     // Route violation logs to the observability endpoint in report-only mode

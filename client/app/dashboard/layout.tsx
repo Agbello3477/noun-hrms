@@ -215,74 +215,66 @@ export default function DashboardLayout({
         }
     }, [user, isLoading, router]);
 
-    if (mounted && !hasToken) {
-        return (
-            <div className="flex h-screen w-screen flex-col items-center justify-center bg-gray-55 p-8 text-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50 pointer-events-none" />
-                <div className="w-16 h-16 bg-red-55 text-red-600 rounded-2xl flex items-center justify-center mb-6 border border-red-100 shadow-sm animate-bounce">
-                    <Lock size={32} />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
-                <p className="text-gray-500 max-w-sm mb-6 leading-relaxed text-sm">
-                    You must be authenticated with valid credentials to view this page. Please log in to your account.
-                </p>
-                <button
-                    onClick={() => router.push('/')}
-                    style={{ backgroundColor: '#006533' }}
-                    className="inline-flex items-center gap-2 text-white px-6 py-3 rounded-full font-bold shadow-md hover:opacity-95 transition-all text-xs hover:-translate-y-0.5"
-                >
-                    Log In to Portal
-                </button>
-            </div>
-        );
-    }
-
-    if (!mounted || isLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-            </div>
-        );
-    }
-
-    if (!user) {
-        return null; // Will redirect via useEffect
-    }
-
-    if (user.mustChangePassword) {
-        return <ForcedPasswordChangeModal refreshUser={refreshUser} />;
-    }
-
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden relative">
             <Suspense fallback={null}>
                 <NavigationProgress />
             </Suspense>
-            {/* Mobile Sidebar Overlay */}
-            {isSidebarOpen && (
-                <div 
-                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
+
+            {mounted && !hasToken ? (
+                <div className="flex h-screen w-screen flex-col items-center justify-center bg-gray-50 p-8 text-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50 pointer-events-none" />
+                    <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mb-6 border border-red-100 shadow-sm animate-bounce">
+                        <Lock size={32} />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+                    <p className="text-gray-500 max-w-sm mb-6 leading-relaxed text-sm">
+                        You must be authenticated with valid credentials to view this page. Please log in to your account.
+                    </p>
+                    <button
+                        onClick={() => router.push('/')}
+                        style={{ backgroundColor: '#006533' }}
+                        className="inline-flex items-center gap-2 text-white px-6 py-3 rounded-full font-bold shadow-md hover:opacity-95 transition-all text-xs hover:-translate-y-0.5"
+                    >
+                        Log In to Portal
+                    </button>
+                </div>
+            ) : (!mounted || isLoading || !user) ? (
+                <div className="flex h-full w-full items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"></div>
+                    <div className="sr-only">{children}</div>
+                </div>
+            ) : user.mustChangePassword ? (
+                <ForcedPasswordChangeModal refreshUser={refreshUser} />
+            ) : (
+                <>
+                    {/* Mobile Sidebar Overlay */}
+                    {isSidebarOpen && (
+                        <div 
+                            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+                            onClick={() => setIsSidebarOpen(false)}
+                        />
+                    )}
+                    
+                    {/* Mobile Sidebar */}
+                    <div className={`md:hidden fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 flex-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                        <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+                    </div>
+
+                    {/* Desktop Sidebar (NO absolute/fixed positioning whatsoever) */}
+                    <div className="hidden md:block flex-none">
+                        <Sidebar />
+                    </div>
+                    
+                    <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+                        <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+
+                        <main className="flex-1 overflow-auto p-4 md:p-8">
+                            {children}
+                        </main>
+                    </div>
+                </>
             )}
-            
-            {/* Mobile Sidebar */}
-            <div className={`md:hidden fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 flex-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-            </div>
-
-            {/* Desktop Sidebar (NO absolute/fixed positioning whatsoever) */}
-            <div className="hidden md:block flex-none">
-                <Sidebar />
-            </div>
-            
-            <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-                <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-
-                <main className="flex-1 overflow-auto p-4 md:p-8">
-                    {children}
-                </main>
-            </div>
         </div>
     );
 }
