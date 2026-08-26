@@ -51,7 +51,7 @@ export const getIncidents = async (req: AuthRequest, res: Response) => {
 
     try {
         const pageNum = page ? parseInt(String(page)) : 1;
-        const limitNum = limit ? Math.min(parseInt(String(limit)), 50) : 20;
+        const limitNum = Math.min(parseInt(String(limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
 
         const where: any = {
@@ -59,22 +59,32 @@ export const getIncidents = async (req: AuthRequest, res: Response) => {
             ...(priority ? { priority: String(priority) } : {})
         };
 
-        const incidents = await prisma.securityIncident.findMany({
-            where,
-            include: {
-                reporter: {
-                    select: { name: true, email: true }
+        const [total, incidents] = await Promise.all([
+            prisma.securityIncident.count({ where }),
+            prisma.securityIncident.findMany({
+                where,
+                select: {
+                    id: true,
+                    title: true,
+                    description: true,
+                    category: true,
+                    priority: true,
+                    status: true,
+                    location: true,
+                    attachmentUrl: true,
+                    createdAt: true,
+                    reporter: {
+                        select: { name: true, email: true }
+                    },
+                    assignedTo: {
+                        select: { name: true }
+                    }
                 },
-                assignedTo: {
-                    select: { name: true }
-                }
-            },
-            orderBy: { createdAt: 'desc' },
-            skip,
-            take: limitNum
-        });
-
-        const total = await prisma.securityIncident.count({ where });
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limitNum
+            })
+        ]);
 
         res.setHeader('X-Total-Count', total.toString());
         res.setHeader('X-Total-Pages', Math.ceil(total / limitNum).toString());

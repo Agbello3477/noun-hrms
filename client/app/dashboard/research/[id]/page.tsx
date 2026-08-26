@@ -18,8 +18,7 @@ const ProjectChat = dynamic(() => import('@/components/research/ProjectChat'), {
     loading: () => <ChatSkeleton />
 });
 
-import { getSocketUrl } from '@/lib/api';
-import io from 'socket.io-client';
+import { useSocket } from '@/context/SocketContext';
 
 const VideoConferenceModal = dynamic(() => import('@/components/ui/VideoConferenceModal'), {
     ssr: false
@@ -94,6 +93,7 @@ export default function ResearchWorkspace({ params }: { params?: { id?: string }
     // Video Conferencing state
     const [isMeetingOpen, setIsMeetingOpen] = useState(false);
     const [meetingRoomName, setMeetingRoomName] = useState('');
+    const { startVideoCall } = useSocket();
 
     const handleLaunchMeeting = async () => {
         try {
@@ -105,31 +105,14 @@ export default function ResearchWorkspace({ params }: { params?: { id?: string }
             setMeetingRoomName(room);
             setIsMeetingOpen(true);
 
-            // Broadcast WhatsApp-style incoming video call to collaborators via Socket
-            try {
-                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-                if (token) {
-                    const socket = io(getSocketUrl(), {
-                        auth: { token },
-                        transports: ['websocket', 'polling']
-                    });
-                    socket.on('connect', () => {
-                        socket.emit('VIDEO_CALL_INITIATE', {
-                            roomName: room,
-                            title: `Research Forum Video Call: ${project?.title || 'Academic Project'}`,
-                            callerName: currentUser?.name || (currentUser?.email ? currentUser.email.split('@')[0] : 'Colleague'),
-                            callerRole: currentUser?.role || 'Academic Staff',
-                            callerAvatar: currentUser?.staffProfile?.passportUrl || null,
-                            targetUserIds: res.data.memberUserIds || [],
-                            module: 'research',
-                            targetId: id
-                        });
-                        setTimeout(() => socket.disconnect(), 5000);
-                    });
-                }
-            } catch (sockErr) {
-                console.warn('[Video Call] Socket broadcast notice:', sockErr);
-            }
+            // Broadcast WhatsApp-style incoming video call using persistent socket
+            startVideoCall({
+                roomName: room,
+                title: `Research Forum Video Call: ${project?.title || 'Academic Project'}`,
+                targetUserIds: res.data.memberUserIds || [],
+                module: 'research',
+                targetId: id
+            });
         } catch (err) {
             setMeetingRoomName(`research-${id}`);
             setIsMeetingOpen(true);

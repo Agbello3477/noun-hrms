@@ -141,28 +141,47 @@ export const getAllStaff = async (req: Request, res: Response) => {
             }
         }
 
-        const total = await prisma.user.count({ where: whereClause });
-
+        const isDropdown = req.query.dropdown === 'true';
         const pageNum = page ? parseInt(String(page)) : 1;
-        const limitNum = limit ? parseInt(String(limit)) : 10000; // default large if not paginated
+        const limitNum = isDropdown ? 200 : Math.min(parseInt(String(limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
 
-        const staff = await prisma.user.findMany({
-            where: whereClause,
-            include: {
-                staffProfile: {
-                    include: {
-                        studyCenter: true,
-                        unit: true
+        const [total, staff] = await Promise.all([
+            prisma.user.count({ where: whereClause }),
+            prisma.user.findMany({
+                where: whereClause,
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    isActive: true,
+                    createdAt: true,
+                    staffProfile: {
+                        select: {
+                            id: true,
+                            staffId: true,
+                            surname: true,
+                            otherNames: true,
+                            rank: true,
+                            cadre: true,
+                            status: true,
+                            gender: true,
+                            stateOfOrigin: true,
+                            passportUrl: true,
+                            voipExtension: true,
+                            unit: { select: { id: true, name: true } },
+                            studyCenter: { select: { id: true, name: true } }
+                        }
                     }
                 },
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-            skip,
-            take: limitNum
-        });
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip,
+                take: limitNum
+            })
+        ]);
 
         const totalPages = Math.ceil(total / limitNum);
 
@@ -864,10 +883,10 @@ export const getDueForPromotion = async (req: Request, res: Response) => {
     }
 
     try {
-        const { search = '', year, page = '1', limit = '20' } = req.query;
+        const { search = '', year, page = '1', limit = '25' } = req.query;
         const calendarYear = year ? parseInt(String(year)) : new Date().getFullYear();
-        const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
-        const take = parseInt(String(limit));
+        const take = Math.min(parseInt(String(limit || '25')), 25);
+        const skip = (parseInt(String(page)) - 1) * take;
 
         const where: any = { calendarYear };
         if (search) {

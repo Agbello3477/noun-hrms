@@ -296,24 +296,45 @@ export const getMemos = async (req: Request, res: Response) => {
         const userId = req.user?.id;
         const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role);
 
-        let memos;
-        if (isHR) {
-            memos = await prisma.memo.findMany({
-                where: {
-                    OR: [
-                        {
-                            sender: {
-                                role: {
-                                    in: ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR']
-                                }
-                            }
-                        },
-                        { recipientId: null },
-                        { recipientId: userId }
-                    ]
+        const pageNum = req.query.page ? parseInt(String(req.query.page)) : 1;
+        const limitNum = Math.min(parseInt(String(req.query.limit || 25)), 25);
+        const skip = (pageNum - 1) * limitNum;
+
+        const whereClause: any = isHR ? {
+            OR: [
+                {
+                    sender: {
+                        role: {
+                            in: ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR']
+                        }
+                    }
                 },
+                { recipientId: null },
+                { recipientId: userId }
+            ]
+        } : {
+            OR: [
+                { recipientId: null },
+                { recipientId: userId },
+                { senderId: userId }
+            ]
+        };
+
+        const [total, memos] = await Promise.all([
+            prisma.memo.count({ where: whereClause }),
+            prisma.memo.findMany({
+                where: whereClause,
                 orderBy: { createdAt: 'desc' },
-                include: {
+                skip,
+                take: limitNum,
+                select: {
+                    id: true,
+                    title: true,
+                    content: true,
+                    allowResponses: true,
+                    attachmentUrl: true,
+                    attachmentName: true,
+                    createdAt: true,
                     sender: {
                         select: {
                             name: true,
@@ -343,49 +364,12 @@ export const getMemos = async (req: Request, res: Response) => {
                         select: { responses: true }
                     }
                 }
-            });
-        } else {
-            memos = await prisma.memo.findMany({
-                where: {
-                    OR: [
-                        { recipientId: null },
-                        { recipientId: userId },
-                        { senderId: userId }
-                    ]
-                },
-                orderBy: { createdAt: 'desc' },
-                include: {
-                    sender: {
-                        select: {
-                            name: true,
-                            email: true,
-                            role: true,
-                            staffProfile: {
-                                select: {
-                                    signatureUrl: true,
-                                    unit: { select: { name: true } },
-                                    studyCenter: { select: { name: true } }
-                                }
-                            }
-                        }
-                    },
-                    recipient: {
-                        select: {
-                            name: true,
-                            email: true,
-                            staffProfile: {
-                                select: {
-                                    staffId: true
-                                }
-                            }
-                        }
-                    },
-                    _count: {
-                        select: { responses: true }
-                    }
-                }
-            });
-        }
+            })
+        ]);
+
+        res.setHeader('X-Total-Count', total.toString());
+        res.setHeader('X-Total-Pages', Math.ceil(total / limitNum).toString());
+        res.setHeader('X-Current-Page', pageNum.toString());
 
         const formatted = memos.map(m => formatMemoSenderName(m));
         res.json(formatted);

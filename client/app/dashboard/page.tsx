@@ -8,6 +8,7 @@ import {
     Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar,
     Filter, Users, TrendingUp, BarChart2, Shield, Phone
 } from 'lucide-react';
+import { useSwrData } from '../../hooks/useSwrData';
 import Link from 'next/link';
 
 // Emergency Contact Banner Component
@@ -51,8 +52,6 @@ const EmergencyContacts = ({ hotlines, className }: { hotlines?: any; className?
 };
 
 // ─── Shared Helper: Map raw API responses to timeline activity format ──────────
-// This prevents the identical mapping logic from being duplicated across
-// fetchRegistryDashboardData() and handleVCSendMemo() refresh blocks.
 function mapActivitiesToTimeline(memos: any[], transfers: any[], queries: any[]) {
     const mappedMemos = memos.map((m: any) => {
         const isDirect = !!m.recipient;
@@ -89,25 +88,24 @@ function mapActivitiesToTimeline(memos: any[], transfers: any[], queries: any[])
 
 export default function DashboardHome() {
     const { user, isLoading } = useAuth();
+    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN' || user?.role === 'VICE_CHANCELLOR';
+    const isVC = user?.role === 'VICE_CHANCELLOR';
+    const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
+
+    // Emergency Hotlines with instant SWR cache
+    const { data: emergencyHotlines } = useSwrData<{ clinicEmergencyPhone: string; securityControlRoomPhone: string }>(
+        '/api/system/emergency-hotlines',
+        { ttl: 600000 }
+    );
+
+    // Leaves History with instant SWR cache
+    const { data: leaves = [], isLoading: loadingLeaves } = useSwrData<any[]>(
+        user ? '/api/leaves/me' : null,
+        { ttl: 60000 }
+    );
+
     const [notifications, setNotifications] = useState<any[]>([]);
     const [loadingNotifications, setLoadingNotifications] = useState(true);
-    const [leaves, setLeaves] = useState<any[]>([]);
-    const [loadingLeaves, setLoadingLeaves] = useState(true);
-    
-    // Emergency hotlines settings state
-    const [emergencyHotlines, setEmergencyHotlines] = useState<{ clinicEmergencyPhone: string; securityControlRoomPhone: string } | null>(null);
-
-    useEffect(() => {
-        const fetchHotlines = async () => {
-            try {
-                const { data } = await api.get('/api/system/emergency-hotlines');
-                setEmergencyHotlines(data);
-            } catch (err) {
-                console.error('Failed to fetch emergency hotlines', err);
-            }
-        };
-        fetchHotlines();
-    }, []);
 
     // Registry Dashboard States
     const [activities, setActivities] = useState<any[]>([]);
@@ -154,10 +152,6 @@ export default function DashboardHome() {
     const [sigSuccess, setSigSuccess] = useState('');
     const [sigError, setSigError] = useState('');
     const [currentSigUrl, setCurrentSigUrl] = useState('');
-
-    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN' || user?.role === 'VICE_CHANCELLOR';
-    const isVC = user?.role === 'VICE_CHANCELLOR';
-
 
     useEffect(() => {
         if (user?.staffProfile?.signatureUrl) {
@@ -264,8 +258,6 @@ export default function DashboardHome() {
         }
     };
 
-    const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
-
     useEffect(() => {
         // Restore cached dashboard data instantly from sessionStorage for 0ms load speed
         try {
@@ -301,21 +293,6 @@ export default function DashboardHome() {
 
         return () => clearInterval(interval);
     }, [user, isRegistry]);
-
-    useEffect(() => {
-        const fetchLeaves = async () => {
-            if (!user) return;
-            try {
-                const { data } = await api.get('/api/leaves/me');
-                setLeaves(data || []);
-            } catch (error) {
-                console.error('Failed to load leaves history', error);
-            } finally {
-                setLoadingLeaves(false);
-            }
-        };
-        fetchLeaves();
-    }, [user]);
 
     useEffect(() => {
         const fetchRegistryDashboardData = async () => {

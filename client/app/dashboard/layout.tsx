@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
@@ -10,9 +10,7 @@ import NavigationProgress from '@/components/ui/NavigationProgress';
 import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter';
 import dynamic from 'next/dynamic';
-import { getSocketUrl } from '../../lib/api';
-import io, { Socket } from 'socket.io-client';
-import { IncomingVideoCallData } from '@/components/ui/IncomingVideoCallModal';
+import { SocketProvider, useSocket } from '../../context/SocketContext';
 
 const IncomingVideoCallModal = dynamic(() => import('@/components/ui/IncomingVideoCallModal'), {
     ssr: false
@@ -70,123 +68,115 @@ function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4 relative overflow-hidden w-full">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50 pointer-events-none" />
-            
-            <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl border border-gray-100 relative animate-in fade-in zoom-in-95 duration-300">
-                <div className="flex flex-col items-center mb-6 text-center">
-                    <div className="w-16 h-16 mb-4 bg-red-50 rounded-full flex items-center justify-center text-red-500 shadow-inner">
-                        <Lock className="w-8 h-8" />
+            <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] pointer-events-none" />
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+                <div className="text-center mb-6">
+                    <div className="mx-auto w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-4 text-amber-600">
+                        <Lock size={24} />
                     </div>
-                    <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">Change Default Password</h2>
-                    <p className="text-sm font-medium text-gray-500 mt-2">
-                        For security reasons, you must change your temporary default password before you can proceed to the portal.
+                    <h2 className="text-xl font-bold text-gray-900">Security Update Required</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        You are currently using the default system password. Please change your password to continue.
                     </p>
                 </div>
 
                 {error && (
-                    <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700 border border-red-100 flex items-start gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-red-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                        <span className="flex-1">{error}</span>
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg font-medium">
+                        {error}
                     </div>
                 )}
-
                 {success && (
-                    <div className="mb-4 rounded-lg bg-green-50 p-4 text-sm text-green-700 border border-green-100 flex items-start gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-green-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        <span className="flex-1">Password updated successfully! Redirecting you to the portal...</span>
+                    <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg font-medium">
+                        Password updated successfully! Logging you in...
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="currentPassword">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
                             Current Password
                         </label>
                         <div className="relative">
                             <input
-                                className="w-full rounded-xl border border-gray-200 bg-gray-55 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
-                                id="currentPassword"
-                                type={showCurrent ? 'text' : 'password'}
-                                placeholder="Enter current password (e.g. 123456789)"
+                                type={showCurrent ? "text" : "password"}
+                                required
                                 value={currentPassword}
                                 onChange={(e) => setCurrentPassword(e.target.value)}
-                                required
+                                className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-10"
+                                placeholder="Enter current password"
                             />
                             <button
                                 type="button"
-                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
                                 onClick={() => setShowCurrent(!showCurrent)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                             >
-                                {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                                {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
                     </div>
 
                     <div>
-                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="newPassword">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
                             New Password
                         </label>
                         <div className="relative">
                             <input
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
-                                id="newPassword"
-                                type={showNew ? 'text' : 'password'}
-                                placeholder="Min 8 characters"
+                                type={showNew ? "text" : "password"}
+                                required
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                required
+                                className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-10"
+                                placeholder="Enter at least 8 characters"
                             />
                             <button
                                 type="button"
-                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
                                 onClick={() => setShowNew(!showNew)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                             >
-                                {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                                {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
+                        </div>
+                        <div className="mt-2">
+                            <PasswordStrengthMeter password={newPassword} />
                         </div>
                     </div>
 
                     <div>
-                        <label className="mb-1 block text-xs font-bold text-gray-500 uppercase tracking-wider" htmlFor="confirmPassword">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
                             Confirm New Password
                         </label>
                         <div className="relative">
                             <input
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-10 text-gray-700 focus:border-nounGreen focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none transition-all"
-                                id="confirmPassword"
-                                type={showConfirm ? 'text' : 'password'}
+                                type={showConfirm ? "text" : "password"}
+                                required
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                required
+                                className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-10"
+                                placeholder="Re-enter new password"
                             />
                             <button
                                 type="button"
-                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
                                 onClick={() => setShowConfirm(!showConfirm)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                             >
-                                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
                     </div>
-                    <PasswordStrengthMeter password={newPassword} />
 
                     <button
-                        className="w-full rounded-xl bg-nounGreen px-4 py-3.5 font-bold text-white hover:bg-green-800 transition-all shadow-lg shadow-green-900/20 hover:-translate-y-0.5 flex items-center justify-center gap-2 mt-6 disabled:opacity-75 disabled:cursor-not-allowed"
                         type="submit"
                         disabled={isSubmitting || success}
+                        style={{ backgroundColor: '#006533' }}
+                        className="w-full mt-2 py-2.5 px-4 text-white text-sm font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {isSubmitting ? (
                             <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <Loader2 size={16} className="animate-spin" />
                                 Updating Password...
                             </>
                         ) : (
-                            'Update Password & Access Portal'
+                            'Set Secure Password & Continue'
                         )}
                     </button>
                 </form>
@@ -195,25 +185,35 @@ function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise
     );
 }
 
-export default function DashboardLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
+// Ultra-fast Shell Skeleton during initial micro-load (<50ms)
+function ShellContentSkeleton() {
+    return (
+        <div className="space-y-6 animate-pulse p-4">
+            <div className="h-8 w-64 bg-slate-200 rounded-lg" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="h-28 bg-slate-200 rounded-2xl" />
+                <div className="h-28 bg-slate-200 rounded-2xl" />
+                <div className="h-28 bg-slate-200 rounded-2xl" />
+                <div className="h-28 bg-slate-200 rounded-2xl" />
+            </div>
+            <div className="h-64 bg-slate-200 rounded-3xl" />
+        </div>
+    );
+}
+
+function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const { user, isLoading, refreshUser } = useAuth();
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
-
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    // Global Incoming Video Call State
-    const [incomingVideoCall, setIncomingVideoCall] = useState<IncomingVideoCallData | null>(null);
-    const [activeVideoModal, setActiveVideoModal] = useState<{
-        isOpen: boolean;
-        roomName: string;
-        title: string;
-    } | null>(null);
-    const globalSocketRef = useRef<Socket | null>(null);
+    const {
+        incomingVideoCall,
+        activeVideoModal,
+        acceptVideoCall,
+        declineVideoCall,
+        closeActiveVideoModal
+    } = useSocket();
 
     const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token');
 
@@ -221,76 +221,19 @@ export default function DashboardLayout({
         setMounted(true);
     }, []);
 
-    // Global socket listener for incoming WhatsApp-style video calls
     useEffect(() => {
-        if (!user || typeof window === 'undefined') return;
-
-        const token = localStorage.getItem('token');
-        const socketUrl = getSocketUrl();
-        const socketInstance = io(socketUrl, {
-            auth: { token },
-            transports: ['websocket', 'polling']
-        });
-
-        globalSocketRef.current = socketInstance;
-
-        socketInstance.on('connect', () => {
-            console.log('[Dashboard Layout] Global video signaling socket connected');
-        });
-
-        socketInstance.on('VIDEO_CALL_INCOMING', (callData: IncomingVideoCallData) => {
-            console.log('[Dashboard Layout] Received incoming video call alert:', callData);
-            if (callData.callerUserId !== user.id) {
-                setIncomingVideoCall(callData);
-            }
-        });
-
-        socketInstance.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
-            setIncomingVideoCall((prev) => (prev?.roomName === data?.roomName ? null : prev));
-        });
-
-        return () => {
-            socketInstance.disconnect();
-            globalSocketRef.current = null;
-        };
-    }, [user]);
-
-    const handleAcceptVideoCall = (callData: IncomingVideoCallData) => {
-        if (globalSocketRef.current) {
-            globalSocketRef.current.emit('VIDEO_CALL_ACCEPTED', { roomName: callData.roomName });
-        }
-        setIncomingVideoCall(null);
-        setActiveVideoModal({
-            isOpen: true,
-            roomName: callData.roomName,
-            title: callData.title || `Video Call with ${callData.callerName}`
-        });
-    };
-
-    const handleDeclineVideoCall = (callData: IncomingVideoCallData) => {
-        if (globalSocketRef.current) {
-            globalSocketRef.current.emit('VIDEO_CALL_DECLINED', {
-                roomName: callData.roomName,
-                callerUserId: callData.callerUserId
-            });
-        }
-        setIncomingVideoCall(null);
-    };
-
-    useEffect(() => {
-        if (!isLoading && !user) {
+        if (!isLoading && !user && mounted) {
             router.push('/');
         } else if (user && !user.mustChangePassword) {
-            // Register FCM Push Notifications dynamically on the client side
             import('../../lib/firebase')
                 .then(({ requestPushNotificationsPermission }) => {
                     requestPushNotificationsPermission();
                 })
                 .catch(err => {
-                    console.error('[FCM] Failed to load Firebase init library:', err);
+                    console.warn('[FCM] Firebase notification registration:', err);
                 });
         }
-    }, [user, isLoading, router]);
+    }, [user, isLoading, mounted, router]);
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden relative">
@@ -316,12 +259,7 @@ export default function DashboardLayout({
                         Log In to Portal
                     </button>
                 </div>
-            ) : (!mounted || isLoading || !user) ? (
-                <div className="flex h-full w-full items-center justify-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"></div>
-                    <div className="sr-only">{children}</div>
-                </div>
-            ) : user.mustChangePassword ? (
+            ) : user?.mustChangePassword ? (
                 <ForcedPasswordChangeModal refreshUser={refreshUser} />
             ) : (
                 <>
@@ -338,7 +276,7 @@ export default function DashboardLayout({
                         <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
                     </div>
 
-                    {/* Desktop Sidebar (NO absolute/fixed positioning whatsoever) */}
+                    {/* Desktop Sidebar Shell */}
                     <div className="hidden md:block flex-none">
                         <Sidebar />
                     </div>
@@ -347,7 +285,9 @@ export default function DashboardLayout({
                         <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
                         <main className="flex-1 overflow-auto p-4 md:p-8">
-                            {children}
+                            <Suspense fallback={<ShellContentSkeleton />}>
+                                {children}
+                            </Suspense>
                         </main>
                     </div>
                 </>
@@ -357,8 +297,8 @@ export default function DashboardLayout({
             {mounted && incomingVideoCall && (
                 <IncomingVideoCallModal
                     incomingCall={incomingVideoCall}
-                    onAccept={handleAcceptVideoCall}
-                    onDecline={handleDeclineVideoCall}
+                    onAccept={acceptVideoCall}
+                    onDecline={declineVideoCall}
                 />
             )}
 
@@ -366,12 +306,7 @@ export default function DashboardLayout({
             {mounted && activeVideoModal?.isOpen && (
                 <VideoConferenceModal
                     isOpen={activeVideoModal.isOpen}
-                    onClose={() => {
-                        if (globalSocketRef.current) {
-                            globalSocketRef.current.emit('VIDEO_CALL_ENDED', { roomName: activeVideoModal.roomName });
-                        }
-                        setActiveVideoModal(null);
-                    }}
+                    onClose={closeActiveVideoModal}
                     roomName={activeVideoModal.roomName}
                     userName={user?.name || (user?.email ? user.email.split('@')[0] : 'Colleague')}
                     userEmail={user?.email || ''}
@@ -380,5 +315,15 @@ export default function DashboardLayout({
                 />
             )}
         </div>
+    );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <SocketProvider>
+            <DashboardLayoutContent>
+                {children}
+            </DashboardLayoutContent>
+        </SocketProvider>
     );
 }

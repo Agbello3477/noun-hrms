@@ -343,35 +343,52 @@ export const getEncounters = async (req: AuthRequest, res: Response) => {
 
     try {
         const pageNum = page ? parseInt(String(page)) : 1;
-        const limitNum = limit ? Math.min(parseInt(String(limit)), 50) : 20;
+        const limitNum = Math.min(parseInt(String(limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
+        const where = status ? { status: String(status) } : {};
 
-        const encounters = await prisma.clinicEncounter.findMany({
-            where: status ? { status: String(status) } : {},
-            include: {
-                patientFile: {
-                    select: {
-                        id: true,
-                        patientId: true,
-                        name: true,
-                        gender: true,
-                        dob: true,
-                        bloodGroup: true,
-                        genotype: true,
-                        allergies: true,
-                        createdAt: true,
-                        updatedAt: true
+        const [total, encounters] = await Promise.all([
+            prisma.clinicEncounter.count({ where }),
+            prisma.clinicEncounter.findMany({
+                where,
+                select: {
+                    id: true,
+                    status: true,
+                    bp: true,
+                    temperature: true,
+                    weight: true,
+                    symptoms: true,
+                    clinicalNotes: true,
+                    diagnoses: true,
+                    labTests: true,
+                    labResults: true,
+                    prescriptions: true,
+                    pharmacyStatus: true,
+                    createdAt: true,
+                    triagedAt: true,
+                    consultedAt: true,
+                    labCompletedAt: true,
+                    pharmacyFulfilledAt: true,
+                    patientFile: {
+                        select: {
+                            id: true,
+                            patientId: true,
+                            name: true,
+                            gender: true,
+                            dob: true,
+                            bloodGroup: true,
+                            genotype: true,
+                            allergies: true,
+                            createdAt: true,
+                            updatedAt: true
+                        }
                     }
-                }
-            },
-            orderBy: { createdAt: 'desc' },
-            skip,
-            take: limitNum
-        });
-
-        const total = await prisma.clinicEncounter.count({
-            where: status ? { status: String(status) } : {}
-        });
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limitNum
+            })
+        ]);
 
         res.setHeader('X-Total-Count', total.toString());
         res.setHeader('X-Total-Pages', Math.ceil(total / limitNum).toString());

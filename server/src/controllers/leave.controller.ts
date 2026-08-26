@@ -432,15 +432,30 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
 
         const activeLeaves = await prisma.leaveRequest.findMany({
             where: whereClause,
-            include: {
+            select: {
+                id: true,
+                type: true,
+                startDate: true,
+                endDate: true,
+                durationDays: true,
+                reason: true,
+                status: true,
                 staff: {
-                    include: {
-                        unit: true,
-                        studyCenter: true,
+                    select: {
+                        id: true,
+                        title: true,
+                        surname: true,
+                        otherNames: true,
+                        cadre: true,
+                        rank: true,
+                        staffId: true,
+                        unit: { select: { name: true, type: true } },
+                        studyCenter: { select: { name: true } },
                         user: { select: { email: true, name: true } }
                     }
                 }
             },
+            take: 25,
             orderBy: { endDate: 'asc' }
         });
 

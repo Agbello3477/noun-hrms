@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import io, { Socket } from 'socket.io-client';
 
+import { useSocket } from '../../context/SocketContext';
+
 interface VoipUser {
   id: string;
   userId: string;
@@ -62,16 +64,22 @@ interface VoicemailItem {
 
 export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtension, onMissedCallCountChange }: VoipCallModalProps) {
   const { user } = useAuth();
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const { 
+    socket, 
+    userExtension, 
+    onlineExtensions, 
+    missedCalls: socketMissedCalls, 
+    newMissedCount,
+    clearNewMissedCount,
+    registerExtension 
+  } = useSocket();
 
   // VoIP Extension States
-  const [userExtension, setUserExtension] = useState<string>('');
   const [targetExt, setTargetExt] = useState<string>('');
   const [directory, setDirectory] = useState<VoipUser[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'keypad' | 'directory' | 'ptt' | 'missed' | 'voicemail'>('keypad');
-  const [onlineExtensions, setOnlineExtensions] = useState<Set<string>>(new Set());
 
   // Active Call States
   const [callState, setCallState] = useState<'IDLE' | 'INITIATING' | 'RINGING' | 'INCOMING' | 'CONNECTED' | 'REJECTED' | 'ENDED'>('IDLE');
@@ -93,7 +101,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   const [voicemails, setVoicemails] = useState<VoicemailItem[]>([]);
   const [loadingVoicemails, setLoadingVoicemails] = useState<boolean>(false);
   const [playingVoicemailId, setPlayingVoicemailId] = useState<string | null>(null);
-  const [newMissedCount, setNewMissedCount] = useState<number>(0);
 
   // Voice Note Recording for Unanswered / Busy Call
   const [showVoicemailRecorder, setShowVoicemailRecorder] = useState<boolean>(false);
@@ -115,7 +122,13 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const incomingOfferSdpRef = useRef<any>(null);
-  const myExtensionRef = useRef<string>('');
+
+  // Synchronize missed calls from socket context
+  useEffect(() => {
+    if (socketMissedCalls && socketMissedCalls.length > 0) {
+      setMissedCalls(socketMissedCalls);
+    }
+  }, [socketMissedCalls]);
 
   // Propagate missed call count to parent (for Header badge)
   useEffect(() => {
@@ -129,63 +142,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     }
   }, [isSpeakerOn]);
 
-  // Initialize Socket.io connection for VoIP Signaling
-  useEffect(() => {
-    if (!user || typeof window === 'undefined') return;
-
-    const token = localStorage.getItem('token');
-    const socketUrl = getSocketUrl();
-    console.log('[VoIP UI] Connecting to signaling server:', socketUrl);
-    
-    const socketInstance = io(socketUrl, {
-      auth: { token },
-      transports: ['websocket', 'polling']
-    });
-
-    socketInstance.on('connect', () => {
-      console.log('[VoIP UI] Signaling socket connected');
-      if (myExtensionRef.current) {
-        socketInstance.emit('VOIP_REGISTER_EXTENSION', { extension: myExtensionRef.current });
-        console.log(`[VoIP UI] Registered extension ${myExtensionRef.current} on connect`);
-      }
-      socketInstance.emit('VOIP_GET_ONLINE_EXTENSIONS', (exts: string[]) => {
-        if (Array.isArray(exts)) {
-          setOnlineExtensions(new Set(exts));
-        }
-      });
-    });
-
-    // Real-time Voicemail notification
-    socketInstance.on('VOICEMAIL_RECEIVED', (vm: any) => {
-      console.log('[VoIP UI] Received new voicemail in real-time:', vm);
-      setVoicemails((prev) => [vm, ...prev]);
-      setNewMissedCount((prev) => prev + 1);
-    });
-
-    setSocket(socketInstance);
-
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, [user]);
-
-  // Fetch logged in user's guaranteed extension
-  const fetchMyExtension = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/voip/my-extension');
-      if (data?.extension) {
-        myExtensionRef.current = data.extension;
-        setUserExtension(data.extension);
-        if (socket?.connected) {
-          socket.emit('VOIP_REGISTER_EXTENSION', { extension: data.extension });
-          console.log(`[VoIP UI] Registered my extension ${data.extension} from /my-extension`);
-        }
-      }
-    } catch (err) {
-      console.error('[VoIP UI] Failed to get my extension', err);
-    }
-  }, [socket]);
-
   // Fetch directory and user's 4-digit extension
   const fetchDirectory = useCallback(async () => {
     try {
@@ -193,14 +149,10 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       const { data } = await api.get('/api/voip/directory');
       setDirectory(data || []);
 
-      if (!myExtensionRef.current) {
+      if (!userExtension) {
         const myProfile = (data || []).find((p: VoipUser) => p.userId === user?.id);
         if (myProfile?.extension) {
-          myExtensionRef.current = myProfile.extension;
-          setUserExtension(myProfile.extension);
-          if (socket?.connected) {
-            socket.emit('VOIP_REGISTER_EXTENSION', { extension: myProfile.extension });
-          }
+          registerExtension(myProfile.extension);
         }
       }
     } catch (err) {
@@ -208,7 +160,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     } finally {
       setLoadingDirectory(false);
     }
-  }, [user, socket]);
+  }, [user, userExtension, registerExtension]);
 
   // Fetch Voicemails
   const fetchVoicemails = useCallback(async () => {
@@ -225,11 +177,10 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   useEffect(() => {
     if (user) {
-      fetchMyExtension();
       fetchDirectory();
       fetchVoicemails();
     }
-  }, [user, fetchMyExtension, fetchDirectory, fetchVoicemails]);
+  }, [user, fetchDirectory, fetchVoicemails]);
 
   useEffect(() => {
     if (initialExtension) {
@@ -349,7 +300,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     socket.on('CALL_MISSED', (data: MissedCall) => {
       console.log('[VoIP UI] Received missed call notice:', data);
       setMissedCalls((prev) => [data, ...prev]);
-      setNewMissedCount((prev) => prev + 1);
     });
 
     // ICE Candidate Relay
@@ -768,7 +718,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
                 Staff Directory ({directory.length})
               </button>
               <button
-                onClick={() => { setActiveTab('voicemail'); setShowVoicemailRecorder(false); setNewMissedCount(0); }}
+                onClick={() => { setActiveTab('voicemail'); setShowVoicemailRecorder(false); clearNewMissedCount(); }}
                 className={`flex-1 py-2 text-xs font-bold transition border-b-2 relative ${
                   activeTab === 'voicemail' ? 'border-emerald-600 text-emerald-700 font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
@@ -781,7 +731,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
                 )}
               </button>
               <button
-                onClick={() => { setActiveTab('missed'); setShowVoicemailRecorder(false); setNewMissedCount(0); }}
+                onClick={() => { setActiveTab('missed'); setShowVoicemailRecorder(false); clearNewMissedCount(); }}
                 className={`flex-1 py-2 text-xs font-bold transition border-b-2 relative ${
                   activeTab === 'missed' ? 'border-emerald-600 text-emerald-700 font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
