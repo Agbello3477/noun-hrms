@@ -534,15 +534,13 @@ export const verifyAndEnable2FA = async (req: Request, res: Response) => {
 
         if (!isValid) return res.status(400).json({ message: 'Invalid 2FA code' });
 
-        // Generate 5 backup codes of 8 characters
-        const backupCodes: string[] = [];
-        const hashedBackupCodes: string[] = [];
-        for (let i = 0; i < 5; i++) {
-            const rawCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-            backupCodes.push(rawCode);
-            const hashed = bcrypt.hashSync(rawCode, 10);
-            hashedBackupCodes.push(hashed);
-        }
+        // Generate 5 backup codes of 8 characters in parallel non-blocking workers
+        const backupCodes: string[] = Array.from({ length: 5 }, () =>
+            Math.random().toString(36).substring(2, 10).toUpperCase()
+        );
+        const hashedBackupCodes = await Promise.all(
+            backupCodes.map((rawCode) => bcrypt.hash(rawCode, 10))
+        );
 
         await prisma.user.update({
             where: { id: userId },
