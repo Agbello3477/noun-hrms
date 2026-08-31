@@ -5,7 +5,7 @@ import prisma from '../prisma';
 export const setupChatSocket = (io: SocketIOServer) => {
     // Middleware to authenticate socket connection
     io.use((socket, next) => {
-        const token = socket.handshake.auth.token;
+        const token = socket.handshake.auth?.token || (socket.handshake.query?.token as string);
         if (!token) {
             return next(new Error('Authentication error: Token missing'));
         }

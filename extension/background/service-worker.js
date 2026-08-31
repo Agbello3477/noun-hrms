@@ -1,5 +1,6 @@
 // NOUN HRMS Manifest V3 Background Service Worker
 import { getConfig, apiRequest, clipLiteratureToProject } from '../lib/api.js';
+import { io } from '../lib/socket.io.esm.min.js';
 
 let socket = null;
 let isConnectingSocket = false;
@@ -37,18 +38,18 @@ async function showDesktopNotification(id, options) {
   }
 }
 
-// ── WebSocket & VoIP Signaling Engine ─────────────────────────────────────────
+// ── Socket.IO & VoIP Signaling Engine ────────────────────────────────────────
 async function initWebSocketSignaling() {
   const config = await getConfig();
   if (!config.token) {
     if (socket) {
-      try { socket.close(); } catch(e) {}
+      try { socket.disconnect(); } catch(e) {}
       socket = null;
     }
     return;
   }
 
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (socket && socket.connected) {
     return; // Already connected
   }
 
@@ -56,40 +57,89 @@ async function initWebSocketSignaling() {
   isConnectingSocket = true;
 
   try {
-    // Derive WS URL from HTTP API base
-    const wsUrl = config.apiBase.replace(/^http/, 'ws');
-    
-    // Connect to WebSocket server with token in query params
-    socket = new WebSocket(`${wsUrl}/api/collaboration/doc?token=${encodeURIComponent(config.token)}`);
+    if (socket) {
+      try { socket.disconnect(); } catch(e) {}
+      socket = null;
+    }
 
-    socket.onopen = () => {
+    socket = io(config.apiBase, {
+      auth: { token: config.token },
+      query: { token: config.token },
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000
+    });
+
+    socket.on('connect', () => {
       isConnectingSocket = false;
-      console.log('[NOUN HRMS WS] Connected to enterprise signaling gateway.');
+      console.log('[NOUN HRMS Socket.IO] Connected to enterprise signaling server.');
       chrome.action.setBadgeText({ text: 'ON' });
       chrome.action.setBadgeBackgroundColor({ color: '#006533' });
-    };
+    });
 
-    socket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        handleSignalingEvent(msg);
-      } catch (err) {
-        // Non-JSON message (binary stream)
-      }
-    };
-
-    socket.onclose = () => {
+    socket.on('connect_error', (err) => {
       isConnectingSocket = false;
-      socket = null;
+      console.debug('[NOUN HRMS Socket.IO Auth/Connect Error]:', err.message);
+    });
+
+    socket.on('INCOMING_CALL', (data) => {
+      showDesktopNotification(`call_${data?.callId || Date.now()}`, {
+        title: '📞 Incoming NOUN VoIP Call',
+        message: `Incoming call from ${data?.callerName || 'Staff Colleague'} (Ext: ${data?.callerExtension || '1000'})`,
+        priority: 2,
+        buttons: [{ title: 'Answer Call' }, { title: 'Decline' }]
+      });
+    });
+
+    socket.on('VIDEO_CALL_INCOMING', (data) => {
+      showDesktopNotification(`video_${data?.roomName || Date.now()}`, {
+        title: '📹 Incoming Video Meeting',
+        message: `${data?.callerName || 'Colleague'} initiated: ${data?.title || 'Video Conference Meeting'}`,
+        priority: 2,
+        buttons: [{ title: 'Join Video Call' }]
+      });
+    });
+
+    socket.on('CALL_MISSED', (data) => {
+      showDesktopNotification(`missed_${Date.now()}`, {
+        title: '⚠️ Missed VoIP Call',
+        message: `You missed a call from ${data?.callerName || 'Colleague'} (Ext: ${data?.callerExtension || '1000'})`,
+        priority: 1
+      });
+    });
+
+    socket.on('VOICEMAIL_RECEIVED', (data) => {
+      showDesktopNotification(`voicemail_${Date.now()}`, {
+        title: '🎙️ New Voicemail / Audio Note',
+        message: `New voice message received from Extension ${data?.callerExtension || 'colleague'}.`,
+        priority: 1
+      });
+    });
+
+    socket.on('SECURITY_ALERT', (data) => {
+      showDesktopNotification(`sec_${Date.now()}`, {
+        title: '🚨 NOUN SECURITY COMMAND ALERT',
+        message: data?.message || 'Security dispatch alert broadcasted.',
+        priority: 2
+      });
+    });
+
+    socket.on('SECURITY_PTT_TALK_START', (data) => {
+      showDesktopNotification(`sec_ptt_${Date.now()}`, {
+        title: '🚨 NOUN SECURITY DISPATCH (PTT)',
+        message: `Officer ${data?.speakerName || 'Dispatch'} broadcasting on ${data?.channelId || 'Main Channel'}.`,
+        priority: 2
+      });
+    });
+
+    socket.on('disconnect', () => {
+      isConnectingSocket = false;
       chrome.action.setBadgeText({ text: '' });
-    };
-
-    socket.onerror = () => {
-      isConnectingSocket = false;
-    };
+    });
   } catch (err) {
     isConnectingSocket = false;
-    console.debug('[NOUN HRMS WS] Signaling connection failed:', err);
+    console.debug('[NOUN HRMS Socket.IO Setup Error]:', err);
   }
 }
 
