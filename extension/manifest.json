@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "NOUN HRMS Enterprise Companion",
+  "version": "1.0.0",
+  "description": "Official desktop companion for NOUN HRMS: Academic Literature Clipper, Emergency SOS Trigger, and Real-Time VoIP/Call Alerts.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "NOUN HRMS Desktop Companion",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://noun-hrms.onrender.com/*",
+    "https://nounhrms.web.app/*",
+    "https://nounhrms.firebaseapp.com/*",
+    "http://localhost:5000/*",
+    "http://localhost:3000/*",
+    "*://scholar.google.com/*",
+    "*://scholar.googleusercontent.com/*",
+    "*://pubmed.ncbi.nlm.nih.gov/*",
+    "*://ieeexplore.ieee.org/*",
+    "*://*.sciencedirect.com/*",
+    "*://doi.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://nounhrms.web.app/*",
+        "https://nounhrms.firebaseapp.com/*",
+        "http://localhost:3000/*"
+      ],
+      "js": [
+        "content/portal-sync.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://scholar.google.com/*",
+        "*://pubmed.ncbi.nlm.nih.gov/*",
+        "*://ieeexplore.ieee.org/*",
+        "*://*.sciencedirect.com/*",
+        "*://doi.org/*"
+      ],
+      "js": [
+        "content/clipper.js"
+      ],
+      "css": [
+        "content/clipper.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

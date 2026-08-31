@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOUN HRMS Desktop Companion</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="extension-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-circle">
+          <img src="../icons/icon-48.png" alt="NOUN" width="22" height="22">
+        </div>
+        <div class="brand-text">
+          <h1>NOUN HRMS</h1>
+          <span class="badge">Enterprise Companion</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="connection-dot" class="dot offline" title="Offline"></span>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="clipper">📚 Clipper</button>
+      <button class="tab-btn" data-tab="emergency">🚨 SOS Alert</button>
+      <button class="tab-btn" data-tab="status">👤 Status</button>
+    </nav>
+
+    <!-- TAB 1: ACADEMIC CLIPPER -->
+    <main id="tab-clipper" class="tab-content active">
+      <div id="clipper-view">
+        <div class="section-title-row">
+          <h2>Academic Literature Clipper</h2>
+          <button id="btn-refresh-meta" class="icon-btn" title="Refresh Active Tab Metadata">🔄</button>
+        </div>
+
+        <div id="clipper-auth-warning" class="alert-box warning hidden">
+          <span>⚠️ Please log in or sync your portal session to clip articles.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="project-select">Target Research Workspace</label>
+          <select id="project-select" class="form-control">
+            <option value="">Loading workspaces...</option>
+          </select>
+        </div>
+
+        <div class="metadata-preview">
+          <div class="form-group">
+            <label for="meta-title">Paper Title</label>
+            <input type="text" id="meta-title" class="form-control" placeholder="Detecting publication title...">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="meta-authors">Authors</label>
+              <input type="text" id="meta-authors" class="form-control" placeholder="Authors list">
+            </div>
+            <div class="form-group w-80">
+              <label for="meta-year">Year</label>
+              <input type="text" id="meta-year" class="form-control" placeholder="YYYY">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="meta-doi">DOI / Link</label>
+            <input type="text" id="meta-doi" class="form-control" placeholder="10.xxxx/yyyy">
+          </div>
+
+          <div class="form-group">
+            <label for="meta-abstract">Abstract Preview</label>
+            <textarea id="meta-abstract" class="form-control text-area-sm" rows="3" placeholder="Abstract text..."></textarea>
+          </div>
+        </div>
+
+        <button id="btn-clip-save" class="btn btn-primary btn-block">
+          <span class="btn-text">📥 Clip to Research Forum</span>
+        </button>
+
+        <div id="clip-status-msg" class="status-banner hidden"></div>
+      </div>
+    </main>
+
+    <!-- TAB 2: EMERGENCY SOS QUICK ACTION -->
+    <main id="tab-emergency" class="tab-content">
+      <div class="emergency-banner">
+        <div class="sos-icon">🚨</div>
+        <div>
+          <h3>Security Command Trigger</h3>
+          <p>Dispatches high-priority incident alert to Campus Security</p>
+        </div>
+      </div>
+
+      <form id="emergency-form">
+        <div class="form-group">
+          <label for="sos-category">Incident Category *</label>
+          <select id="sos-category" class="form-control" required>
+            <option value="SUSPICIOUS_ACTIVITY">Suspicious Activity</option>
+            <option value="MEDICAL_EMERGENCY">Medical Emergency</option>
+            <option value="FIRE_HAZARD">Fire Hazard / Outbreak</option>
+            <option value="INTRUSION_BREACH">Security Breach / Intrusion</option>
+            <option value="THEFT_PROPERTY">Theft / Property Damage</option>
+            <option value="HARASSMENT_DISPUTE">Hostility / Physical Dispute</option>
+            <option value="OTHER_INCIDENT">Other Urgent Emergency</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="sos-title">Headline / Short Title *</label>
+          <input type="text" id="sos-title" class="form-control" placeholder="e.g. Broken window near Science Complex" required>
+        </div>
+
+        <div class="form-group">
+          <label for="sos-location">Exact Campus Location *</label>
+          <input type="text" id="sos-location" class="form-control" placeholder="e.g. Faculty of Sciences, Block B Room 102" required>
+        </div>
+
+        <div class="form-group">
+          <label for="sos-description">Incident Details *</label>
+          <textarea id="sos-description" class="form-control" rows="3" placeholder="Provide relevant observations or immediate assistance required..." required></textarea>
+        </div>
+
+        <div class="checkbox-row">
+          <label class="custom-checkbox">
+            <input type="checkbox" id="sos-anonymous">
+            <span class="checkmark"></span>
+            <span class="checkbox-label">File as Anonymous Incident</span>
+          </label>
+        </div>
+
+        <button type="submit" id="btn-submit-sos" class="btn btn-danger btn-block">
+          <span>🚨 Transmit Emergency Ticket</span>
+        </button>
+
+        <div id="sos-status-msg" class="status-banner hidden"></div>
+      </form>
+    </main>
+
+    <!-- TAB 3: USER STATUS & CONFIGURATION -->
+    <main id="tab-status" class="tab-content">
+      <div id="user-profile-card" class="profile-card">
+        <div class="profile-avatar" id="user-avatar-initials">UN</div>
+        <div class="profile-info">
+          <h3 id="user-display-name">Not Signed In</h3>
+          <p id="user-display-email">Sync with portal or sign in below</p>
+          <div class="profile-badges">
+            <span id="user-role-badge" class="badge">Guest</span>
+            <span id="user-ext-badge" class="badge badge-gold hidden">Ext: ----</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-actions">
+        <button id="btn-sync-session" class="btn btn-secondary btn-block">
+          🔄 Sync from Active Portal Tab
+        </button>
+      </div>
+
+      <div class="accordion-section">
+        <details>
+          <summary>Manual Sign In / API Settings</summary>
+          <form id="manual-login-form" class="mt-8">
+            <div class="form-group">
+              <label for="login-email">Staff Email</label>
+              <input type="email" id="login-email" class="form-control" placeholder="user@noun.edu.ng">
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password</label>
+              <input type="password" id="login-password" class="form-control" placeholder="••••••••">
+            </div>
+            <button type="submit" id="btn-manual-login" class="btn btn-primary btn-block">
+              Direct Sign In
+            </button>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="form-group">
+            <label for="cfg-api-base">API Server Endpoint</label>
+            <input type="text" id="cfg-api-base" class="form-control" value="https://noun-hrms.onrender.com">
+          </div>
+          <div class="form-group">
+            <label for="cfg-portal-base">Web Portal Domain</label>
+            <input type="text" id="cfg-portal-base" class="form-control" value="https://nounhrms.web.app">
+          </div>
+          <button id="btn-save-config" class="btn btn-outline btn-block">Save Server Configuration</button>
+        </details>
+      </div>
+
+      <div class="mt-12">
+        <button id="btn-logout" class="btn btn-outline-danger btn-block hidden">Disconnect / Sign Out</button>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <a href="https://nounhrms.web.app/dashboard" target="_blank" class="footer-link">Open Full Web Portal ↗</a>
+      <span class="version-tag">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
