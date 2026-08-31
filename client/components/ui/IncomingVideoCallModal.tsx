@@ -1,7 +1,7 @@
-"use client";
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Video, PhoneOff, Users, Sparkles } from 'lucide-react';
+import { startIncomingCallRingtone, stopIncomingCallRingtone } from '../../lib/sound';
+import { showBrowserNotification } from '../../lib/notifications';
 
 export interface IncomingVideoCallData {
     roomName: string;
@@ -26,71 +26,34 @@ export default function IncomingVideoCallModal({
     onAccept,
     onDecline
 }: IncomingVideoCallModalProps) {
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const ringIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Play pleasant synthetic Web Audio ringtone chime
+    // Play pleasant synthetic Web Audio ringtone chime and show desktop notification
     useEffect(() => {
         if (!incomingCall) {
-            if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
-            if (audioContextRef.current) {
-                audioContextRef.current.close().catch(() => {});
-                audioContextRef.current = null;
-            }
+            stopIncomingCallRingtone();
             return;
         }
 
-        const playRingChime = () => {
-            try {
-                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-                if (!AudioCtx) return;
-                const ctx = new AudioCtx();
-                audioContextRef.current = ctx;
+        // Start soft undisturbing harmonic chime
+        startIncomingCallRingtone();
 
-                const osc1 = ctx.createOscillator();
-                const osc2 = ctx.createOscillator();
-                const gain = ctx.createGain();
-
-                osc1.type = 'sine';
-                osc2.type = 'triangle';
-                osc1.frequency.setValueAtTime(440, ctx.currentTime); // A4
-                osc1.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-                osc2.frequency.setValueAtTime(554.37, ctx.currentTime); // C#5
-                osc2.frequency.exponentialRampToValueAtTime(1108.73, ctx.currentTime + 0.3);
-
-                gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-
-                osc1.connect(gain);
-                osc2.connect(gain);
-                gain.connect(ctx.destination);
-
-                osc1.start();
-                osc2.start();
-                osc1.stop(ctx.currentTime + 0.6);
-                osc2.stop(ctx.currentTime + 0.6);
-            } catch (e) {
-                // AudioContext autoplay might be restricted before interaction
-            }
-        };
-
-        playRingChime();
-        ringIntervalRef.current = setInterval(playRingChime, 2500);
+        // Trigger native desktop push notification
+        showBrowserNotification(`📹 Video Meeting: ${incomingCall.title || 'Incoming Video Conference'}`, {
+            body: `${incomingCall.callerName} (${incomingCall.callerRole || 'Colleague'}) is calling. Click to join.`,
+            tag: `video_call_${incomingCall.roomName}`,
+            requireInteraction: true
+        });
 
         // Auto-dismiss after 45s
         const autoTimeout = setTimeout(() => {
             if (incomingCall) {
+                stopIncomingCallRingtone();
                 onDecline(incomingCall);
             }
         }, 45000);
 
         return () => {
-            if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
+            stopIncomingCallRingtone();
             clearTimeout(autoTimeout);
-            if (audioContextRef.current) {
-                audioContextRef.current.close().catch(() => {});
-                audioContextRef.current = null;
-            }
         };
     }, [incomingCall, onDecline]);
 

@@ -238,17 +238,22 @@ export const setupVoipSocket = (io: SocketIOServer) => {
 
       console.log(`[Video Call Signaling] ${callerInfo.callerName} initiated video call in room ${roomName}`);
 
+      // 1. Emit to all targeted user socket rooms
       if (Array.isArray(targetUserIds) && targetUserIds.length > 0) {
-        // Send directly to targeted peer users (excluding caller)
         targetUserIds.forEach((targetUid) => {
           if (targetUid !== user.id) {
             io.to(`voip_user_${targetUid}`).emit('VIDEO_CALL_INCOMING', callerInfo);
           }
         });
-      } else {
-        // Broadcast to all connected clients except initiator
-        socket.broadcast.emit('VIDEO_CALL_INCOMING', callerInfo);
       }
+
+      // 2. Emit to project collaborative socket room if targetId exists
+      if (targetId) {
+        io.to(`project_${targetId}`).emit('VIDEO_CALL_INCOMING', callerInfo);
+      }
+
+      // 3. Fallback broadcast to all connected dashboard peers (excluding caller)
+      socket.broadcast.emit('VIDEO_CALL_INCOMING', callerInfo);
     });
 
     socket.on('VIDEO_CALL_ACCEPTED', (data: { roomName: string }) => {

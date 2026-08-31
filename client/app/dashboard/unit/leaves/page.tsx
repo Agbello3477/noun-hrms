@@ -37,7 +37,7 @@ export default function UnitLeavesPage() {
     // Check permissions
     const isHOD = currentUser?.role === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'DEPARTMENT';
     const isDean = currentUser?.role === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'FACULTY';
-    const canApprove = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser?.role || '');
+    const canApprove = ['UNIT_HEAD', 'UNIT_ADMIN', 'STUDY_CENTER_MANAGER', 'CLINIC_HEAD', 'SECURITY_HEAD', 'BURSARY', 'AUDIT', 'HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser?.role || '');
 
     useEffect(() => {
         if (canApprove) fetchPendingLeaves();

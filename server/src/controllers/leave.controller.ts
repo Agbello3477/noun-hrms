@@ -12,7 +12,10 @@ export const applyForLeave = async (req: Request, res: Response) => {
         // @ts-ignore
         const userId = req.user.id;
 
-        const staffProfile = await prisma.staffProfile.findUnique({ where: { userId } });
+        const staffProfile = await prisma.staffProfile.findUnique({
+            where: { userId },
+            include: { user: true, unit: true, studyCenter: true }
+        });
         if (!staffProfile) return res.status(400).json({ message: 'Staff profile not found' });
 
         // Validation...
@@ -35,6 +38,51 @@ export const applyForLeave = async (req: Request, res: Response) => {
                 status: LeaveStatus.PENDING
             }
         });
+
+        // Notify Unit Head / Center Approvers in real-time
+        try {
+            const approvers = await prisma.user.findMany({
+                where: {
+                    OR: [
+                        ...(staffProfile.unitId ? [{
+                            staffProfile: { unitId: staffProfile.unitId },
+                            role: { in: [Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.CLINIC_HEAD, Role.SECURITY_HEAD] }
+                        }] : []),
+                        ...(staffProfile.centerId ? [{
+                            staffProfile: { centerId: staffProfile.centerId },
+                            role: { in: [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD] }
+                        }] : []),
+                        { role: { in: [Role.HR_ADMIN, Role.SUPER_USER] } }
+                    ],
+                    id: { not: userId }
+                },
+                select: { id: true, email: true, name: true }
+            });
+
+            const staffName = staffProfile.user?.name || 'Staff Member';
+            for (const approver of approvers) {
+                await notifyUser(
+                    approver.id,
+                    'New Leave Application',
+                    `${staffName} applied for ${String(type).replace(/_/g, ' ')} (${durationDays} days). Pending review.`,
+                    'INFO',
+                    '/dashboard/unit/leaves'
+                );
+
+                if (approver.email) {
+                    sendLeaveNotification(
+                        approver.email,
+                        approver.name || 'Approver',
+                        String(type).replace(/_/g, ' '),
+                        'PENDING REVIEW',
+                        durationDays,
+                        `Staff ${staffName} has submitted a leave application starting ${start.toDateString()} for ${durationDays} days.`
+                    ).catch(e => console.warn('Email dispatch warning:', e));
+                }
+            }
+        } catch (notifErr) {
+            console.error('Error dispatching leave notifications:', notifErr);
+        }
 
         res.status(201).json({ message: 'Leave request submitted', leave });
     } catch (error) {
@@ -83,7 +131,7 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
         // @ts-ignore
         const userRole = req.user.role;
 
-        const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(userRole as any);
+        const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.ADMIN].includes(userRole as any);
 
         if (isGlobalApprover) {
             const leaves = await prisma.leaveRequest.findMany({
@@ -93,6 +141,7 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                 include: {
                     staff: {
                         select: {
+                            id: true,
                             user: { select: { name: true, email: true } },
                             level: true,
                             unit: true,
@@ -116,100 +165,52 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
         const unit = headProfile.unit;
         const centerId = headProfile.centerId;
 
-        let leaves = [];
-
-        if (unit && unit.type === 'FACULTY') {
-            // Dean: View RECOMMENDED leaves from departments in this faculty
-            const facultyCode = unit.code || '';
-            const mapping: Record<string, string[]> = {
-                'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
-                'FAC-LAW': ['DEP-LAW'],
-                'FAC-SOCIA': ['DEP-POL'],
-                'FAC-MANAG': ['DEP-ACC'],
-                'FAC-EDUCA': ['DEP-EDT'],
-                'FAC-HEALT': ['DEP-PBH'],
-                'FAC-AGRIC': ['DEP-AGR'],
-                'FAC-ARTS': ['DEP-ART'],
-                'FAC-COMPU': ['DEP-CMP']
-            };
-            const departmentCodes = mapping[facultyCode] || [];
-            
-            const deptUnits = await prisma.unit.findMany({
-                where: { code: { in: departmentCodes } },
-                select: { id: true }
-            });
-            const deptIds = deptUnits.map(d => d.id);
-
-            leaves = await prisma.leaveRequest.findMany({
-                where: {
-                    status: LeaveStatus.RECOMMENDED,
-                    staff: {
-                        unitId: { in: deptIds }
-                    }
-                },
-                include: {
-                    staff: {
-                        select: {
-                            user: { select: { name: true, email: true } },
-                            level: true,
-                            unit: true,
-                            studyCenter: true
-                        }
-                    }
-                },
-                take: 100,
-                orderBy: { createdAt: 'desc' }
-            });
-        } else if (unit && unit.type === 'DEPARTMENT') {
-            // HOD: View PENDING leaves from staff in this department
-            leaves = await prisma.leaveRequest.findMany({
-                where: {
-                    status: LeaveStatus.PENDING,
-                    staff: {
-                        unitId: unit.id
-                    }
-                },
-                include: {
-                    staff: {
-                        select: {
-                            user: { select: { name: true, email: true } },
-                            level: true,
-                            unit: true,
-                            studyCenter: true
-                        }
-                    }
-                },
-                take: 100,
-                orderBy: { createdAt: 'desc' }
-            });
-        } else {
-            // Study Center Manager or Directorate Director: View PENDING leaves in their unit/center
-            leaves = await prisma.leaveRequest.findMany({
-                where: {
-                    status: LeaveStatus.PENDING,
-                    staff: {
+        // Build list of target unit IDs if this is a Faculty Dean
+        let targetUnitIds: string[] = [];
+        if (unit) {
+            targetUnitIds.push(unit.id);
+            if (unit.type === 'FACULTY') {
+                const relatedUnits = await prisma.unit.findMany({
+                    where: {
                         OR: [
-                            ...(unit ? [{ unitId: unit.id }] : []),
-                            ...(centerId ? [{ centerId: centerId }] : [])
+                            { type: 'DEPARTMENT' },
+                            { code: { startsWith: unit.code ? unit.code.replace('FAC-', 'DEP-') : '' } }
                         ]
-                    }
-                },
-                include: {
-                    staff: {
-                        select: {
-                            user: { select: { name: true, email: true } },
-                            level: true,
-                            unit: true,
-                            studyCenter: true
-                        }
-                    }
-                },
-                take: 100,
-                orderBy: { createdAt: 'desc' }
-            });
+                    },
+                    select: { id: true }
+                });
+                targetUnitIds.push(...relatedUnits.map(u => u.id));
+            }
         }
 
-        res.json(leaves);
+        const leaves = await prisma.leaveRequest.findMany({
+            where: {
+                status: { in: [LeaveStatus.PENDING, LeaveStatus.RECOMMENDED] },
+                staffId: { not: headProfile.id },
+                staff: {
+                    OR: [
+                        ...(targetUnitIds.length > 0 ? [{ unitId: { in: targetUnitIds } }] : []),
+                        ...(centerId ? [{ centerId }] : []),
+                        ...(!unit && !centerId ? [{}] : [])
+                    ]
+                }
+            },
+            include: {
+                staff: {
+                    select: {
+                        id: true,
+                        user: { select: { name: true, email: true } },
+                        level: true,
+                        unit: true,
+                        studyCenter: true
+                    }
+                }
+            },
+            take: 150,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return res.json(leaves);
 
     } catch (error) {
         console.error('Error fetching unit leaves:', error);

@@ -93,6 +93,8 @@ export class VoipPeerManager {
     return this.peerConnection;
   }
 
+  private pendingCandidates: RTCIceCandidateInit[] = [];
+
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     const pc = await this.initializePeerConnection();
     const offer = await pc.createOffer({
@@ -109,6 +111,7 @@ export class VoipPeerManager {
   public async handleOfferAndCreateAnswer(offerSdp: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     const pc = await this.initializePeerConnection();
     await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+    await this.flushPendingCandidates();
 
     const answer = await pc.createAnswer();
     const modifiedSdp = this.preferOpusCodec(answer.sdp || '');
@@ -119,12 +122,33 @@ export class VoipPeerManager {
   public async handleAnswer(answerSdp: RTCSessionDescriptionInit): Promise<void> {
     if (this.peerConnection) {
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answerSdp));
+      await this.flushPendingCandidates();
     }
   }
 
   public async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
     if (this.peerConnection && this.peerConnection.remoteDescription) {
-      await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('[WebRTC] Error adding ICE candidate:', err);
+      }
+    } else {
+      this.pendingCandidates.push(candidate);
+    }
+  }
+
+  private async flushPendingCandidates(): Promise<void> {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    while (this.pendingCandidates.length > 0) {
+      const candidate = this.pendingCandidates.shift();
+      if (candidate) {
+        try {
+          await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.warn('[WebRTC] Error flushing ICE candidate:', err);
+        }
+      }
     }
   }
 

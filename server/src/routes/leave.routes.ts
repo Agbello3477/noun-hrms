@@ -14,10 +14,15 @@ router.post('/resume', resumeFromLeave);
 router.get('/me', getMyLeaves);
 router.get('/active', getActiveLeaves);
 
-// Unit Heads / Directors / Center Managers
+// Unit Heads / Directors / Center Managers / Departmental Heads
 const approvalRoles = [
     Role.UNIT_HEAD,
+    Role.UNIT_ADMIN,
     Role.STUDY_CENTER_MANAGER,
+    Role.CLINIC_HEAD,
+    Role.SECURITY_HEAD,
+    Role.BURSARY,
+    Role.AUDIT,
     Role.HR_ADMIN,
     Role.ADMIN,
     Role.SUPER_USER,

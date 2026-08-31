@@ -79,16 +79,16 @@ export const generateMeetingToken = async (req: any, res: Response) => {
                 include: {
                     members: {
                         include: {
-                            staff: { select: { userId: true } }
+                            staff: { select: { id: true, userId: true } }
                         }
                     },
-                    owner: { select: { id: true } }
+                    owner: { select: { id: true, userId: true } }
                 }
             });
 
             if (project) {
                 projectTitle = project.title;
-                if (project.owner?.id) memberUserIds.push(project.owner.id);
+                if (project.owner?.userId) memberUserIds.push(project.owner.userId);
                 project.members.forEach(m => {
                     if (m.staff?.userId) memberUserIds.push(m.staff.userId);
                 });

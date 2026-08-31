@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import api, { getSocketUrl, getApiBaseUrl } from '../../lib/api';
 import { VoipPeerManager, stopMediaStreamTracks } from '../../lib/webrtc';
+import { startIncomingCallRingtone, stopIncomingCallRingtone } from '../../lib/sound';
+import { showBrowserNotification } from '../../lib/notifications';
 import { 
   Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Search, 
   Users, Shield, Heart, Clock, X, UserCheck, AlertCircle, Radio, Loader2,
@@ -220,6 +222,16 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       });
       setCallState('INCOMING');
 
+      // Start soft undisturbing harmonic chime
+      startIncomingCallRingtone();
+
+      // Trigger native desktop push notification
+      showBrowserNotification(`📞 Incoming VoIP Call from ${data.callerName || 'Staff Colleague'}`, {
+        body: `Internal Extension: ${data.callerExtension} • Click to answer`,
+        tag: `voip_call_${data.callId}`,
+        requireInteraction: true
+      });
+
       socket.emit('CALL_RINGING', { callId: data.callId });
     });
 
@@ -325,6 +337,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Clean up WebRTC audio tracks and reset hardware
   const cleanupCallHardware = () => {
+    stopIncomingCallRingtone();
     if (peerManagerRef.current) {
       peerManagerRef.current.cleanup();
       peerManagerRef.current = null;
@@ -371,6 +384,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
         (remoteStream) => {
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch((e) => console.warn('Remote audio autoplay blocked:', e));
           }
         }
       );
@@ -403,6 +417,9 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Accept Incoming Call
   const handleAcceptCall = async () => {
+    stopIncomingCallRingtone();
+    onOpen?.();
+
     if (!currentCallId || !incomingOfferSdpRef.current || !socket) return;
 
     try {
@@ -422,6 +439,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
         (remoteStream) => {
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch((e) => console.warn('Remote audio autoplay blocked:', e));
           }
         }
       );
@@ -444,6 +462,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Reject Incoming Call
   const handleRejectCall = () => {
+    stopIncomingCallRingtone();
     if (socket && currentCallId) {
       socket.emit('CALL_REJECTED', { callId: currentCallId, reason: 'Declined by recipient' });
     }
@@ -453,6 +472,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Hang Up Active Call
   const handleHangup = () => {
+    stopIncomingCallRingtone();
     if (socket && currentCallId) {
       socket.emit('CALL_ENDED', { callId: currentCallId });
     }
