@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api, { getImageUrl } from '../../../lib/api';
+import { useSwrData } from '../../../hooks/useSwrData';
 import Link from 'next/link';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus, FileText } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
@@ -14,8 +15,7 @@ function LeavesContent() {
     const openParam = searchParams.get('open');
     const { user, refreshUser } = useAuth();
 
-    const [leaves, setLeaves] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: leaves = [], isLoading: loading, refresh: fetchMyLeaves } = useSwrData<any[]>('/api/leaves/me', { ttl: 60000 });
     const [resuming, setResuming] = useState(false);
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
@@ -27,21 +27,6 @@ function LeavesContent() {
             setIsSabbaticalModalOpen(true);
         }
     }, [openParam]);
-
-    useEffect(() => {
-        fetchMyLeaves();
-    }, []);
-
-    const fetchMyLeaves = async () => {
-        try {
-            const { data } = await api.get('/api/leaves/me');
-            setLeaves(data);
-        } catch (error) {
-            console.error('Failed to fetch my leaves', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleResumeFromLeave = async () => {
         setResuming(true);

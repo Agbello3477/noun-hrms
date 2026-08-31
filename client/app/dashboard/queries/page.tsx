@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import api, { getImageUrl } from '../../../lib/api';
+import { useSwrData } from '../../../hooks/useSwrData';
 import { AlertTriangle, Clock, Paperclip, Send, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -29,8 +30,7 @@ interface Query {
 
 export default function MyQueriesPage() {
     const { user } = useAuth();
-    const [queries, setQueries] = useState<Query[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: queries = [], isLoading: loading, refresh: fetchQueries } = useSwrData<Query[]>('/api/queries', { ttl: 30000 });
 
     const getIssuerDisplayName = (issuedBy?: any) => {
         if (!issuedBy) return 'Registry';
@@ -52,21 +52,6 @@ export default function MyQueriesPage() {
     const [replyFile, setReplyFile] = useState<File | null>(null);
     const [activeQuery, setActiveQuery] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-
-    const fetchQueries = async () => {
-        try {
-            const res = await api.get('/api/queries');
-            setQueries(res.data);
-        } catch (error) {
-            console.error('Error fetching queries', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchQueries();
-    }, []);
 
     const handleReply = async (e: React.FormEvent, targetQueryId: string, text: string, file: File | null) => {
         e.preventDefault();

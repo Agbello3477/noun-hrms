@@ -45,9 +45,15 @@ export const getRecruitmentAnalytics = async (req: Request, res: Response) => {
             ? new Date(filterYear, parseInt(month), 0, 23, 59, 59)
             : new Date(filterYear, 11, 31, 23, 59, 59);
 
+        const activeZone = zone || region; // allow either query param
+        const cacheKey = `analytics:recruitment:${filterYear}:${month || 'all'}:${gender || 'all'}:${activeZone || 'all'}`;
+        const cached = await redisService.get(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
+
         // Build WHERE clause for stateOfOrigin (zone / region filter)
         let stateFilter: any = undefined;
-        const activeZone = zone || region; // allow either query param
         if (activeZone && ZONE_STATES[activeZone]) {
             stateFilter = { in: ZONE_STATES[activeZone].map(s => s) };
         }
@@ -110,7 +116,7 @@ export const getRecruitmentAnalytics = async (req: Request, res: Response) => {
             cadreMap[c] = (cadreMap[c] || 0) + 1;
         });
 
-        res.json({
+        const resultData = {
             total: staffRecords.length,
             filterYear,
             filterMonth: month ? parseInt(month) : null,
@@ -120,7 +126,10 @@ export const getRecruitmentAnalytics = async (req: Request, res: Response) => {
             byGender: Object.entries(genderMap).map(([label, count]) => ({ label, count })),
             byZone: Object.entries(zoneMap).map(([zone, count]) => ({ zone, count })),
             byCadre: Object.entries(cadreMap).map(([label, count]) => ({ label, count }))
-        });
+        };
+
+        await redisService.set(cacheKey, resultData, 60);
+        res.json(resultData);
     } catch (error) {
         console.error('Recruitment Analytics Error:', error);
         res.status(500).json({ message: 'Error fetching recruitment analytics' });
@@ -135,26 +144,71 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             return res.json(cached);
         }
 
-        // 1. Total Workforce Count
-        const totalStaff = await prisma.user.count({
-            where: { role: { not: 'SUPER_USER' } } // Exclude developers/system owners if needed
-        });
-
-        // 2. Leave Statistics
-        // Aggregate active leaves by type.
-        // Active = Status APPROVED and EndDate >= Today
+        // Parallelise all independent DB queries — eliminates sequential latency
         const today = new Date();
 
-        const activeLeaves = await prisma.leaveRequest.groupBy({
-            by: ['type'],
-            where: {
-                status: LeaveStatus.APPROVED,
-                endDate: { gte: today }
-            },
-            _count: {
-                _all: true
-            }
-        });
+        const [
+            totalStaff,
+            activeLeaves,
+            genderDist,
+            stateDist,
+            activeLeavesList
+        ] = await Promise.all([
+            // 1. Total Workforce Count
+            prisma.user.count({
+                where: { role: { not: 'SUPER_USER' } }
+            }),
+
+            // 2. Leave Statistics — aggregate active leaves by type
+            prisma.leaveRequest.groupBy({
+                by: ['type'],
+                where: {
+                    status: LeaveStatus.APPROVED,
+                    endDate: { gte: today }
+                },
+                _count: { _all: true }
+            }),
+
+            // 3. Gender Distribution
+            prisma.staffProfile.groupBy({
+                by: ['gender'],
+                _count: { _all: true }
+            }),
+
+            // 4. Geo-political Zone Distribution
+            prisma.staffProfile.groupBy({
+                by: ['stateOfOrigin'],
+                where: { isDeleted: false },
+                _count: { _all: true }
+            }),
+
+            // 5. Active leaves detail list — explicit select (no wide include)
+            prisma.leaveRequest.findMany({
+                where: {
+                    status: LeaveStatus.APPROVED,
+                    endDate: { gte: today }
+                },
+                select: {
+                    id: true,
+                    type: true,
+                    startDate: true,
+                    endDate: true,
+                    durationDays: true,
+                    staff: {
+                        select: {
+                            id: true,
+                            title: true,
+                            surname: true,
+                            otherNames: true,
+                            unit: { select: { name: true, type: true } },
+                            studyCenter: { select: { name: true } }
+                        }
+                    }
+                },
+                orderBy: { endDate: 'asc' },
+                take: 200
+            })
+        ]);
 
         // Map database enums to frontend friendly keys
         const leaveStats = {
@@ -177,20 +231,6 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             if (group.type === LeaveType.ANNUAL) leaveStats.annual = group._count._all;
         });
 
-        // 3. Gender Distribution (Optional but good for analytics)
-        const genderDist = await prisma.staffProfile.groupBy({
-            by: ['gender'],
-            _count: { _all: true }
-        });
-
-        // 4. Geo-political Zone Distribution
-
-        const stateDist = await prisma.staffProfile.groupBy({
-            by: ['stateOfOrigin'],
-            where: { isDeleted: false },
-            _count: { _all: true }
-        });
-
         const zoneCounts: Record<string, number> = {
             'North Central': 0,
             'North East': 0,
@@ -211,25 +251,6 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             zone,
             count
         }));
-
-        // Get detailed list of active leaves
-        const activeLeavesList = await prisma.leaveRequest.findMany({
-            where: {
-                status: LeaveStatus.APPROVED,
-                endDate: { gte: today }
-            },
-            include: {
-                staff: {
-                    include: {
-                        unit: true,
-                        studyCenter: true
-                    }
-                }
-            },
-            orderBy: {
-                endDate: 'asc'
-            }
-        });
 
         const result = {
             totalWorkforce: totalStaff,

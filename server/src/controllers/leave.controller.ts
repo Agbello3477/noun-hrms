@@ -99,7 +99,9 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                             studyCenter: true
                         }
                     }
-                }
+                },
+                take: 200,
+                orderBy: { createdAt: 'desc' }
             });
             return res.json(leaves);
         }
@@ -154,7 +156,9 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                             studyCenter: true
                         }
                     }
-                }
+                },
+                take: 100,
+                orderBy: { createdAt: 'desc' }
             });
         } else if (unit && unit.type === 'DEPARTMENT') {
             // HOD: View PENDING leaves from staff in this department
@@ -174,7 +178,9 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                             studyCenter: true
                         }
                     }
-                }
+                },
+                take: 100,
+                orderBy: { createdAt: 'desc' }
             });
         } else {
             // Study Center Manager or Directorate Director: View PENDING leaves in their unit/center
@@ -197,7 +203,9 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                             studyCenter: true
                         }
                     }
-                }
+                },
+                take: 100,
+                orderBy: { createdAt: 'desc' }
             });
         }
 

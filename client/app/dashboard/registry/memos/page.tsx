@@ -122,8 +122,13 @@ export default function RegistryMemosPage() {
 
     useEffect(() => {
         fetchMemos();
-        fetchStaff();
     }, []);
+
+    useEffect(() => {
+        if (showModal && staffList.length === 0) {
+            fetchStaff();
+        }
+    }, [showModal, staffList.length]);
 
     const handleCreateMemo = async (e: React.FormEvent) => {
         e.preventDefault();

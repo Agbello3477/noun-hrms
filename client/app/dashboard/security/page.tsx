@@ -195,11 +195,13 @@ export default function SecurityDashboard() {
 
   useEffect(() => {
     if (activeTab === 'inventory') {
-      fetchGear();
-      fetchLoans();
-      fetchAllUsers();
+      Promise.all([
+        fetchGear(),
+        fetchLoans(),
+        allUsers.length === 0 ? fetchAllUsers() : Promise.resolve()
+      ]).catch(console.error);
     }
-  }, [activeTab]);
+  }, [activeTab, allUsers.length]);
 
   const handleAddGear = async (e: React.FormEvent) => {
     e.preventDefault();

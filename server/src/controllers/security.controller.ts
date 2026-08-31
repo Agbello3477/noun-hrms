@@ -18,7 +18,8 @@ export const getRoster = async (req: AuthRequest, res: Response) => {
                     select: { name: true, email: true }
                 }
             },
-            orderBy: { date: 'desc' }
+            orderBy: { date: 'desc' },
+            take: 200
         });
         res.json(roster);
     } catch (error: any) {
@@ -290,25 +291,15 @@ export const createConsolidatedReport = async (req: AuthRequest, res: Response) 
     const authorId = req.user?.id;
 
     try {
-        // Aggregate statistics automatically for the report
-        const totalIncidents = await prisma.securityIncident.count({
-            where: {
-                createdAt: {
-                    gte: new Date(startDate),
-                    lte: new Date(endDate)
-                }
-            }
-        });
-
-        const highPriorityIncidents = await prisma.securityIncident.count({
-            where: {
-                priority: 'HIGH',
-                createdAt: {
-                    gte: new Date(startDate),
-                    lte: new Date(endDate)
-                }
-            }
-        });
+        // Parallelise the two count queries — eliminates one serial DB round trip
+        const dateRange = {
+            gte: new Date(startDate),
+            lte: new Date(endDate)
+        };
+        const [totalIncidents, highPriorityIncidents] = await Promise.all([
+            prisma.securityIncident.count({ where: { createdAt: dateRange } }),
+            prisma.securityIncident.count({ where: { priority: 'HIGH', createdAt: dateRange } })
+        ]);
 
         const report = await prisma.consolidatedSecurityReport.create({
             data: {
@@ -324,18 +315,20 @@ export const createConsolidatedReport = async (req: AuthRequest, res: Response) 
 
         // Trigger system notification to the Vice Chancellor (VC)
         const vcUsers = await prisma.user.findMany({
-            where: { role: Role.VICE_CHANCELLOR }
+            where: { role: Role.VICE_CHANCELLOR },
+            select: { id: true }
         });
 
-        for (const vc of vcUsers) {
-            await prisma.notification.create({
-                data: {
+        if (vcUsers.length > 0) {
+            // createMany eliminates N serial DB writes
+            await prisma.notification.createMany({
+                data: vcUsers.map(vc => ({
                     userId: vc.id,
                     title: 'New Consolidated Security Report',
                     message: `Security Head has submitted the latest consolidated security intelligence report.`,
                     type: 'INFO',
                     link: `/dashboard/security/reports`
-                }
+                }))
             });
         }
 

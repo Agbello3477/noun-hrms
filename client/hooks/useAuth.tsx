@@ -63,8 +63,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const USER_CACHE_KEY = 'noun_hrms_user_cache';
+
+    // ── Instant user restore from cache ──────────────────────────────────────
+    // Read cached user synchronously so pages render without waiting for /api/auth/me.
+    // The effect below always re-validates in the background.
+    const getInitialUser = (): User | null => {
+        if (typeof window === 'undefined') return null;
+        try {
+            const cached = sessionStorage.getItem(USER_CACHE_KEY);
+            return cached ? JSON.parse(cached) : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const [user, setUser] = useState<User | null>(getInitialUser);
+    // If we already have a cached user, start as NOT loading so pages render immediately.
+    const [isLoading, setIsLoading] = useState(() => getInitialUser() === null);
     const router = useRouter();
 
     const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
@@ -124,15 +140,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 const { data } = await api.get('/api/auth/me');
                 setUser(data);
+                // Persist to sessionStorage so next page load is instant
+                try { sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(data)); } catch {}
             } catch (error: any) {
                 console.error('Failed to fetch user', error);
                 if (error.response && (error.response.status === 401 || error.response.status === 403)) {
                     localStorage.removeItem('token');
+                    try { sessionStorage.removeItem(USER_CACHE_KEY); } catch {}
                     setUser(null);
                 } else {
-                    setUser(null);
+                    // Network error — keep cached user, don't log them out
                 }
             }
+        } else {
+            try { sessionStorage.removeItem(USER_CACHE_KEY); } catch {}
         }
     };
 
@@ -159,6 +180,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = (token: string, userData: User) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('token', token);
+            try {
+                sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(userData));
+            } catch {}
         }
         setUser(userData);
 
@@ -180,6 +204,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             localStorage.removeItem('token');
+            try {
+                sessionStorage.removeItem(USER_CACHE_KEY);
+            } catch {}
             setUser(null);
             window.location.href = '/';
         }

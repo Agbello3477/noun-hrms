@@ -177,17 +177,17 @@ export default function ClinicDashboard() {
       }
     };
 
-    // Immediately poll then repeat every 6 s
+    // Immediately poll then repeat every 25 s
     poll();
-    const interval = setInterval(poll, 6000);
+    const interval = setInterval(poll, 25000);
     return () => clearInterval(interval);
   // ⚠ prevQueueCountRef intentionally omitted – it's a ref, not state
   }, [activeRole, activeTab, sendDesktopNotification]);
 
   // Fetch functions
-  const fetchPatientFiles = async () => {
+  const fetchPatientFiles = async (query = searchQuery) => {
     try {
-      const res = await api.get(`/api/clinic/patients?query=${searchQuery}`);
+      const res = await api.get(`/api/clinic/patients?query=${encodeURIComponent(query)}`);
       setPatientFiles(res.data);
     } catch (err) {
       console.error(err);
@@ -214,11 +214,12 @@ export default function ClinicDashboard() {
     }
   };
 
+  // Initial load of all clinic modules once on mount
   useEffect(() => {
     const loadAllClinicData = async () => {
       try {
         const [patientsRes, encountersRes, inventoryRes] = await Promise.all([
-          api.get(`/api/clinic/patients?query=${searchQuery}`).catch(() => ({ data: [] })),
+          api.get('/api/clinic/patients').catch(() => ({ data: [] })),
           api.get('/api/clinic/encounters').catch(() => ({ data: [] })),
           api.get('/api/clinic/inventory').catch(() => ({ data: [] }))
         ]);
@@ -231,6 +232,14 @@ export default function ClinicDashboard() {
       }
     };
     loadAllClinicData();
+  }, []);
+
+  // Debounced search for patient records only
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPatientFiles(searchQuery);
+    }, 400);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
 
   const handleCreatePatient = async (e: React.FormEvent) => {

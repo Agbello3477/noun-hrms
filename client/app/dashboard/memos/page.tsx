@@ -54,14 +54,13 @@ function MemosContent() {
             const res = await api.get('/api/memos');
             setMemos(res.data);
 
-            // Determine initial memo to select
+            // Determine initial memo to select immediately
             if (res.data.length > 0) {
                 const initialId = memoIdParam || res.data[0].id;
-                const found = res.data.find((m: Memo) => m.id === initialId);
+                const found = res.data.find((m: Memo) => m.id === initialId) || res.data[0];
                 if (found) {
+                    setSelectedMemo(found);
                     fetchMemoDetails(found.id);
-                } else {
-                    fetchMemoDetails(res.data[0].id);
                 }
             }
         } catch (error) {
@@ -105,15 +104,14 @@ function MemosContent() {
             });
 
             // Update state
-            setSelectedMemo({
+            const updatedMemo = {
                 ...selectedMemo,
                 myResponse: res.data
-            });
+            };
+            setSelectedMemo(updatedMemo);
+            setMemos(prev => prev.map(m => m.id === selectedMemo.id ? { ...m, myResponse: res.data } : m));
             setSubmitSuccess(true);
             setResponseContent('');
-
-            // Also update main list count / local copies if needed
-            fetchMemos();
         } catch (error: any) {
             console.error('Response submit error:', error);
             setSubmitError(error.response?.data?.message || 'Failed to submit response.');
