@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface LoginFormProps {
     onSwitchView: (view: 'hero' | 'register') => void;
@@ -16,6 +16,8 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [is2FALoading, setIs2FALoading] = useState(false);
   const { login, user } = useAuth();
   const router = useRouter();
 
@@ -37,7 +39,9 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setError('');
+    setIsLoading(true);
 
     try {
       const response = await api.post('/api/auth/login', { email, password });
@@ -71,23 +75,31 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
           ? 'Cannot connect to the server. Please verify your internet connection.'
           : 'Login failed');
       setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleVerify2FA = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (is2FALoading) return;
       setError('');
+      setIs2FALoading(true);
       try {
           const response = await api.post('/api/auth/2fa/verify-login', { tempToken, code: twoFactorCode });
           login(response.data.token, response.data.user);
       } catch (err: any) {
           setError(err.response?.data?.message || 'Invalid 2FA code');
+      } finally {
+          setIs2FALoading(false);
       }
   };
 
   const handleSetupAndEnable2FA = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (is2FALoading) return;
       setError('');
+      setIs2FALoading(true);
       try {
           const response = await api.post('/api/auth/2fa/verify-enable', { tempToken, code: twoFactorCode });
           setSuccess('2FA Setup Successful!');
@@ -97,6 +109,8 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
           setTwoFactorStep('SHOW_BACKUP_CODES');
       } catch (err: any) {
           setError(err.response?.data?.message || 'Invalid verification code');
+      } finally {
+          setIs2FALoading(false);
       }
   };
 
@@ -189,10 +203,22 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
               </div>
 
               <button
-                className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5 mt-4"
+                className={`w-full rounded-xl px-4 py-3.5 font-bold text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mt-4 ${
+                  isLoading
+                    ? 'bg-primary/80 cursor-not-allowed opacity-90'
+                    : 'bg-primary hover:bg-primary-dark hover:-translate-y-0.5'
+                }`}
                 type="submit"
+                disabled={isLoading}
               >
-                Sign In Securely
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <span>Sign In Securely</span>
+                )}
               </button>
 
               <div className="text-center pt-4">
@@ -228,10 +254,22 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     />
                 </div>
                 <button
-                    className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5"
+                    className={`w-full rounded-xl px-4 py-3.5 font-bold text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 ${
+                      is2FALoading || twoFactorCode.length !== 6
+                        ? 'bg-primary/80 cursor-not-allowed opacity-90'
+                        : 'bg-primary hover:bg-primary-dark hover:-translate-y-0.5'
+                    }`}
                     type="submit"
+                    disabled={is2FALoading || twoFactorCode.length !== 6}
                 >
-                    Verify & Login
+                    {is2FALoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Verifying Security Code...</span>
+                      </>
+                    ) : (
+                      <span>Verify & Login</span>
+                    )}
                 </button>
             </form>
         )}
@@ -268,11 +306,22 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
                     />
                 </div>
                 <button
-                    className="w-full rounded-xl bg-primary px-4 py-3.5 font-bold text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 hover:-translate-y-0.5 disabled:opacity-50"
+                    className={`w-full rounded-xl px-4 py-3.5 font-bold text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 ${
+                      is2FALoading || twoFactorCode.length !== 6
+                        ? 'bg-primary/80 cursor-not-allowed opacity-90'
+                        : 'bg-primary hover:bg-primary-dark hover:-translate-y-0.5'
+                    }`}
                     type="submit"
-                    disabled={twoFactorCode.length !== 6}
+                    disabled={is2FALoading || twoFactorCode.length !== 6}
                 >
-                    Confirm & Login
+                    {is2FALoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Enabling 2FA & Signing In...</span>
+                      </>
+                    ) : (
+                      <span>Confirm & Login</span>
+                    )}
                 </button>
             </form>
         )}

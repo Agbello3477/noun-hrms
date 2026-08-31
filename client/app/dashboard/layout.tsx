@@ -20,6 +20,10 @@ const VideoConferenceModal = dynamic(() => import('@/components/ui/VideoConferen
     ssr: false
 });
 
+const ExtensionPromptModal = dynamic(() => import('@/components/ui/ExtensionPromptModal'), {
+    ssr: false
+});
+
 function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise<void> }) {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -314,6 +318,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     subtitle="Encrypted real-time WebRTC peer meeting"
                 />
             )}
+
+            {/* In-Portal Desktop Companion Promotion Prompt */}
+            {mounted && <ExtensionPromptModal />}
         </div>
     );
 }
