@@ -56,8 +56,15 @@ const app = express();
 app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
 const PORT = process.env.PORT || 5000;
 
-// Enable response compression (Gzip/Brotli) for all payloads
-app.use(compression());
+// Enable response compression (Gzip/Brotli) for all payloads > 1KB
+app.use(compression({
+    threshold: 1024,
+    level: 6,
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    }
+}));
 
 // Apply observability context tracing as the very first middleware
 app.use(observabilityMiddleware);

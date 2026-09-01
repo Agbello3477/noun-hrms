@@ -82,7 +82,7 @@ function LeavesContent() {
     const approvedCount = leaves.filter(l => l.status === 'APPROVED').length;
     const rejectedCount = leaves.filter(l => l.status === 'REJECTED').length;
 
-    if (loading) {
+    if (loading && leaves.length === 0) {
         return (
             <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-[50vh]">
                 <div className="text-gray-500 font-medium">Loading your leaves...</div>

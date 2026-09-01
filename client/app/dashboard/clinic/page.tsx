@@ -214,8 +214,17 @@ export default function ClinicDashboard() {
     }
   };
 
-  // Initial load of all clinic modules once on mount
+  // Initial load of all clinic modules with 0ms instant cache restoration
   useEffect(() => {
+    try {
+      const cachedPatients = sessionStorage.getItem('noun_clinic_patients');
+      if (cachedPatients) setPatientFiles(JSON.parse(cachedPatients));
+      const cachedEncounters = sessionStorage.getItem('noun_clinic_encounters');
+      if (cachedEncounters) setEncounters(JSON.parse(cachedEncounters));
+      const cachedInventory = sessionStorage.getItem('noun_clinic_inventory');
+      if (cachedInventory) setInventory(JSON.parse(cachedInventory));
+    } catch {}
+
     const loadAllClinicData = async () => {
       try {
         const [patientsRes, encountersRes, inventoryRes] = await Promise.all([
@@ -223,10 +232,19 @@ export default function ClinicDashboard() {
           api.get('/api/clinic/encounters').catch(() => ({ data: [] })),
           api.get('/api/clinic/inventory').catch(() => ({ data: [] }))
         ]);
-        setPatientFiles(patientsRes.data || []);
-        setEncounters(encountersRes.data || []);
-        prevQueueCountRef.current = (encountersRes.data || []).length;
-        setInventory(inventoryRes.data || []);
+        if (patientsRes.data) {
+          setPatientFiles(patientsRes.data);
+          try { sessionStorage.setItem('noun_clinic_patients', JSON.stringify(patientsRes.data)); } catch {}
+        }
+        if (encountersRes.data) {
+          setEncounters(encountersRes.data);
+          prevQueueCountRef.current = encountersRes.data.length;
+          try { sessionStorage.setItem('noun_clinic_encounters', JSON.stringify(encountersRes.data)); } catch {}
+        }
+        if (inventoryRes.data) {
+          setInventory(inventoryRes.data);
+          try { sessionStorage.setItem('noun_clinic_inventory', JSON.stringify(inventoryRes.data)); } catch {}
+        }
       } catch (err) {
         console.error('Parallel clinic load error:', err);
       }

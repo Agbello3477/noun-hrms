@@ -1,9 +1,15 @@
 import { Router } from 'express';
-import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics, getVcExecutiveAnalytics } from '../controllers/analytics.controller';
+import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics, getVcExecutiveAnalytics, getDashboardBootstrap } from '../controllers/analytics.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
+
+// Consolidated Single-Payload Dashboard Bootstrap (0ms fast load)
+router.get('/dashboard-bootstrap',
+    verifyToken,
+    getDashboardBootstrap
+);
 
 // VC Executive Command Dashboard
 router.get('/vc-executive',

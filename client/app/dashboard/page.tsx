@@ -92,30 +92,34 @@ export default function DashboardHome() {
     const isVC = user?.role === 'VICE_CHANCELLOR';
     const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
 
-    // Emergency Hotlines with instant SWR cache
-    const { data: emergencyHotlines } = useSwrData<{ clinicEmergencyPhone: string; securityControlRoomPhone: string }>(
-        '/api/system/emergency-hotlines',
-        { ttl: 600000 }
+    // Consolidated Single-Payload Dashboard Bootstrap (0ms instant SWR cache + background revalidation)
+    const { data: bootstrapData, isLoading: loadingBootstrap, refresh: refreshBootstrap } = useSwrData<{
+        hotlines: { clinicEmergencyPhone: string; securityControlRoomPhone: string };
+        notifications: any[];
+        unreadNotificationsCount: number;
+        myLeaves: any[];
+        activities: any[];
+        analytics: any;
+        managerStats: any;
+        pendingActionsCount: number;
+    }>(
+        user ? '/api/analytics/dashboard-bootstrap' : null,
+        { ttl: 60000, sessionPersist: true, revalidateOnFocus: true }
     );
 
-    // Leaves History with instant SWR cache
-    const { data: leaves = [], isLoading: loadingLeaves } = useSwrData<any[]>(
-        user ? '/api/leaves/me' : null,
-        { ttl: 60000 }
-    );
+    const emergencyHotlines = bootstrapData?.hotlines;
+    const leaves = bootstrapData?.myLeaves || [];
+    const notifications = bootstrapData?.notifications || [];
+    const loadingNotifications = loadingBootstrap && !bootstrapData;
 
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [loadingNotifications, setLoadingNotifications] = useState(true);
-
-    // Registry Dashboard States
-    const [activities, setActivities] = useState<any[]>([]);
-    const [loadingActivities, setLoadingActivities] = useState(true);
-    const [pendingActionsCount, setPendingActionsCount] = useState(0);
-    const [analytics, setAnalytics] = useState<any>({
+    const activities = bootstrapData?.activities || [];
+    const loadingActivities = loadingBootstrap && !bootstrapData;
+    const pendingActionsCount = bootstrapData?.pendingActionsCount || 0;
+    const analytics = bootstrapData?.analytics || {
         totalWorkforce: 0,
         activeLeaves: { annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0 },
         activeLeavesList: []
-    });
+    };
 
     // Recruitment Filter States (HR Dashboard)
     const [recruitYear, setRecruitYear] = useState(new Date().getFullYear().toString());
@@ -126,14 +130,14 @@ export default function DashboardHome() {
     const [loadingRecruit, setLoadingRecruit] = useState(false);
 
     // Manager Dashboard States
-    const [managerStats, setManagerStats] = useState<any>({
+    const managerStats = bootstrapData?.managerStats || {
         totalStaff: 0,
         activeLeaves: 0,
         pendingLeaves: 0,
         pendingAper: 0,
         activeQueries: 0
-    });
-    const [loadingManagerStats, setLoadingManagerStats] = useState(true);
+    };
+    const loadingManagerStats = loadingBootstrap && !bootstrapData;
 
     // VC Memo Broadcaster & Signature States
     const [allStaff, setAllStaff] = useState<any[]>([]);
@@ -155,10 +159,8 @@ export default function DashboardHome() {
 
     useEffect(() => {
         if (user?.staffProfile?.signatureUrl) {
-            // Auth context includes signatureUrl — use it directly
             setCurrentSigUrl(getImageUrl(user.staffProfile.signatureUrl));
         } else if (isVC && user) {
-            // Fallback: fetch fresh profile if signatureUrl missing from auth context
             api.get('/api/auth/me').then(({ data }) => {
                 if (data?.staffProfile?.signatureUrl) {
                     setCurrentSigUrl(getImageUrl(data.staffProfile.signatureUrl));
@@ -243,13 +245,7 @@ export default function DashboardHome() {
             setMemoContent('');
             setSelectedRecipients([]);
             setMemoAttachment(null);
-            // Refresh memos timeline using shared helper (avoids code duplication)
-            const [memosRes, transfersRes, queriesRes] = await Promise.all([
-                api.get('/api/memos').catch(() => ({ data: [] })),
-                api.get('/api/registry/transfers').catch(() => ({ data: [] })),
-                api.get('/api/queries').catch(() => ({ data: [] })),
-            ]);
-            setActivities(mapActivitiesToTimeline(memosRes.data || [], transfersRes.data || [], queriesRes.data || []));
+            refreshBootstrap();
         } catch (error: any) {
             console.error('Failed to send memo', error);
             setMemoError(error.response?.data?.message || 'Failed to send memo. Please check inputs.');
@@ -257,83 +253,6 @@ export default function DashboardHome() {
             setSendingMemo(false);
         }
     };
-
-    useEffect(() => {
-        // Restore cached dashboard data instantly from sessionStorage for 0ms load speed
-        try {
-            const cachedAnalytics = sessionStorage.getItem('noun_dashboard_analytics');
-            if (cachedAnalytics) setAnalytics(JSON.parse(cachedAnalytics));
-            const cachedActivities = sessionStorage.getItem('noun_dashboard_activities');
-            if (cachedActivities) setActivities(JSON.parse(cachedActivities));
-            const cachedManager = sessionStorage.getItem('noun_dashboard_manager');
-            if (cachedManager) setManagerStats(JSON.parse(cachedManager));
-        } catch {
-            // Ignore cache parse errors
-        }
-    }, []);
-
-    useEffect(() => {
-        const fetchNotifications = async (silent = false) => {
-            if (isRegistry || !user) return;
-            try {
-                if (!silent) setLoadingNotifications(true);
-                const { data } = await api.get('/api/notifications');
-                setNotifications(data.notifications || []);
-            } catch (error) {
-                console.error('Failed to load notifications', error);
-            } finally {
-                if (!silent) setLoadingNotifications(false);
-            }
-        };
-
-        fetchNotifications(false);
-        const interval = setInterval(() => {
-            if (!document.hidden) fetchNotifications(true);
-        }, 120000); // 2 minutes interval
-
-        return () => clearInterval(interval);
-    }, [user, isRegistry]);
-
-    useEffect(() => {
-        const fetchRegistryDashboardData = async () => {
-            if (!isRegistry || !user) return;
-            try {
-                // Fetch recent memos, transfers, queries, and analytics
-                const [memosRes, transfersRes, queriesRes, analyticsRes] = await Promise.all([
-                    api.get('/api/memos').catch(() => ({ data: [] })),
-                    api.get('/api/registry/transfers').catch(() => ({ data: [] })),
-                    api.get('/api/queries').catch(() => ({ data: [] })),
-                    api.get('/api/analytics/dashboard').catch(() => ({ data: null }))
-                ]);
-
-                // Map all responses using shared helper (eliminates 40 lines of duplicate code)
-                const combined = mapActivitiesToTimeline(memosRes.data || [], transfersRes.data || [], queriesRes.data || []);
-                setActivities(combined);
-
-                const pendingActions = (transfersRes.data || []).length + (queriesRes.data || []).filter((q: any) => q.status === 'PENDING').length;
-                setPendingActionsCount(pendingActions);
-
-                if (analyticsRes && analyticsRes.data) {
-                    setAnalytics(analyticsRes.data);
-                    try {
-                        sessionStorage.setItem('noun_dashboard_analytics', JSON.stringify(analyticsRes.data));
-                        sessionStorage.setItem('noun_dashboard_activities', JSON.stringify(combined));
-                    } catch {}
-                }
-            } catch (error) {
-                console.error('Failed to fetch registry activity data', error);
-            } finally {
-                setLoadingActivities(false);
-            }
-        };
-
-        fetchRegistryDashboardData();
-        const interval = setInterval(() => {
-            if (!document.hidden) fetchRegistryDashboardData();
-        }, 120000); // 2 minutes interval
-
-        return () => clearInterval(interval);
-    }, [user, isRegistry]);
 
     // Recruitment analytics fetch
     useEffect(() => {
@@ -356,30 +275,6 @@ export default function DashboardHome() {
         };
         fetchRecruitmentData();
     }, [user, isRegistry, recruitYear, recruitMonth, recruitGender, recruitZone]);
-
-    useEffect(() => {
-        const fetchManagerStats = async () => {
-            if (!isUnitManager || !user) return;
-            try {
-                setLoadingManagerStats(true);
-                const { data } = await api.get('/api/analytics/manager');
-                setManagerStats(data);
-                try {
-                    sessionStorage.setItem('noun_dashboard_manager', JSON.stringify(data));
-                } catch {}
-            } catch (error) {
-                console.error('Failed to fetch manager dashboard stats', error);
-            } finally {
-                setLoadingManagerStats(false);
-            }
-        };
-
-        fetchManagerStats();
-        const interval = setInterval(() => {
-            if (!document.hidden) fetchManagerStats();
-        }, 120000); // 2 minutes interval
-        return () => clearInterval(interval);
-    }, [user, isUnitManager]);
 
     // Guard: show loading spinner while auth state is resolving or user is not yet set
     // (must be after all hooks to respect React Rules of Hooks)

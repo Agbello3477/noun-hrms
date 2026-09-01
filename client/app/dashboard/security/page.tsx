@@ -139,6 +139,14 @@ export default function SecurityDashboard() {
 
   useEffect(() => {
     if (!activeRole) return;
+
+    try {
+      const cachedIncidents = sessionStorage.getItem('noun_security_incidents');
+      if (cachedIncidents) setIncidents(JSON.parse(cachedIncidents));
+      const cachedRoster = sessionStorage.getItem('noun_security_roster');
+      if (cachedRoster) setRoster(JSON.parse(cachedRoster));
+    } catch {}
+
     const loadSecurityData = async () => {
       try {
         const canViewSecurity = ['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN'].includes(activeRole);
@@ -153,6 +161,10 @@ export default function SecurityDashboard() {
         if (canViewSecurity) {
           setIncidents(incidentsRes.data || []);
           setRoster(rosterRes.data || []);
+          try {
+            sessionStorage.setItem('noun_security_incidents', JSON.stringify(incidentsRes.data || []));
+            sessionStorage.setItem('noun_security_roster', JSON.stringify(rosterRes.data || []));
+          } catch {}
         }
         if (canViewUsers) {
           setAllUsers((usersRes.data || []).map((s: any) => {

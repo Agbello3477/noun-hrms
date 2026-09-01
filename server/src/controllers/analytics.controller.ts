@@ -538,3 +538,231 @@ export const getVcExecutiveAnalytics = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Error fetching executive dashboard stats' });
     }
 };
+
+// GET /api/analytics/dashboard-bootstrap (Consolidated Single-Payload Bootstrap)
+export const getDashboardBootstrap = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const userId = user?.id;
+        const userRole = user?.role;
+        const isRegistry = userRole === Role.HR_ADMIN || userRole === Role.SUPER_USER || userRole === Role.ADMIN || userRole === Role.VICE_CHANCELLOR;
+        const isUnitManager = userRole === Role.STUDY_CENTER_MANAGER || userRole === Role.UNIT_HEAD || userRole === Role.UNIT_ADMIN;
+
+        // Fetch User's Staff Profile ID, Unit ID and Center ID
+        let profileId: string | null = null;
+        let userUnitId: string | null = null;
+        let userCenterId: string | null = null;
+
+        if (userId) {
+            const profile = await prisma.staffProfile.findUnique({
+                where: { userId },
+                select: { id: true, unitId: true, centerId: true }
+            });
+            profileId = profile?.id || null;
+            userUnitId = profile?.unitId || null;
+            userCenterId = profile?.centerId || null;
+        }
+
+        // Execute parallel non-blocking queries across all dashboard sections
+        const [
+            notificationsResult,
+            leavesResult,
+            memosResult,
+            transfersResult,
+            queriesResult,
+            workforceResult,
+            activeLeavesResult,
+            managerStaffCountResult,
+            managerPendingLeavesResult,
+            managerPendingAperResult,
+            managerActiveQueriesResult
+        ] = await Promise.allSettled([
+            // 1. Notifications
+            userId ? prisma.notification.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            }) : Promise.resolve([]),
+            // 2. User Leaves
+            profileId ? prisma.leaveRequest.findMany({
+                where: { staffId: profileId },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            }) : Promise.resolve([]),
+            // 3. Memos (Activities)
+            prisma.memo.findMany({
+                include: {
+                    sender: { select: { name: true } },
+                    recipient: { select: { name: true, staffProfile: { select: { staffId: true } } } }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            }),
+            // 4. Transfers (Activities)
+            prisma.transferLog.findMany({
+                include: { staff: { select: { name: true } } },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            }),
+            // 5. Queries (Activities)
+            prisma.staffQuery.findMany({
+                include: { staff: { select: { user: { select: { name: true } } } } },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            }),
+            // 6. Workforce count (Registry)
+            isRegistry ? prisma.staffProfile.count({ where: { isDeleted: false } }) : Promise.resolve(0),
+            // 7. Active leaves breakdown (Registry)
+            isRegistry ? prisma.leaveRequest.findMany({
+                where: { status: LeaveStatus.APPROVED },
+                include: { staff: { select: { surname: true, otherNames: true, staffId: true, rank: true } } }
+            }) : Promise.resolve([]),
+            // 8. Manager: Unit Staff Count
+            (isUnitManager && (userUnitId || userCenterId)) ? prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    OR: [
+                        ...(userUnitId ? [{ unitId: userUnitId }] : []),
+                        ...(userCenterId ? [{ centerId: userCenterId }] : [])
+                    ]
+                }
+            }) : Promise.resolve(0),
+            // 9. Manager: Pending Unit Leaves
+            (isUnitManager && (userUnitId || userCenterId)) ? prisma.leaveRequest.count({
+                where: {
+                    status: LeaveStatus.PENDING,
+                    staff: {
+                        OR: [
+                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
+                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
+                        ]
+                    }
+                }
+            }) : Promise.resolve(0),
+            // 10. Manager: Pending Unit APER
+            (isUnitManager && (userUnitId || userCenterId)) ? prisma.aperForm.count({
+                where: {
+                    status: AperStatus.SUBMITTED,
+                    staff: {
+                        OR: [
+                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
+                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
+                        ]
+                    }
+                }
+            }) : Promise.resolve(0),
+            // 11. Manager: Active Unit Queries
+            (isUnitManager && (userUnitId || userCenterId)) ? prisma.staffQuery.count({
+                where: {
+                    status: 'OPEN',
+                    staff: {
+                        OR: [
+                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
+                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
+                        ]
+                    }
+                }
+            }) : Promise.resolve(0)
+        ]);
+
+        const hotlines = {
+            clinicEmergencyPhone: '+234 803 123 4567',
+            securityControlRoomPhone: '+234 803 765 4321'
+        };
+
+        // Parse Notifications
+        const notifications = notificationsResult.status === 'fulfilled' ? notificationsResult.value : [];
+        const unreadNotificationsCount = notifications.filter((n: any) => !n.isRead).length;
+
+        // Parse User Leaves
+        const myLeaves = leavesResult.status === 'fulfilled' ? leavesResult.value : [];
+
+        // Parse Timeline Activities
+        const rawMemos = memosResult.status === 'fulfilled' ? memosResult.value : [];
+        const rawTransfers = transfersResult.status === 'fulfilled' ? transfersResult.value : [];
+        const rawQueries = queriesResult.status === 'fulfilled' ? queriesResult.value : [];
+
+        const mappedMemos = rawMemos.map((m: any) => {
+            const isDirect = !!m.recipient;
+            return {
+                id: `memo-${m.id}`,
+                type: 'MEMO',
+                title: isDirect ? `Direct Memo Sent to ${m.recipient?.name || 'Staff'}` : 'Memo Broadcast Sent',
+                description: isDirect
+                    ? `Direct memo: "${m.title}" sent to ${m.recipient?.name || 'Staff'} (${m.recipient?.staffProfile?.staffId || 'N/A'}) by ${m.sender?.name || 'Registry'}`
+                    : `General memo: "${m.title}" broadcasted by ${m.sender?.name || 'Registry'}`,
+                createdAt: m.createdAt,
+                color: isDirect ? 'border-indigo-500 bg-indigo-50/40 text-indigo-700' : 'border-primary bg-primary/10 text-primary-dark'
+            };
+        });
+
+        const mappedTransfers = rawTransfers.map((t: any) => ({
+            id: `transfer-${t.id}`,
+            type: 'TRANSFER',
+            title: 'Staff Transfer Approved',
+            description: `${t.staff?.name || 'Staff member'} transfer processed`,
+            createdAt: t.createdAt,
+            color: 'border-orange-500 bg-orange-50/40 text-orange-700'
+        }));
+
+        const mappedQueries = rawQueries.map((q: any) => ({
+            id: `query-${q.id}`,
+            type: 'QUERY',
+            title: 'Disciplinary Query Issued',
+            description: `Query "${q.title || 'Disciplinary query'}" issued to ${q.staff?.user?.name || 'Staff member'}`,
+            createdAt: q.createdAt,
+            color: 'border-blue-500 bg-blue-50/40 text-blue-700'
+        }));
+
+        const activities = [...mappedMemos, ...mappedTransfers, ...mappedQueries]
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 15);
+
+        // Parse Registry Analytics
+        const totalWorkforce = workforceResult.status === 'fulfilled' ? workforceResult.value : 0;
+        const allActiveLeaves = activeLeavesResult.status === 'fulfilled' ? activeLeavesResult.value : [];
+        const activeLeavesBreakdown: Record<string, number> = {
+            annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0
+        };
+        allActiveLeaves.forEach((l: any) => {
+            const key = (l.type || '').toLowerCase();
+            if (activeLeavesBreakdown[key] !== undefined) {
+                activeLeavesBreakdown[key]++;
+            }
+        });
+
+        const analytics = isRegistry ? {
+            totalWorkforce,
+            activeLeaves: activeLeavesBreakdown,
+            activeLeavesList: allActiveLeaves.slice(0, 10)
+        } : null;
+
+        // Parse Manager Stats
+        const managerStats = isUnitManager ? {
+            totalStaff: managerStaffCountResult.status === 'fulfilled' ? managerStaffCountResult.value : 0,
+            activeLeaves: 0,
+            pendingLeaves: managerPendingLeavesResult.status === 'fulfilled' ? managerPendingLeavesResult.value : 0,
+            pendingAper: managerPendingAperResult.status === 'fulfilled' ? managerPendingAperResult.value : 0,
+            activeQueries: managerActiveQueriesResult.status === 'fulfilled' ? managerActiveQueriesResult.value : 0
+        } : null;
+
+        const pendingActionsCount = isRegistry
+            ? (rawQueries.filter((q: any) => q.status === 'OPEN').length + (allActiveLeaves.length > 0 ? 1 : 0))
+            : (managerStats ? (managerStats.pendingLeaves + managerStats.pendingAper + managerStats.activeQueries) : 0);
+
+        res.json({
+            hotlines,
+            notifications,
+            unreadNotificationsCount,
+            myLeaves,
+            activities,
+            analytics,
+            managerStats,
+            pendingActionsCount
+        });
+    } catch (error: any) {
+        console.error('Error executing dashboard bootstrap:', error);
+        res.status(500).json({ message: 'Error bootstrapping dashboard' });
+    }
+};
+

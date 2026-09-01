@@ -50,9 +50,11 @@ function MemosContent() {
 
     const fetchMemos = async () => {
         try {
-            setLoading(true);
             const res = await api.get('/api/memos');
             setMemos(res.data);
+            try {
+                sessionStorage.setItem('noun_memos_list', JSON.stringify(res.data));
+            } catch {}
 
             // Determine initial memo to select immediately
             if (res.data.length > 0) {
@@ -83,6 +85,20 @@ function MemosContent() {
     };
 
     useEffect(() => {
+        try {
+            const cachedMemos = sessionStorage.getItem('noun_memos_list');
+            if (cachedMemos) {
+                const parsed = JSON.parse(cachedMemos);
+                setMemos(parsed);
+                setLoading(false);
+                if (parsed.length > 0) {
+                    const initialId = memoIdParam || parsed[0].id;
+                    const found = parsed.find((m: Memo) => m.id === initialId) || parsed[0];
+                    if (found) setSelectedMemo(found);
+                }
+            }
+        } catch {}
+
         fetchMemos();
     }, [memoIdParam]);
 

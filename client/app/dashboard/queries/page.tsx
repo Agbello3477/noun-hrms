@@ -85,7 +85,7 @@ export default function MyQueriesPage() {
         }
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading queries...</div>;
+    if (loading && queries.length === 0) return <div className="p-8 text-center text-gray-500">Loading queries...</div>;
 
     return (
         <div className="space-y-6">

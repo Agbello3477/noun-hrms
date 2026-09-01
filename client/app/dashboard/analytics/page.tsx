@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import api from '../../../lib/api';
+import { useSwrData } from '../../../hooks/useSwrData';
 import { Users, Calendar, Briefcase, Activity } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -21,35 +20,14 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
-    const { user, isLoading } = useAuth();
-    const [data, setData] = useState<AnalyticsData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    const { user, isLoading: authLoading } = useAuth();
+    const { data, isLoading, error } = useSwrData<AnalyticsData>(
+        user ? '/api/analytics/dashboard' : null,
+        { ttl: 120000, sessionPersist: true }
+    );
 
-    useEffect(() => {
-        const fetchAnalytics = async () => {
-            try {
-                const response = await api.get('/api/analytics/dashboard');
-                setData(response.data);
-            } catch (err: any) {
-                console.error('Analytics Error:', err);
-                if (err.response?.status === 403) {
-                    setError('You do not have permission to view HR Analytics.');
-                } else {
-                    setError('Failed to load analytics data.');
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (!isLoading && user) {
-            fetchAnalytics();
-        }
-    }, [isLoading, user]);
-
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading analytics...</div>;
-    if (error) return <div className="p-8 text-center text-red-500 font-medium">{error}</div>;
+    if (isLoading && !data) return <div className="p-8 text-center text-gray-500">Loading analytics...</div>;
+    if (error && !data) return <div className="p-8 text-center text-red-500 font-medium">{error.response?.data?.message || 'Failed to load analytics data.'}</div>;
     if (!data) return null;
 
     return (
