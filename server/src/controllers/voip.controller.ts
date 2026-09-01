@@ -3,6 +3,7 @@ import prisma from '../prisma';
 import { Role } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
+import { generateDynamicTurnCredentials } from '../services/turnCredential.service';
 
 // Helper to determine the 4-digit prefix based on role
 const getPrefixForRole = (role: Role): number => {
@@ -219,21 +220,12 @@ export const lookupExtension = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/voip/ice-servers - Returns WebRTC ICE Server configs
+// GET /api/voip/ice-servers & /api/v1/webrtc/ice-servers - Returns WebRTC ICE Server configs
 export const getIceServers = async (req: Request, res: Response) => {
-  const iceServers: any[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:turn.yourdomain.com:3478'] },
-    {
-      urls: [
-        process.env.TURN_SERVER_URL_UDP || 'turn:turn.yourdomain.com:3478?transport=udp',
-        process.env.TURN_SERVER_URL_TCP || 'turn:turn.yourdomain.com:3478?transport=tcp'
-      ],
-      username: process.env.TURN_SERVER_USERNAME || 'turnuser',
-      credential: process.env.TURN_SERVER_PASSWORD || 'StrongSecurePassword123!'
-    }
-  ];
-
-  res.status(200).json({ iceServers });
+  const userId = (req as any).user?.id || 'anonymous-client';
+  const ttlSeconds = 12 * 3600; // 12 hours
+  const iceConfig = generateDynamicTurnCredentials(userId, ttlSeconds);
+  res.status(200).json(iceConfig);
 };
 
 // GET /api/voip/my-extension - Returns current authenticated user's 4-digit VoIP extension

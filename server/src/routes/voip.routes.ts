@@ -42,6 +42,7 @@ router.get('/my-extension', getMyExtension);
 router.get('/directory', getVoipDirectory);
 router.get('/lookup/:extension', lookupExtension);
 router.get('/ice-servers', getIceServers);
+router.get('/v1/webrtc/ice-servers', getIceServers);
 
 // Phase 17: Voicemail & Voice Notes
 router.post('/voicemail', audioUpload.single('audio'), saveVoicemail);

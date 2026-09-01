@@ -1,3 +1,5 @@
+import api from './api';
+
 export interface IceServerConfig {
   urls: string | string[];
   username?: string;
@@ -24,6 +26,48 @@ export const rtcConfiguration: RTCConfiguration = {
 };
 
 export const DEFAULT_ICE_SERVERS: IceServerConfig[] = rtcConfiguration.iceServers as IceServerConfig[];
+
+let cachedIceServers: { servers: IceServerConfig[]; expiresAt: number } | null = null;
+
+/**
+ * Ephemeral dynamic TURN credential fetcher (HMAC-SHA1) with caching
+ */
+export const fetchDynamicIceServers = async (authToken?: string): Promise<IceServerConfig[]> => {
+  const now = Date.now();
+  if (cachedIceServers && cachedIceServers.expiresAt > now + 60000) {
+    return cachedIceServers.servers;
+  }
+
+  try {
+    const token = authToken || (typeof window !== 'undefined' ? sessionStorage.getItem('token') : null);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const { data } = await api.get('/api/v1/webrtc/ice-servers', { headers });
+    if (data?.iceServers && Array.isArray(data.iceServers)) {
+      cachedIceServers = {
+        servers: data.iceServers,
+        expiresAt: data.expiresAt || (now + 12 * 3600 * 1000)
+      };
+      return data.iceServers;
+    }
+  } catch (err) {
+    console.warn('[WebRTC] Falling back to default ICE servers:', err);
+  }
+
+  return DEFAULT_ICE_SERVERS;
+};
+
+/**
+ * Creates an RTCPeerConnection with dynamic ICE credentials
+ */
+export async function createPeerConnection(authToken?: string): Promise<RTCPeerConnection> {
+  const iceServers = await fetchDynamicIceServers(authToken);
+  return new RTCPeerConnection({
+    iceServers,
+    iceCandidatePoolSize: 10
+  });
+}
 
 // Helper to stop all tracks and release microphone media hardware completely
 export const stopMediaStreamTracks = (stream: MediaStream | null): void => {

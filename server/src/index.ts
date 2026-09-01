@@ -130,6 +130,8 @@ app.use('/api/research', researchRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/observability', observabilityRoutes);
 app.use('/api/voip', voipRoutes);
+app.use('/api/v1/webrtc', voipRoutes);
+app.use('/api/webrtc', voipRoutes);
 
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
