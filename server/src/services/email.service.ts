@@ -24,19 +24,12 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
         console.log(`[EMAIL_SERVICE] Initiating dispatch to ${to} | Subject: "${subject}"`);
 
         const settings = getEmailSettings();
-        const mockMode = settings.mockEmailMode !== undefined ? settings.mockEmailMode : true;
+        const resendKey = (process.env.RESEND_API_KEY || settings.resendApiKey || '').trim();
+        const resendFrom = (process.env.RESEND_FROM_EMAIL || settings.resendFromEmail || 'onboarding@resend.dev').trim();
 
-        if (mockMode) {
-            console.log(`[EMAIL_SERVICE] [MOCK MODE ACTIVE] Email simulated to ${to}:\nSubject: ${subject}\nHTML:\n${html}`);
-            return true;
-        }
-
-        // 1. Resend API Integration
-        const resendKey = settings.resendApiKey || process.env.RESEND_API_KEY;
-        const resendFrom = settings.resendFromEmail || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-
+        // If a real Resend API Key exists, dispatch via Resend immediately
         if (resendKey) {
-            console.log(`[EMAIL_SERVICE] Dispatching via Resend API to ${to}...`);
+            console.log(`[EMAIL_SERVICE] Dispatching via Resend API (${resendFrom}) to ${to}...`);
             const resendClient = new Resend(resendKey);
             const response = await resendClient.emails.send({
                 from: resendFrom,
@@ -46,12 +39,17 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
             });
 
             if (response.error) {
+                console.error(`[EMAIL_SERVICE] Resend API Error:`, response.error);
                 throw new Error(response.error.message);
             }
             console.log(`[EMAIL_SERVICE] Email sent via Resend API to ${to}. Message ID: ${response.data?.id}`);
             return true;
         }
 
+        const mockMode = settings.mockEmailMode !== undefined ? settings.mockEmailMode : true;
+        if (mockMode) {
+            console.log(`[EMAIL_SERVICE] [MOCK MODE ACTIVE] Email simulated to ${to}:\nSubject: ${subject}\nHTML:\n${html}`);
+            return true;
         // 2. Custom SMTP Transporter
         const host = settings.smtpHost || process.env.SMTP_HOST;
         const port = Number(settings.smtpPort || process.env.SMTP_PORT || 587);
