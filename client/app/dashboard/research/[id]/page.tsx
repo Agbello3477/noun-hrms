@@ -122,7 +122,7 @@ export default function ResearchWorkspace({ params }: { params?: { id?: string }
     useEffect(() => {
         setIsMounted(true);
         if (!id) return;
-        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        const userStr = typeof window !== 'undefined' ? (sessionStorage.getItem('noun_hrms_user_cache') || sessionStorage.getItem('user')) : null;
         if (userStr) {
             try {
                 setCurrentUser(JSON.parse(userStr));

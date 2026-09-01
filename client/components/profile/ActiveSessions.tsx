@@ -25,7 +25,7 @@ export default function ActiveSessions() {
             const { data } = await api.get('/api/auth/sessions');
             setSessions(data || []);
 
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             if (token) {
                 try {
                     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -51,7 +51,7 @@ export default function ActiveSessions() {
             // If the user revoked their own session, force logout
             const targetSession = sessions.find(s => s.id === id);
             if (targetSession && targetSession.token === currentSid) {
-                localStorage.removeItem('token');
+                sessionStorage.removeItem('token');
                 window.location.href = '/';
             }
         } catch (error) {

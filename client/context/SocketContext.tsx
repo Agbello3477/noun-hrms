@@ -100,7 +100,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     const socketUrl = getSocketUrl();
 
     // Do not reconnect if already connected to the same socketUrl

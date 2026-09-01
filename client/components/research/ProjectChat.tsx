@@ -51,7 +51,7 @@ export default function ProjectChat({
     }, [initialMessages]);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) return;
 
         const socketUrl = getSocketUrl();

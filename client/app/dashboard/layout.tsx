@@ -219,7 +219,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         closeActiveVideoModal
     } = useSocket();
 
-    const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token');
+    const hasToken = typeof window !== 'undefined' && !!sessionStorage.getItem('token');
 
     useEffect(() => {
         setMounted(true);

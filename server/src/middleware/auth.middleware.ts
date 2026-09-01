@@ -14,7 +14,9 @@ interface AuthRequest extends Request {
 
 
 export const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : (authHeader ? authHeader.trim() : undefined);
+    const token = bearerToken || req.cookies?.token;
 
     if (!token) {
         return res.status(401).json({ message: 'Authentication required' });

@@ -79,7 +79,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
 
     // Socket.io Connection for Document Collaboration Events
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) return;
 
         const socketUrl = getSocketUrl();
@@ -408,7 +408,7 @@ export default function RichTextEditor({ projectId, currentUserName, currentUser
     const triggerExport = async (format: 'pdf' | 'docx' | 'latex') => {
         setExporting(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             const endpoint = `${getApiBaseUrl()}/api/research/${projectId}/export?format=${format}&doubleSpaced=${doubleSpaced}`;
             
             const response = await fetch(endpoint, {

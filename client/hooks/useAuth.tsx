@@ -135,17 +135,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const fetchUser = async () => {
         if (typeof window === 'undefined') return;
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (token) {
             try {
                 const { data } = await api.get('/api/auth/me');
                 setUser(data);
-                // Persist to sessionStorage so next page load is instant
+                // Persist to sessionStorage so next page load is instant within this tab
                 try { sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(data)); } catch {}
             } catch (error: any) {
                 console.error('Failed to fetch user', error);
                 if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                    localStorage.removeItem('token');
+                    sessionStorage.removeItem('token');
                     try { sessionStorage.removeItem(USER_CACHE_KEY); } catch {}
                     setUser(null);
                 } else {
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const handlePageShow = (event: PageTransitionEvent) => {
             if (event.persisted) {
-                const token = localStorage.getItem('token');
+                const token = sessionStorage.getItem('token');
                 if (!token) {
                     window.location.replace('/');
                 }
@@ -179,16 +179,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = (token: string, userData: User) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('token', token);
+            sessionStorage.setItem('token', token);
             try {
                 sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(userData));
             } catch {}
         }
         setUser(userData);
 
-        const returnUrl = localStorage.getItem('auth_return_url');
+        const returnUrl = sessionStorage.getItem('auth_return_url');
         if (returnUrl) {
-            localStorage.removeItem('auth_return_url');
+            sessionStorage.removeItem('auth_return_url');
             router.push(returnUrl);
         } else {
             router.push('/dashboard');
@@ -198,12 +198,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logout = (currentPath?: any) => {
         if (typeof window !== 'undefined') {
             if (currentPath && typeof currentPath === 'string') {
-                localStorage.setItem('auth_return_url', currentPath);
+                sessionStorage.setItem('auth_return_url', currentPath);
             } else {
-                localStorage.removeItem('auth_return_url');
+                sessionStorage.removeItem('auth_return_url');
             }
 
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
             try {
                 sessionStorage.removeItem(USER_CACHE_KEY);
             } catch {}
