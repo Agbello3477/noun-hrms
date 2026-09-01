@@ -224,7 +224,7 @@ export default function FileRegistryPage() {
                                 color={folderColor}
                                 role={file.role}
                                 designation={designation}
-                                onClick={() => router.push(`/dashboard/hr/files/${encodeURIComponent(file.staffProfile?.staffId || file.id)}`)}
+                                onClick={() => router.push(`/dashboard/hr/files/${file.id}`)}
                             />
                         );
                     })}

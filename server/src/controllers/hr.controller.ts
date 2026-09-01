@@ -297,9 +297,16 @@ export const getStaffFile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params; // Staff Profile ID or StaffID String? Let's check both
 
-        // Attempt to find by Profile ID first (UUID)
-        let profile = await prisma.staffProfile.findFirst({
-            where: { id, isDeleted: false },
+        // Attempt to find by Profile ID (UUID), User ID (UUID), or Staff ID String
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id },
+                    { userId: id },
+                    { staffId: id }
+                ],
+                isDeleted: false
+            },
             include: {
                 user: true,
                 unit: true,
@@ -307,19 +314,6 @@ export const getStaffFile = async (req: Request, res: Response) => {
                 createdBy: { select: { name: true } }
             }
         });
-
-        // If not found, try by Staff ID String
-        if (!profile) {
-            profile = await prisma.staffProfile.findFirst({
-                where: { staffId: id, isDeleted: false },
-                include: {
-                    user: true,
-                    unit: true,
-                    studyCenter: true,
-                    createdBy: { select: { name: true } }
-                }
-            });
-        }
 
         if (!profile) return res.status(404).json({ message: 'Staff file not found' });
 
