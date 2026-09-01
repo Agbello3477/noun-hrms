@@ -50,6 +50,8 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
         if (mockMode) {
             console.log(`[EMAIL_SERVICE] [MOCK MODE ACTIVE] Email simulated to ${to}:\nSubject: ${subject}\nHTML:\n${html}`);
             return true;
+        }
+
         // 2. Custom SMTP Transporter
         const host = settings.smtpHost || process.env.SMTP_HOST;
         const port = Number(settings.smtpPort || process.env.SMTP_PORT || 587);
