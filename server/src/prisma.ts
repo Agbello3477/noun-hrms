@@ -5,7 +5,21 @@ import { PrismaClient, Prisma } from '@prisma/client';
  * PgBouncer transaction pooling, TCP keepalive, and timeout parameters.
  */
 export function buildOptimizedDatabaseUrl(rawUrl?: string): string {
-  const urlString = rawUrl || process.env.DATABASE_URL || '';
+  let urlString = (rawUrl || process.env.DATABASE_URL || '').trim();
+
+  // Strip accidental surrounding quotes ("..." or '...')
+  if ((urlString.startsWith('"') && urlString.endsWith('"')) || (urlString.startsWith("'") && urlString.endsWith("'"))) {
+    urlString = urlString.slice(1, -1).trim();
+  }
+
+  // Strip accidental variable name prefix (e.g. DATABASE_URL=... or DIRECT_URL=...)
+  if (urlString.startsWith('DATABASE_URL=')) {
+    urlString = urlString.replace(/^DATABASE_URL=/, '').trim();
+  }
+  if (urlString.startsWith('DIRECT_URL=')) {
+    urlString = urlString.replace(/^DIRECT_URL=/, '').trim();
+  }
+
   if (!urlString || urlString.startsWith('file:') || urlString.startsWith('sqlite:')) {
     return urlString;
   }
