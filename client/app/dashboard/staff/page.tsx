@@ -77,16 +77,33 @@ export default function StaffPage() {
     const [page, setPage] = useState(1);
     const [pageSize] = useState(12);
 
+    useEffect(() => {
+        try {
+            const cachedStaff = sessionStorage.getItem('noun_staff_list_cache');
+            if (cachedStaff) {
+                setStaffList(JSON.parse(cachedStaff));
+                setLoading(false);
+            }
+            const cachedOrg = sessionStorage.getItem('noun_org_structure_cache');
+            if (cachedOrg) setOrgData(JSON.parse(cachedOrg));
+        } catch {}
+    }, []);
+
     const fetchStaffAndOrg = async () => {
         try {
-            setLoading(true);
             const statusParam = selectedStatuses.length > 0 ? selectedStatuses.join(',') : 'ACTIVE';
             const [staffRes, orgRes] = await Promise.all([
                 api.get(`/api/staff?status=${statusParam}`),
                 api.get('/api/org/structure')
             ]);
-            setStaffList(staffRes.data || []);
-            setOrgData(orgRes.data || { centers: [], units: [] });
+            if (staffRes.data) {
+                setStaffList(staffRes.data);
+                try { sessionStorage.setItem('noun_staff_list_cache', JSON.stringify(staffRes.data)); } catch {}
+            }
+            if (orgRes.data) {
+                setOrgData(orgRes.data);
+                try { sessionStorage.setItem('noun_org_structure_cache', JSON.stringify(orgRes.data)); } catch {}
+            }
         } catch (error) {
             console.error('Failed to fetch data', error);
         } finally {

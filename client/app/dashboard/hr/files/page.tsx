@@ -50,18 +50,22 @@ export default function FileRegistryPage() {
     const [showExistingModal, setShowExistingModal] = useState(false);
 
     const fetchData = async () => {
-        setLoading(true);
         try {
             const [fileRes, orgRes] = await Promise.all([
                 api.get('/api/registry/files'),
-                api.get('/api/org/structure') // Reuse generic struct endpoint
+                api.get('/api/org/structure')
             ]);
 
-            setFiles(fileRes.data);
-            setFilteredFiles(fileRes.data);
-
-            setCenters(orgRes.data.centers);
-            setUnits(orgRes.data.units);
+            if (fileRes.data) {
+                setFiles(fileRes.data);
+                setFilteredFiles(fileRes.data);
+                try { sessionStorage.setItem('noun_registry_files_cache', JSON.stringify(fileRes.data)); } catch {}
+            }
+            if (orgRes.data) {
+                setCenters(orgRes.data.centers);
+                setUnits(orgRes.data.units);
+                try { sessionStorage.setItem('noun_org_structure_cache', JSON.stringify(orgRes.data)); } catch {}
+            }
         } catch (error) {
             console.error('Failed to load registry data', error);
         } finally {
@@ -70,6 +74,22 @@ export default function FileRegistryPage() {
     };
 
     useEffect(() => {
+        try {
+            const cachedFiles = sessionStorage.getItem('noun_registry_files_cache');
+            if (cachedFiles) {
+                const parsed = JSON.parse(cachedFiles);
+                setFiles(parsed);
+                setFilteredFiles(parsed);
+                setLoading(false);
+            }
+            const cachedOrg = sessionStorage.getItem('noun_org_structure_cache');
+            if (cachedOrg) {
+                const parsed = JSON.parse(cachedOrg);
+                setCenters(parsed.centers || []);
+                setUnits(parsed.units || []);
+            }
+        } catch {}
+
         fetchData();
     }, []);
 

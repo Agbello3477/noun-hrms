@@ -36,43 +36,22 @@ export const rateLimit = (options: RateLimitOptions) => {
         const now = Date.now();
         const windowSec = Math.ceil(options.windowMs / 1000);
 
-        // 1. Try Redis Rate Limiter first
-        const isRedisActive = (redisService as any).isEnabled && (redisService as any).client;
-        if (isRedisActive) {
-            try {
-                const count = await redisService.incr(key, windowSec);
-                if (count > options.max) {
-                    res.setHeader('Retry-After', windowSec);
-                    return res.status(429).json({
-                        message: options.message,
-                        retryAfterSeconds: windowSec
-                    });
-                }
-                return next();
-            } catch (error) {
-                console.error('Redis rate limiting failed. Falling back to memory store:', error);
-            }
-        }
-
-        // 2. Fallback to In-Memory Rate Limiter
+        // 1. High-Performance Instant In-Memory Rate Limiter (< 0.01ms)
         const record = memoryStore.get(key);
 
         if (!record || now > record.resetTime) {
-            memoryStore.set(key, {
-                count: 1,
-                resetTime: now + options.windowMs
-            });
+            memoryStore.set(key, { count: 1, resetTime: now + options.windowMs });
             return next();
         }
 
         record.count += 1;
 
         if (record.count > options.max) {
-            const secondsLeft = Math.ceil((record.resetTime - now) / 1000);
-            res.setHeader('Retry-After', secondsLeft);
+            const retryAfterSec = Math.max(1, Math.ceil((record.resetTime - now) / 1000));
+            res.setHeader('Retry-After', retryAfterSec);
             return res.status(429).json({
                 message: options.message,
-                retryAfterSeconds: secondsLeft
+                retryAfterSeconds: retryAfterSec
             });
         }
 
