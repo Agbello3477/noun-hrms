@@ -12,11 +12,15 @@ import PasswordStrengthMeter from '@/components/ui/PasswordStrengthMeter';
 import dynamic from 'next/dynamic';
 import { SocketProvider, useSocket } from '../../context/SocketContext';
 
-const IncomingVideoCallModal = dynamic(() => import('@/components/ui/IncomingVideoCallModal'), {
+const GlobalIncomingCallModal = dynamic(() => import('@/components/ui/GlobalIncomingCallModal'), {
     ssr: false
 });
 
 const VideoConferenceModal = dynamic(() => import('@/components/ui/VideoConferenceModal'), {
+    ssr: false
+});
+
+const VoipCallModal = dynamic(() => import('@/components/voip/VoipCallModal'), {
     ssr: false
 });
 
@@ -213,9 +217,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
     const {
         incomingVideoCall,
+        incomingVoipCall,
         activeVideoModal,
-        acceptVideoCall,
-        declineVideoCall,
+        isVoipDialerOpen,
+        initialDialerExtension,
+        closeVoipDialer,
         closeActiveVideoModal
     } = useSocket();
 
@@ -297,12 +303,17 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 </>
             )}
 
-            {/* Global WhatsApp-style Incoming Video Call Banner */}
-            {mounted && incomingVideoCall && (
-                <IncomingVideoCallModal
-                    incomingCall={incomingVideoCall}
-                    onAccept={acceptVideoCall}
-                    onDecline={declineVideoCall}
+            {/* Global VoIP / Video Incoming Call Modal */}
+            {mounted && (incomingVoipCall || incomingVideoCall) && (
+                <GlobalIncomingCallModal />
+            )}
+
+            {/* Global VoIP Phone Dialer & Intercom Manager */}
+            {mounted && isVoipDialerOpen && (
+                <VoipCallModal
+                    isOpen={isVoipDialerOpen}
+                    onClose={closeVoipDialer}
+                    initialExtension={initialDialerExtension}
                 />
             )}
 
@@ -318,6 +329,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     subtitle="Encrypted real-time WebRTC peer meeting"
                 />
             )}
+
+            {/* Hidden HTML5 Remote Audio Element for seamless WebRTC two-way audio playback */}
+            <audio id="remoteAudio" autoPlay playsInline className="hidden" />
 
             {/* In-Portal Desktop Companion Promotion Prompt */}
             {mounted && <ExtensionPromptModal />}

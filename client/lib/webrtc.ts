@@ -4,11 +4,26 @@ export interface IceServerConfig {
   credential?: string;
 }
 
-export const DEFAULT_ICE_SERVERS: IceServerConfig[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' }
-];
+export const rtcConfiguration: RTCConfiguration = {
+  iceServers: [
+    // Public STUN server for initial candidate discovery
+    {
+      urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:turn.yourdomain.com:3478'],
+    },
+    // Dedicated Coturn TURN server for symmetric NAT traversal
+    {
+      urls: [
+        'turn:turn.yourdomain.com:3478?transport=udp',
+        'turn:turn.yourdomain.com:3478?transport=tcp'
+      ],
+      username: 'turnuser',
+      credential: 'StrongSecurePassword123!',
+    },
+  ],
+  iceCandidatePoolSize: 10,
+};
+
+export const DEFAULT_ICE_SERVERS: IceServerConfig[] = rtcConfiguration.iceServers as IceServerConfig[];
 
 // Helper to stop all tracks and release microphone media hardware completely
 export const stopMediaStreamTracks = (stream: MediaStream | null): void => {

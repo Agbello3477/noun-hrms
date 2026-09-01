@@ -501,24 +501,51 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     setIsSpeakerOn((prev) => !prev);
   };
 
+  // Helper to dynamically detect supported audio codec across modern browsers
+  const getSupportedMimeType = (): string => {
+    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return 'audio/webm';
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/wav'
+    ];
+    for (const mime of candidates) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        return mime;
+      }
+    }
+    return '';
+  };
+
   // ─── Phase 17: Voice Note Recording Logic ─────────────────────────────────
 
   const handleStartVoicemailRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       audioChunksRef.current = [];
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
         setRecordedAudioBlob(audioBlob);
         const url = URL.createObjectURL(audioBlob);
         setRecordedAudioUrl(url);
@@ -559,8 +586,11 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
     setIsSendingVoicemail(true);
     try {
+      const mimeType = recordedAudioBlob.type || 'audio/webm';
+      const fileExt = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+
       const formData = new FormData();
-      formData.append('audio', recordedAudioBlob, `voicemail-${Date.now()}.webm`);
+      formData.append('audio', recordedAudioBlob, `voicemail-${Date.now()}.${fileExt}`);
       formData.append('recipientExtension', voicemailTargetExt);
       formData.append('durationSeconds', recordingDuration.toString());
 
@@ -606,7 +636,10 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     const fullAudioUrl = vm.audioUrl.startsWith('http') ? vm.audioUrl : `${getApiBaseUrl()}${vm.audioUrl}`;
     if (voicemailAudioPlayerRef.current) {
       voicemailAudioPlayerRef.current.src = fullAudioUrl;
-      voicemailAudioPlayerRef.current.play().catch(() => {});
+      voicemailAudioPlayerRef.current.volume = 1.0;
+      voicemailAudioPlayerRef.current.play().catch((err) => {
+        console.error('[Voice Note Playback]', err);
+      });
       setPlayingVoicemailId(vm.id);
 
       // Mark listened in DB
@@ -655,9 +688,10 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   return (
     <>
       {/* Hidden Audio Elements */}
-      <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
+      <audio id="remoteAudio" ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
       <audio
         ref={voicemailAudioPlayerRef}
+        playsInline
         onEnded={() => setPlayingVoicemailId(null)}
         style={{ display: 'none' }}
       />

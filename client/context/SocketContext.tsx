@@ -26,17 +26,32 @@ export interface VoicemailNotificationData {
   callerUser?: any;
 }
 
+export interface IncomingVoipCallData {
+  callId: string;
+  callerExtension: string;
+  callerName: string;
+  callerRank: string;
+  sdpOffer: any;
+}
+
 interface SocketContextValue {
   socket: Socket | null;
   isConnected: boolean;
   userExtension: string;
   onlineExtensions: Set<string>;
   incomingVideoCall: IncomingVideoCallData | null;
+  incomingVoipCall: IncomingVoipCallData | null;
   activeVideoModal: { isOpen: boolean; roomName: string; title: string } | null;
+  isVoipDialerOpen: boolean;
+  initialDialerExtension: string;
   missedCalls: MissedCallData[];
   newMissedCount: number;
   latestVoicemail: VoicemailNotificationData | null;
   registerExtension: (ext: string) => void;
+  openVoipDialer: (ext?: string) => void;
+  closeVoipDialer: () => void;
+  acceptVoipCall: (callData: IncomingVoipCallData) => void;
+  declineVoipCall: (callData: IncomingVoipCallData) => void;
   acceptVideoCall: (callData: IncomingVideoCallData) => void;
   declineVideoCall: (callData: IncomingVideoCallData) => void;
   closeActiveVideoModal: () => void;
@@ -58,12 +73,21 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [userExtension, setUserExtension] = useState<string>('');
   const [onlineExtensions, setOnlineExtensions] = useState<Set<string>>(new Set());
+  
+  // Incoming Call states
   const [incomingVideoCall, setIncomingVideoCall] = useState<IncomingVideoCallData | null>(null);
+  const [incomingVoipCall, setIncomingVoipCall] = useState<IncomingVoipCallData | null>(null);
+  
+  // Active Modals
   const [activeVideoModal, setActiveVideoModal] = useState<{
     isOpen: boolean;
     roomName: string;
     title: string;
   } | null>(null);
+  const [isVoipDialerOpen, setIsVoipDialerOpen] = useState(false);
+  const [initialDialerExtension, setInitialDialerExtension] = useState('');
+
+  // Notifications
   const [missedCalls, setMissedCalls] = useState<MissedCallData[]>([]);
   const [newMissedCount, setNewMissedCount] = useState<number>(0);
   const [latestVoicemail, setLatestVoicemail] = useState<VoicemailNotificationData | null>(null);
@@ -103,7 +127,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     const token = sessionStorage.getItem('token');
     const socketUrl = getSocketUrl();
 
-    // Do not reconnect if already connected to the same socketUrl
     if (socketRef.current?.connected) {
       return;
     }
@@ -152,6 +175,24 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       setIncomingVideoCall((prev) => (prev?.roomName === data?.roomName ? null : prev));
     });
 
+    // Real-time VoIP Call Signaling (Voice Intercom)
+    instance.on('INCOMING_CALL', (data: IncomingVoipCallData) => {
+      console.log('[SocketContext] Received incoming VoIP call alert:', data);
+      setIncomingVoipCall(data);
+    });
+
+    instance.on('CALL_ENDED', () => {
+      setIncomingVoipCall(null);
+    });
+
+    instance.on('CALL_REJECTED', () => {
+      setIncomingVoipCall(null);
+    });
+
+    instance.on('CALL_TIMEOUT', () => {
+      setIncomingVoipCall(null);
+    });
+
     // Real-time VoIP Missed Call & Voicemail
     instance.on('CALL_MISSED', (data: MissedCallData) => {
       console.log('[SocketContext] Received missed call alert:', data);
@@ -178,6 +219,31 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('VOIP_REGISTER_EXTENSION', { extension: ext });
     }
+  }, []);
+
+  const openVoipDialer = useCallback((ext?: string) => {
+    if (ext) setInitialDialerExtension(ext);
+    setIsVoipDialerOpen(true);
+  }, []);
+
+  const closeVoipDialer = useCallback(() => {
+    setIsVoipDialerOpen(false);
+    setInitialDialerExtension('');
+  }, []);
+
+  const acceptVoipCall = useCallback((callData: IncomingVoipCallData) => {
+    setIncomingVoipCall(null);
+    setIsVoipDialerOpen(true);
+  }, []);
+
+  const declineVoipCall = useCallback((callData: IncomingVoipCallData) => {
+    if (socketRef.current) {
+      socketRef.current.emit('CALL_REJECTED', {
+        callId: callData.callId,
+        reason: 'Call declined by user'
+      });
+    }
+    setIncomingVoipCall(null);
   }, []);
 
   const acceptVideoCall = useCallback((callData: IncomingVideoCallData) => {
@@ -241,11 +307,18 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         userExtension,
         onlineExtensions,
         incomingVideoCall,
+        incomingVoipCall,
         activeVideoModal,
+        isVoipDialerOpen,
+        initialDialerExtension,
         missedCalls,
         newMissedCount,
         latestVoicemail,
         registerExtension,
+        openVoipDialer,
+        closeVoipDialer,
+        acceptVoipCall,
+        declineVoipCall,
         acceptVideoCall,
         declineVideoCall,
         closeActiveVideoModal,

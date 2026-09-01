@@ -6,7 +6,7 @@ import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, C
 import api from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import VoipCallModal from '../voip/VoipCallModal';
+import { useSocket } from '../../context/SocketContext';
 
 export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }) {
     const { user } = useAuth();
@@ -15,8 +15,12 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const [showPersistentModal, setShowPersistentModal] = useState(false);
-    const [isVoipModalOpen, setIsVoipModalOpen] = useState(false);
-    const [missedCallCount, setMissedCallCount] = useState(0);
+    const { openVoipDialer, newMissedCount, clearNewMissedCount } = useSocket();
+
+    const handleOpenVoip = () => {
+        clearNewMissedCount();
+        openVoipDialer();
+    };
     const dropdownRef = useRef<HTMLDivElement>(null);
     const notifiedIdsRef = useRef<Set<string>>(new Set());
 
@@ -149,14 +153,14 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
 
                 {/* VoIP Internal Intercom Phone Button */}
                 <button
-                    onClick={() => { setIsVoipModalOpen(true); setMissedCallCount(0); }}
+                    onClick={handleOpenVoip}
                     className="relative p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 transition-colors shadow-sm flex items-center justify-center"
                     title="Open VoIP Extension Intercom"
                 >
                     <Phone size={18} className="text-emerald-700" />
-                    {missedCallCount > 0 ? (
+                    {newMissedCount > 0 ? (
                         <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-1 ring-white animate-pulse">
-                            {missedCallCount > 9 ? '9+' : missedCallCount}
+                            {newMissedCount > 9 ? '9+' : newMissedCount}
                         </span>
                     ) : (
                         <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-bold text-white ring-1 ring-white">
@@ -164,13 +168,6 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                         </span>
                     )}
                 </button>
-
-                <VoipCallModal
-                    isOpen={isVoipModalOpen}
-                    onClose={() => setIsVoipModalOpen(false)}
-                    onOpen={() => setIsVoipModalOpen(true)}
-                    onMissedCallCountChange={setMissedCallCount}
-                />
 
                 {/* Notification Bell */}
                 <div className="relative" ref={dropdownRef}>
