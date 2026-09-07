@@ -48,6 +48,7 @@ import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
 import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
 import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
+import { RlsService } from './services/rls.service';
 
 
 
@@ -268,4 +269,9 @@ server.listen(PORT, () => {
     scheduleSessionCleanupCron();
     scheduleLeaveResumptionCron();
     scheduleSyntheticMonitoring();
+
+    // Automatically ensure Row Level Security (RLS) is enabled on all tables
+    RlsService.enableRlsOnAllTables().catch((err: any) => {
+        console.error('[Startup RLS Enforcer] Failed to enforce RLS on startup:', err);
+    });
 });

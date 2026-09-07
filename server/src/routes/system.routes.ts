@@ -1,5 +1,14 @@
 import { Router } from 'express';
-import { getAuditLogs, archiveAuditLogs, getSystemSettings, updateSystemSettings, exportSystemAuditReport, getEmergencyHotlines } from '../controllers/system.controller';
+import { 
+    getAuditLogs, 
+    archiveAuditLogs, 
+    getSystemSettings, 
+    updateSystemSettings, 
+    exportSystemAuditReport, 
+    getEmergencyHotlines,
+    getDatabaseRlsStatus,
+    triggerEnableDatabaseRls
+} from '../controllers/system.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -13,4 +22,9 @@ router.get('/settings', requireRole([Role.SUPER_USER, Role.HR_ADMIN, Role.VICE_C
 router.put('/settings', requireRole([Role.SUPER_USER, Role.HR_ADMIN, Role.ADMIN]), updateSystemSettings);
 router.get('/emergency-hotlines', getEmergencyHotlines);
 
+// Row Level Security (RLS) Management & Verification
+router.get('/rls/status', requireRole([Role.SUPER_USER, Role.ADMIN]), getDatabaseRlsStatus);
+router.post('/rls/enable', requireRole([Role.SUPER_USER, Role.ADMIN]), triggerEnableDatabaseRls);
+
 export default router;
+

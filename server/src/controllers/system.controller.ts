@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import fs from 'fs';
 import path from 'path';
+import { RlsService } from '../services/rls.service';
 
 export const getAuditLogs = async (req: Request, res: Response) => {
     try {
@@ -389,3 +390,35 @@ export const getEmergencyHotlines = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+export const getDatabaseRlsStatus = async (req: Request, res: Response) => {
+    try {
+        const tables = await RlsService.getRlsStatus();
+        const allEnabled = tables.length > 0 && tables.every((t: any) => t.rls_enabled);
+        res.status(200).json({
+            success: true,
+            totalTables: tables.length,
+            allRlsEnabled: allEnabled,
+            tables
+        });
+    } catch (error: any) {
+        console.error('Error getting database RLS status:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to retrieve RLS status' });
+    }
+};
+
+export const triggerEnableDatabaseRls = async (req: Request, res: Response) => {
+    try {
+        const result = await RlsService.enableRlsOnAllTables();
+        res.status(200).json({
+            success: result.success,
+            message: result.success ? 'Row Level Security successfully enabled on all tables' : 'Partial RLS enablement completed',
+            totalUpdated: result.totalUpdated,
+            tables: result.tables
+        });
+    } catch (error: any) {
+        console.error('Error enabling database RLS:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to enable RLS across database' });
+    }
+};
+
