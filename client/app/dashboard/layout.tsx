@@ -218,6 +218,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const {
         incomingVideoCall,
         incomingVoipCall,
+        acceptedVoipCall,
+        clearAcceptedVoipCall,
         activeVideoModal,
         isVoipDialerOpen,
         initialDialerExtension,
@@ -312,8 +314,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {mounted && isVoipDialerOpen && (
                 <VoipCallModal
                     isOpen={isVoipDialerOpen}
-                    onClose={closeVoipDialer}
+                    onClose={() => {
+                        clearAcceptedVoipCall();
+                        closeVoipDialer();
+                    }}
                     initialExtension={initialDialerExtension}
+                    acceptedCallData={acceptedVoipCall}
                 />
             )}
 

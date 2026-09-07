@@ -114,8 +114,15 @@ export default function ResearchWorkspace({ params }: { params?: { id?: string }
                 targetId: id
             });
         } catch (err) {
-            setMeetingRoomName(`research-${id}`);
+            const room = `research-${id}`;
+            setMeetingRoomName(room);
             setIsMeetingOpen(true);
+            startVideoCall({
+                roomName: room,
+                title: `Research Forum Video Call: ${project?.title || 'Academic Project'}`,
+                module: 'research',
+                targetId: id
+            });
         }
     };
 

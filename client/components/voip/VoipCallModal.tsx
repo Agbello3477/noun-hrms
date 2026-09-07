@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import io, { Socket } from 'socket.io-client';
 
-import { useSocket } from '../../context/SocketContext';
+import { useSocket, IncomingVoipCallData } from '../../context/SocketContext';
 
 interface VoipUser {
   id: string;
@@ -32,6 +32,7 @@ interface VoipCallModalProps {
   onClose: () => void;
   onOpen?: () => void;
   initialExtension?: string;
+  acceptedCallData?: IncomingVoipCallData | null;
   onMissedCallCountChange?: (count: number) => void;
 }
 
@@ -64,7 +65,7 @@ interface VoicemailItem {
   };
 }
 
-export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtension, onMissedCallCountChange }: VoipCallModalProps) {
+export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtension, acceptedCallData, onMissedCallCountChange }: VoipCallModalProps) {
   const { user } = useAuth();
   const { 
     socket, 
@@ -84,8 +85,9 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   const [activeTab, setActiveTab] = useState<'keypad' | 'directory' | 'ptt' | 'missed' | 'voicemail'>('keypad');
 
   // Active Call States
-  const [callState, setCallState] = useState<'IDLE' | 'INITIATING' | 'RINGING' | 'INCOMING' | 'CONNECTED' | 'REJECTED' | 'ENDED'>('IDLE');
+  const [callState, setCallState] = useState<'IDLE' | 'INITIATING' | 'RINGING' | 'INCOMING' | 'CONNECTING' | 'CONNECTED' | 'REJECTED' | 'ENDED'>('IDLE');
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const currentCallIdRef = useRef<string | null>(null);
   const [peerInfo, setPeerInfo] = useState<{ name: string; rank: string; extension: string; department?: string } | null>(null);
   
   // Call Controls (Loudspeaker ON by default)
@@ -124,6 +126,11 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const incomingOfferSdpRef = useRef<any>(null);
+
+  // Handle callId ref sync
+  useEffect(() => {
+    currentCallIdRef.current = currentCallId;
+  }, [currentCallId]);
 
   // Synchronize missed calls from socket context
   useEffect(() => {
@@ -206,6 +213,22 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     };
   }, [callState]);
 
+  // Helper to securely attach incoming remote audio stream
+  const attachRemoteStream = useCallback((stream: MediaStream) => {
+    console.log('[VoIP UI] Attaching remote audio stream to audio elements');
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = stream;
+      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+      remoteAudioRef.current.play().catch((e) => console.log('[Remote Audio Play]', e));
+    }
+    const globalAudio = document.getElementById('remoteAudio') as HTMLAudioElement;
+    if (globalAudio && globalAudio !== remoteAudioRef.current) {
+      globalAudio.srcObject = stream;
+      globalAudio.volume = isSpeakerOn ? 1.0 : 0.4;
+      globalAudio.play().catch((e) => console.log('[Global Audio Play]', e));
+    }
+  }, [isSpeakerOn]);
+
   // Handle Signal Socket Events
   useEffect(() => {
     if (!socket) return;
@@ -215,6 +238,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       console.log('[VoIP UI] Incoming call from Ext:', data.callerExtension);
       incomingOfferSdpRef.current = data.sdpOffer;
       setCurrentCallId(data.callId);
+      currentCallIdRef.current = data.callId;
       setPeerInfo({
         name: data.callerName,
         rank: data.callerRank,
@@ -235,6 +259,11 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       socket.emit('CALL_RINGING', { callId: data.callId });
     });
 
+    socket.on('CALL_INITIATED_ACK', (data: { callId: string }) => {
+      setCurrentCallId(data.callId);
+      currentCallIdRef.current = data.callId;
+    });
+
     // Call Ringing Ack
     socket.on('CALL_RINGING', () => {
       setCallState('RINGING');
@@ -242,7 +271,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
     // Call Accepted
     socket.on('CALL_ACCEPTED', async (data: { callId: string; sdpAnswer: any }) => {
-      console.log('[VoIP UI] Call accepted by peer');
+      console.log('[VoIP UI] Call accepted by peer. Handling SDP answer...');
       if (peerManagerRef.current) {
         await peerManagerRef.current.handleAnswer(data.sdpAnswer);
         setCallState('CONNECTED');
@@ -255,7 +284,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       setCallState('REJECTED');
       cleanupCallHardware();
 
-      // Offer to leave voice note
       if (targetExt) {
         setVoicemailTargetExt(targetExt);
         setVoicemailTargetName(peerInfo?.name || `Ext ${targetExt}`);
@@ -270,7 +298,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       setCallState('REJECTED');
       cleanupCallHardware();
 
-      // Offer to leave voice note
       setVoicemailTargetExt(data.targetExtension || targetExt);
       setVoicemailTargetName(peerInfo?.name || `Ext ${data.targetExtension || targetExt}`);
       setShowVoicemailRecorder(true);
@@ -282,7 +309,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       setCallState('REJECTED');
       cleanupCallHardware();
 
-      // Offer to leave voice note
       if (targetExt) {
         setVoicemailTargetExt(targetExt);
         setVoicemailTargetName(peerInfo?.name || `Ext ${targetExt}`);
@@ -304,6 +330,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       setTimeout(() => {
         setCallState('IDLE');
         setCurrentCallId(null);
+        currentCallIdRef.current = null;
         setPeerInfo(null);
       }, 1500);
     });
@@ -323,6 +350,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
     return () => {
       socket.off('INCOMING_CALL');
+      socket.off('CALL_INITIATED_ACK');
       socket.off('CALL_RINGING');
       socket.off('CALL_ACCEPTED');
       socket.off('CALL_REJECTED');
@@ -333,7 +361,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       socket.off('CALL_MISSED');
       socket.off('ICE_CANDIDATE');
     };
-  }, [socket, targetExt, peerInfo]);
+  }, [socket, targetExt, peerInfo, attachRemoteStream]);
 
   // Clean up WebRTC audio tracks and reset hardware
   const cleanupCallHardware = () => {
@@ -378,19 +406,18 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
           socket.emit('ICE_CANDIDATE', {
             targetExtension: ext,
             candidate,
-            callId: currentCallId
+            callId: currentCallIdRef.current || currentCallId || ''
           });
         },
         (remoteStream) => {
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch((e) => console.warn('Remote audio autoplay blocked:', e));
-          }
+          attachRemoteStream(remoteStream);
         }
       );
 
       peerManagerRef.current = peer;
 
+      // Capture local microphone track and build RTCPeerConnection
+      await peer.initializePeerConnection();
       const offer = await peer.createOffer();
 
       const peerUser = directory.find((p) => p.extension === ext);
@@ -405,7 +432,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
         targetExtension: ext,
         sdpOffer: offer,
         callerName: user?.name,
-        callerRank: 'Academic Staff'
+        callerRank: (user as any)?.staffProfile?.rank || 'Staff'
       });
     } catch (err: any) {
       console.error('[VoIP UI] Failed to start call:', err);
@@ -415,12 +442,31 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     }
   };
 
-  // Accept Incoming Call
-  const handleAcceptCall = async () => {
+  // Accept Incoming Call (Works for both in-modal button & GlobalIncomingCallModal)
+  const handleAcceptCall = async (incomingData?: IncomingVoipCallData) => {
     stopIncomingCallRingtone();
     onOpen?.();
 
-    if (!currentCallId || !incomingOfferSdpRef.current || !socket) return;
+    const offerSdp = incomingData?.sdpOffer || incomingOfferSdpRef.current;
+    const callId = incomingData?.callId || currentCallIdRef.current || currentCallId;
+    const callerExt = incomingData?.callerExtension || peerInfo?.extension;
+
+    if (!offerSdp || !callId || !socket) {
+      console.error('[VoIP UI] Cannot accept call: missing SDP offer or Call ID', { offerSdp: !!offerSdp, callId });
+      return;
+    }
+
+    if (incomingData) {
+      setCurrentCallId(incomingData.callId);
+      currentCallIdRef.current = incomingData.callId;
+      setPeerInfo({
+        name: incomingData.callerName,
+        rank: incomingData.callerRank,
+        extension: incomingData.callerExtension
+      });
+    }
+
+    setCallState('CONNECTING');
 
     try {
       const { data: iceConfig } = await api.get('/api/voip/ice-servers');
@@ -428,37 +474,44 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       const peer = new VoipPeerManager(
         iceConfig.iceServers,
         (candidate) => {
-          if (peerInfo?.extension) {
+          if (callerExt) {
             socket.emit('ICE_CANDIDATE', {
-              targetExtension: peerInfo.extension,
+              targetExtension: callerExt,
               candidate,
-              callId: currentCallId
+              callId
             });
           }
         },
         (remoteStream) => {
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch((e) => console.warn('Remote audio autoplay blocked:', e));
-          }
+          attachRemoteStream(remoteStream);
         }
       );
 
       peerManagerRef.current = peer;
 
-      const answer = await peer.handleOfferAndCreateAnswer(incomingOfferSdpRef.current);
+      // Capture local microphone & create answer SDP
+      await peer.initializePeerConnection();
+      const answer = await peer.handleOfferAndCreateAnswer(offerSdp);
 
       socket.emit('CALL_ACCEPTED', {
-        callId: currentCallId,
+        callId,
         sdpAnswer: answer
       });
 
       setCallState('CONNECTED');
     } catch (err: any) {
       console.error('[VoIP UI] Failed to accept call:', err);
+      setCallError('Microphone access denied or connection error');
       handleRejectCall();
     }
   };
+
+  // Auto-answer when opened with acceptedCallData from global modal
+  useEffect(() => {
+    if (acceptedCallData && isOpen) {
+      handleAcceptCall(acceptedCallData);
+    }
+  }, [acceptedCallData, isOpen]);
 
   // Reject Incoming Call
   const handleRejectCall = () => {
@@ -634,13 +687,30 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     }
 
     const fullAudioUrl = vm.audioUrl.startsWith('http') ? vm.audioUrl : `${getApiBaseUrl()}${vm.audioUrl}`;
+    console.log('[Voice Note Playback] Loading audio from URL:', fullAudioUrl);
+
     if (voicemailAudioPlayerRef.current) {
+      voicemailAudioPlayerRef.current.pause();
       voicemailAudioPlayerRef.current.src = fullAudioUrl;
       voicemailAudioPlayerRef.current.volume = 1.0;
-      voicemailAudioPlayerRef.current.play().catch((err) => {
-        console.error('[Voice Note Playback]', err);
+      voicemailAudioPlayerRef.current.load();
+      voicemailAudioPlayerRef.current.play().then(() => {
+        setPlayingVoicemailId(vm.id);
+      }).catch((err) => {
+        console.warn('[Voice Note Playback] Direct play failed, retrying with native Audio constructor:', err);
+        try {
+          const fallback = new Audio(fullAudioUrl);
+          fallback.crossOrigin = 'anonymous';
+          fallback.volume = 1.0;
+          fallback.play().then(() => {
+            setPlayingVoicemailId(vm.id);
+            fallback.onended = () => setPlayingVoicemailId(null);
+          }).catch(e => {
+            console.error('[Voice Note Playback] Both play methods failed:', e);
+            alert('Unable to play voice recording. Please verify audio support.');
+          });
+        } catch (e) {}
       });
-      setPlayingVoicemailId(vm.id);
 
       // Mark listened in DB
       if (!vm.isListened) {
@@ -688,10 +758,11 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   return (
     <>
       {/* Hidden Audio Elements */}
-      <audio id="remoteAudio" ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+      <audio id="remoteAudioModal" ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
       <audio
         ref={voicemailAudioPlayerRef}
         playsInline
+        crossOrigin="anonymous"
         onEnded={() => setPlayingVoicemailId(null)}
         style={{ display: 'none' }}
       />
@@ -712,7 +783,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
           <div className="mt-4 flex items-center gap-3">
             <button
-              onClick={handleAcceptCall}
+              onClick={() => handleAcceptCall()}
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition"
             >
               <Phone size={14} /> Accept
@@ -836,6 +907,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
                   <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider mt-1">
                     {callState === 'INITIATING' && 'Dialing Extension...'}
                     {callState === 'RINGING' && 'Ringing Recipient...'}
+                    {callState === 'CONNECTING' && 'Connecting Audio Stream...'}
                     {callState === 'CONNECTED' && `Call in Progress (${Math.floor(callDuration / 60)}:${(callDuration % 60).toString().padStart(2, '0')})`}
                     {callState === 'REJECTED' && 'Call Unavailable'}
                     {callState === 'ENDED' && 'Call Terminated'}

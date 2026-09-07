@@ -88,13 +88,21 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       const callerExt = callerProfile?.voipExtension || '1000';
       const displayName = callerName || `${callerProfile?.surname || ''} ${callerProfile?.otherNames || ''}`.trim() || user.name;
 
-      // Target socket room check
-      const targetRoom = io.sockets.adapter.rooms.get(`voip_ext_${targetExtension}`);
-      if (!targetRoom || targetRoom.size === 0) {
+      // Target socket room check (check both extension room and user room)
+      const calleeProfile = await prisma.staffProfile.findFirst({
+        where: { voipExtension: targetExtension, isDeleted: false },
+        select: { userId: true, surname: true, otherNames: true, rank: true }
+      });
+
+      const targetExtRoom = io.sockets.adapter.rooms.get(`voip_ext_${targetExtension}`);
+      const targetUserRoom = calleeProfile?.userId ? io.sockets.adapter.rooms.get(`voip_user_${calleeProfile.userId}`) : null;
+      const isOnline = (targetExtRoom && targetExtRoom.size > 0) || (targetUserRoom && targetUserRoom.size > 0);
+
+      if (!isOnline) {
         return socket.emit('CALL_UNAVAILABLE', {
           targetExtension,
           reason: 'OFFLINE',
-          message: `Extension ${targetExtension} is currently offline or un-registered.`
+          message: `Extension ${targetExtension} is currently offline.`
         });
       }
 
@@ -110,37 +118,59 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         status: 'INITIATED'
       };
 
-      // Set 10-second timeout for unanswered call
-      callSession.timer = setTimeout(() => {
+      // Set 25-second timeout for unanswered call
+      callSession.timer = setTimeout(async () => {
         const session = activeCalls.get(callId);
         if (session && session.status === 'INITIATED') {
           session.status = 'ENDED';
-          // Notify caller of timeout
-          io.to(`voip_user_${user.id}`).emit('CALL_TIMEOUT', { callId, message: 'No answer from target extension after 10 seconds.' });
-          // Notify callee of a missed call so they can display notification
-          io.to(`voip_ext_${targetExtension}`).emit('CALL_MISSED', {
+          io.to(`voip_user_${user.id}`).emit('CALL_TIMEOUT', { callId, message: 'No answer from target extension.' });
+          
+          const missedPayload = {
             callId,
             callerExtension: callerExt,
             callerName: displayName,
             callerRank: callerRank || callerProfile?.rank || 'Staff',
             missedAt: new Date().toISOString()
-          });
+          };
+
+          io.to(`voip_ext_${targetExtension}`).emit('CALL_MISSED', missedPayload);
+          if (calleeProfile?.userId) {
+            io.to(`voip_user_${calleeProfile.userId}`).emit('CALL_MISSED', missedPayload);
+            try {
+              await prisma.notification.create({
+                data: {
+                  userId: calleeProfile.userId,
+                  title: '📞 Missed VoIP Call',
+                  message: `Missed call from ${displayName} (Ext: ${callerExt})`,
+                  type: 'WARNING',
+                  link: '/dashboard'
+                }
+              });
+            } catch (err) {}
+          }
+
           activeCalls.delete(callId);
           userActiveCall.delete(user.id);
         }
-      }, 10000);
+      }, 25000);
 
       activeCalls.set(callId, callSession);
       userActiveCall.set(user.id, callId);
 
-      // Notify target client(s) in extension room
-      io.to(`voip_ext_${targetExtension}`).emit('INCOMING_CALL', {
+      const incomingPayload = {
         callId,
         callerExtension: callerExt,
         callerName: displayName,
         callerRank: callerRank || callerProfile?.rank || 'Staff',
+        callerUserId: user.id,
         sdpOffer
-      });
+      };
+
+      // Notify target client(s) in both extension and user rooms
+      io.to(`voip_ext_${targetExtension}`).emit('INCOMING_CALL', incomingPayload);
+      if (calleeProfile?.userId) {
+        io.to(`voip_user_${calleeProfile.userId}`).emit('INCOMING_CALL', incomingPayload);
+      }
 
       socket.emit('CALL_INITIATED_ACK', { callId });
     });
@@ -204,16 +234,33 @@ export const setupVoipSocket = (io: SocketIOServer) => {
     });
 
     // Relay WebRTC ICE Candidate
-    socket.on('ICE_CANDIDATE', (data: { targetExtension: string; candidate: any; callId: string }) => {
-      io.to(`voip_ext_${data.targetExtension}`).emit('ICE_CANDIDATE', {
-        callerUserId: user.id,
-        candidate: data.candidate,
-        callId: data.callId
-      });
+    socket.on('ICE_CANDIDATE', (data: { targetExtension?: string; candidate: any; callId: string }) => {
+      const session = activeCalls.get(data.callId);
+      if (session) {
+        if (user.id === session.callerUserId) {
+          io.to(`voip_ext_${session.targetExtension}`).emit('ICE_CANDIDATE', {
+            callerUserId: user.id,
+            candidate: data.candidate,
+            callId: data.callId
+          });
+        } else {
+          io.to(`voip_user_${session.callerUserId}`).emit('ICE_CANDIDATE', {
+            callerUserId: user.id,
+            candidate: data.candidate,
+            callId: data.callId
+          });
+        }
+      } else if (data.targetExtension) {
+        io.to(`voip_ext_${data.targetExtension}`).emit('ICE_CANDIDATE', {
+          callerUserId: user.id,
+          candidate: data.candidate,
+          callId: data.callId
+        });
+      }
     });
 
     // ─── Real-Time WhatsApp-Style Video Conference Signaling ───────────────────
-    socket.on('VIDEO_CALL_INITIATE', (payload: {
+    socket.on('VIDEO_CALL_INITIATE', async (payload: {
       roomName: string;
       title?: string;
       callerName?: string;
@@ -252,7 +299,7 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         io.to(`project_${targetId}`).emit('VIDEO_CALL_INCOMING', callerInfo);
       }
 
-      // 3. Fallback broadcast to all connected dashboard peers (excluding caller)
+      // 3. Global broadcast to all connected dashboard peers (excluding caller)
       socket.broadcast.emit('VIDEO_CALL_INCOMING', callerInfo);
     });
 
@@ -265,7 +312,7 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       });
     });
 
-    socket.on('VIDEO_CALL_DECLINED', (data: { roomName: string; callerUserId?: string }) => {
+    socket.on('VIDEO_CALL_DECLINED', async (data: { roomName: string; callerUserId?: string; title?: string }) => {
       console.log(`[Video Call Signaling] User ${user.id} (${user.name}) declined video call in room ${data?.roomName}`);
       if (data?.callerUserId) {
         io.to(`voip_user_${data.callerUserId}`).emit('VIDEO_CALL_PEER_DECLINED', {
@@ -276,7 +323,7 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       }
     });
 
-    socket.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
+    socket.on('VIDEO_CALL_ENDED', async (data: { roomName: string; targetUserIds?: string[]; title?: string; callerName?: string }) => {
       console.log(`[Video Call Signaling] Video call ended in room ${data?.roomName}`);
       socket.broadcast.emit('VIDEO_CALL_ENDED', {
         roomName: data?.roomName,

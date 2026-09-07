@@ -41,6 +41,7 @@ interface SocketContextValue {
   onlineExtensions: Set<string>;
   incomingVideoCall: IncomingVideoCallData | null;
   incomingVoipCall: IncomingVoipCallData | null;
+  acceptedVoipCall: IncomingVoipCallData | null;
   activeVideoModal: { isOpen: boolean; roomName: string; title: string } | null;
   isVoipDialerOpen: boolean;
   initialDialerExtension: string;
@@ -52,6 +53,7 @@ interface SocketContextValue {
   closeVoipDialer: () => void;
   acceptVoipCall: (callData: IncomingVoipCallData) => void;
   declineVoipCall: (callData: IncomingVoipCallData) => void;
+  clearAcceptedVoipCall: () => void;
   acceptVideoCall: (callData: IncomingVideoCallData) => void;
   declineVideoCall: (callData: IncomingVideoCallData) => void;
   closeActiveVideoModal: () => void;
@@ -74,9 +76,10 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [userExtension, setUserExtension] = useState<string>('');
   const [onlineExtensions, setOnlineExtensions] = useState<Set<string>>(new Set());
   
-  // Incoming Call states
+  // Incoming & Accepted Call states
   const [incomingVideoCall, setIncomingVideoCall] = useState<IncomingVideoCallData | null>(null);
   const [incomingVoipCall, setIncomingVoipCall] = useState<IncomingVoipCallData | null>(null);
+  const [acceptedVoipCall, setAcceptedVoipCall] = useState<IncomingVoipCallData | null>(null);
   
   // Active Modals
   const [activeVideoModal, setActiveVideoModal] = useState<{
@@ -232,8 +235,13 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const acceptVoipCall = useCallback((callData: IncomingVoipCallData) => {
+    setAcceptedVoipCall(callData);
     setIncomingVoipCall(null);
     setIsVoipDialerOpen(true);
+  }, []);
+
+  const clearAcceptedVoipCall = useCallback(() => {
+    setAcceptedVoipCall(null);
   }, []);
 
   const declineVoipCall = useCallback((callData: IncomingVoipCallData) => {
@@ -244,6 +252,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       });
     }
     setIncomingVoipCall(null);
+    setAcceptedVoipCall(null);
   }, []);
 
   const acceptVideoCall = useCallback((callData: IncomingVideoCallData) => {
@@ -262,7 +271,8 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     if (socketRef.current) {
       socketRef.current.emit('VIDEO_CALL_DECLINED', {
         roomName: callData.roomName,
-        callerUserId: callData.callerUserId
+        callerUserId: callData.callerUserId,
+        title: callData.title
       });
     }
     setIncomingVideoCall(null);
@@ -283,15 +293,21 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     targetId?: string;
   }) => {
     if (!socketRef.current || !user) return;
+    const title = params.title || 'Video Collaboration Call';
     socketRef.current.emit('VIDEO_CALL_INITIATE', {
       roomName: params.roomName,
-      title: params.title || 'Video Collaboration Call',
+      title,
       callerName: user.name || (user.email ? user.email.split('@')[0] : 'Colleague'),
       callerRole: user.role || 'Staff',
       callerAvatar: (user as any).staffProfile?.passportUrl || null,
       targetUserIds: params.targetUserIds || [],
       module: params.module || 'research',
       targetId: params.targetId || null
+    });
+    setActiveVideoModal({
+      isOpen: true,
+      roomName: params.roomName,
+      title
     });
   }, [user]);
 
@@ -308,6 +324,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         onlineExtensions,
         incomingVideoCall,
         incomingVoipCall,
+        acceptedVoipCall,
         activeVideoModal,
         isVoipDialerOpen,
         initialDialerExtension,
@@ -319,6 +336,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         closeVoipDialer,
         acceptVoipCall,
         declineVoipCall,
+        clearAcceptedVoipCall,
         acceptVideoCall,
         declineVideoCall,
         closeActiveVideoModal,

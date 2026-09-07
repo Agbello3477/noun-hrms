@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
+import { useSocket } from '@/context/SocketContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
@@ -77,6 +78,8 @@ export default function DueForPromotionPage() {
     const [meetingRoomName, setMeetingRoomName] = useState('');
     const [candidateName, setCandidateName] = useState('');
 
+    const { startVideoCall } = useSocket();
+
     const handleLaunchInterview = async (logId: string, name: string) => {
         setCandidateName(name);
         try {
@@ -84,11 +87,26 @@ export default function DueForPromotionPage() {
                 module: 'promotion',
                 targetId: logId
             });
-            setMeetingRoomName(res.data.roomName);
+            const room = res.data.roomName;
+            setMeetingRoomName(room);
             setIsMeetingOpen(true);
+            startVideoCall({
+                roomName: room,
+                title: `Promotion Panel Interview: ${name || 'Candidate'}`,
+                targetUserIds: res.data.memberUserIds || [],
+                module: 'promotion',
+                targetId: logId
+            });
         } catch (err) {
-            setMeetingRoomName(`promotion-${logId}`);
+            const room = `promotion-${logId}`;
+            setMeetingRoomName(room);
             setIsMeetingOpen(true);
+            startVideoCall({
+                roomName: room,
+                title: `Promotion Panel Interview: ${name || 'Candidate'}`,
+                module: 'promotion',
+                targetId: logId
+            });
         }
     };
 

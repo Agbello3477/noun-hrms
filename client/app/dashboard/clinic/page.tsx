@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
+import { useSocket } from '@/context/SocketContext';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import { 
   Heart, Activity, Search, PlusCircle, Clipboard, FileText, 
@@ -67,6 +68,8 @@ export default function ClinicDashboard() {
   const [meetingRoomName, setMeetingRoomName] = useState('');
   const [patientName, setPatientName] = useState('');
 
+  const { startVideoCall } = useSocket();
+
   const handleLaunchTelemedicine = async (encounterOrPatientId: string, name: string) => {
     setPatientName(name);
     try {
@@ -74,11 +77,26 @@ export default function ClinicDashboard() {
         module: 'telemedicine',
         targetId: encounterOrPatientId
       });
-      setMeetingRoomName(res.data.roomName);
+      const room = res.data.roomName;
+      setMeetingRoomName(room);
       setIsMeetingOpen(true);
+      startVideoCall({
+        roomName: room,
+        title: `Telemedicine Consultation: ${name || 'Patient'}`,
+        targetUserIds: res.data.memberUserIds || [],
+        module: 'telemedicine',
+        targetId: encounterOrPatientId
+      });
     } catch (err) {
-      setMeetingRoomName(`telemedicine-${encounterOrPatientId}`);
+      const room = `telemedicine-${encounterOrPatientId}`;
+      setMeetingRoomName(room);
       setIsMeetingOpen(true);
+      startVideoCall({
+        roomName: room,
+        title: `Telemedicine Consultation: ${name || 'Patient'}`,
+        module: 'telemedicine',
+        targetId: encounterOrPatientId
+      });
     }
   };
   const [searchQuery, setSearchQuery] = useState('');

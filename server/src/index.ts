@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 dotenv.config({ path: path.resolve(process.cwd(), `.env.${nodeEnv}`) });
@@ -94,8 +95,28 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve Uploads (Local Mock)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve Uploads with explicit Cross-Origin and Byte-Range headers for smooth audio/video streaming
+const uploadDirs = [
+    path.join(process.cwd(), 'uploads'),
+    path.join(__dirname, '../uploads'),
+    path.join(__dirname, '../../uploads')
+];
+for (const uDir of uploadDirs) {
+    if (!fs.existsSync(uDir)) {
+        try { fs.mkdirSync(uDir, { recursive: true }); } catch (e) {}
+    }
+}
+
+app.use('/uploads', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+}, express.static(path.join(process.cwd(), 'uploads')), express.static(path.join(__dirname, '../uploads')));
 
 // Routes (Authenticated & Rate Limited)
 app.use('/api/auth', authRateLimit, authRoutes);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
+import { useSocket } from '@/context/SocketContext';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import { 
   Shield, AlertTriangle, Users, FileText, Send, CheckCircle, 
@@ -54,6 +55,8 @@ export default function SecurityDashboard() {
   const [meetingRoomName, setMeetingRoomName] = useState('');
   const [incidentTitle, setIncidentTitle] = useState('');
 
+  const { startVideoCall } = useSocket();
+
   const handleLaunchSecurityDispatch = async (incidentId: string, title: string) => {
     setIncidentTitle(title);
     try {
@@ -61,11 +64,26 @@ export default function SecurityDashboard() {
         module: 'security',
         targetId: incidentId
       });
-      setMeetingRoomName(res.data.roomName);
+      const room = res.data.roomName;
+      setMeetingRoomName(room);
       setIsMeetingOpen(true);
+      startVideoCall({
+        roomName: room,
+        title: `Security Live Incident Dispatch: ${title || 'Incident'}`,
+        targetUserIds: res.data.memberUserIds || [],
+        module: 'security',
+        targetId: incidentId
+      });
     } catch (err) {
-      setMeetingRoomName(`security-${incidentId}`);
+      const room = `security-${incidentId}`;
+      setMeetingRoomName(room);
       setIsMeetingOpen(true);
+      startVideoCall({
+        roomName: room,
+        title: `Security Live Incident Dispatch: ${title || 'Incident'}`,
+        module: 'security',
+        targetId: incidentId
+      });
     }
   };
 
