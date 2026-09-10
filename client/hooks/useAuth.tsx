@@ -78,10 +78,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const [user, setUser] = useState<User | null>(getInitialUser);
-    // If we already have a cached user, start as NOT loading so pages render immediately.
-    const [isLoading, setIsLoading] = useState(() => getInitialUser() === null);
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
+
+    // Hydrate cached user on client mount without triggering SSR mismatch
+    useEffect(() => {
+        const cached = getInitialUser();
+        if (cached) {
+            setUser(cached);
+            setIsLoading(false);
+        }
+    }, []);
 
     const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
     const [countdownTime, setCountdownTime] = useState(60);

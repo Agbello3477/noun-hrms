@@ -1,0 +1,52 @@
+name: Playwright End-to-End Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  e2e-test:
+    name: Run E2E Test Suite (Multi-Role, Payroll, WebRTC)
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Project Dependencies
+        run: npm ci || npm install
+
+      - name: Install Playwright Browsers & OS Dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E Tests
+        env:
+          CI: true
+          PLAYWRIGHT_TEST_BASE_URL: ${{ secrets.PLAYWRIGHT_TEST_BASE_URL || 'https://nounhrms.web.app' }}
+        run: npx playwright test --project=chromium
+
+      - name: Upload Playwright Test Report Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-e2e-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload Test Traces & Videos on Failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failure-traces
+          path: test-results/
+          retention-days: 14
