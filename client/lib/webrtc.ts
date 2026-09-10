@@ -8,11 +8,17 @@ export interface IceServerConfig {
 
 export const rtcConfiguration: RTCConfiguration = {
   iceServers: [
-    // Public STUN server for initial candidate discovery
+    // High-availability public Google STUN servers
     {
-      urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:turn.yourdomain.com:3478'],
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+        'stun:stun3.l.google.com:19302',
+        'stun:stun4.l.google.com:19302',
+      ],
     },
-    // Dedicated Coturn TURN server for symmetric NAT traversal
+    // Dedicated Coturn TURN server fallback for symmetric NAT traversal
     {
       urls: [
         'turn:turn.yourdomain.com:3478?transport=udp',
@@ -45,11 +51,23 @@ export const fetchDynamicIceServers = async (authToken?: string): Promise<IceSer
 
     const { data } = await api.get('/api/v1/webrtc/ice-servers', { headers });
     if (data?.iceServers && Array.isArray(data.iceServers)) {
+      // Ensure public STUN is always included alongside dynamic TURN credentials
+      const mergedServers: IceServerConfig[] = [
+        {
+          urls: [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+          ]
+        },
+        ...data.iceServers
+      ];
+
       cachedIceServers = {
-        servers: data.iceServers,
+        servers: mergedServers,
         expiresAt: data.expiresAt || (now + 12 * 3600 * 1000)
       };
-      return data.iceServers;
+      return mergedServers;
     }
   } catch (err) {
     console.warn('[WebRTC] Falling back to default ICE servers:', err);
@@ -86,6 +104,7 @@ export class VoipPeerManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
 
   constructor(
     private iceServers: IceServerConfig[] = DEFAULT_ICE_SERVERS,
@@ -94,7 +113,9 @@ export class VoipPeerManager {
   ) {}
 
   public async getAudioStream(): Promise<MediaStream> {
-    if (this.localStream) return this.localStream;
+    if (this.localStream && this.localStream.active && this.localStream.getAudioTracks().some(t => t.readyState === 'live')) {
+      return this.localStream;
+    }
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -102,13 +123,20 @@ export class VoipPeerManager {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 48000
+          sampleRate: 48000,
+          channelCount: 1
         },
         video: false
       });
+
+      // Ensure every track is actively enabled
+      this.localStream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
+
       return this.localStream;
     } catch (error: any) {
-      console.error('[WebRTC] Microphones access error:', error);
+      console.error('[WebRTC] Microphone access error:', error);
       throw new Error('Microphone access denied or device unavailable.');
     }
   }
@@ -116,43 +144,69 @@ export class VoipPeerManager {
   public async initializePeerConnection(): Promise<RTCPeerConnection> {
     if (this.peerConnection) return this.peerConnection;
 
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: this.iceServers
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 10
     });
+    this.peerConnection = pc;
 
     this.remoteStream = new MediaStream();
 
     // Attach local audio track to Peer Connection
     const localStream = await this.getAudioStream();
     localStream.getTracks().forEach((track) => {
-      if (this.peerConnection) {
-        this.peerConnection.addTrack(track, localStream);
-      }
+      pc.addTrack(track, localStream);
     });
 
-    // Handle incoming remote audio tracks
-    this.peerConnection.ontrack = (event) => {
+    // Handle incoming remote audio tracks with live unmute listener
+    pc.ontrack = (event) => {
+      console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
+      let stream: MediaStream;
       if (event.streams && event.streams[0]) {
-        this.remoteStream = event.streams[0];
-      } else if (this.remoteStream) {
+        stream = event.streams[0];
+        this.remoteStream = stream;
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
+        }
         this.remoteStream.addTrack(event.track);
+        stream = this.remoteStream;
       }
-      if (this.onTrackReceived && this.remoteStream) {
-        this.onTrackReceived(this.remoteStream);
-      }
+
+      const dispatchRemoteStream = () => {
+        if (this.onTrackReceived && stream) {
+          console.log('[WebRTC] Dispatching remote audio stream to caller/callee listeners');
+          this.onTrackReceived(stream);
+        }
+      };
+
+      dispatchRemoteStream();
+
+      // Listen for track unmute when first network RTP audio packets arrive
+      event.track.onunmute = () => {
+        console.log('[WebRTC] Remote audio track unmuted and active');
+        dispatchRemoteStream();
+      };
     };
 
     // Handle ICE Candidates
-    this.peerConnection.onicecandidate = (event) => {
+    pc.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidate) {
         this.onIceCandidate(event.candidate);
       }
     };
 
-    return this.peerConnection;
-  }
+    // Monitor ICE Connection State
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE Connection State changed to:', pc.iceConnectionState);
+    };
 
-  private pendingCandidates: RTCIceCandidateInit[] = [];
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] Peer Connection State changed to:', pc.connectionState);
+    };
+
+    return pc;
+  }
 
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     const pc = await this.initializePeerConnection();
@@ -161,7 +215,7 @@ export class VoipPeerManager {
       offerToReceiveVideo: false
     });
 
-    // Enforce Opus Codec in SDP
+    // Line-break safe Opus Codec Priority in SDP
     const modifiedSdp = this.preferOpusCodec(offer.sdp || '');
     await pc.setLocalDescription({ type: offer.type, sdp: modifiedSdp });
     return pc.localDescription!;
@@ -172,7 +226,10 @@ export class VoipPeerManager {
     await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
     await this.flushPendingCandidates();
 
-    const answer = await pc.createAnswer();
+    const answer = await pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: false
+    });
     const modifiedSdp = this.preferOpusCodec(answer.sdp || '');
     await pc.setLocalDescription({ type: answer.type, sdp: modifiedSdp });
     return pc.localDescription!;
@@ -186,6 +243,8 @@ export class VoipPeerManager {
   }
 
   public async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!candidate || !candidate.candidate) return;
+
     if (this.peerConnection && this.peerConnection.remoteDescription) {
       try {
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
@@ -197,11 +256,11 @@ export class VoipPeerManager {
     }
   }
 
-  private async flushPendingCandidates(): Promise<void> {
+  public async flushPendingCandidates(): Promise<void> {
     if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
     while (this.pendingCandidates.length > 0) {
       const candidate = this.pendingCandidates.shift();
-      if (candidate) {
+      if (candidate && candidate.candidate) {
         try {
           await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
@@ -211,26 +270,26 @@ export class VoipPeerManager {
     }
   }
 
-  // Ensure Opus audio codec is prioritized for <40kbps minimal bandwidth usage
+  // Ensure Opus audio codec is prioritized safely with line-ending normalization
   private preferOpusCodec(sdp: string): string {
-    const sdpLines = sdp.split('\r\n');
-    const mLineIndex = sdpLines.findIndex((line) => line.startsWith('m=audio'));
-    if (mLineIndex === -1) return sdp;
+    if (!sdp) return sdp;
+    const lines = sdp.split(/\r\n|\r|\n/);
+    const mLineIndex = lines.findIndex((line) => line.startsWith('m=audio'));
+    if (mLineIndex === -1) return lines.join('\r\n');
 
-    const opusPayloadType = sdpLines.find((line) => line.includes('a=rtpmap') && line.toLowerCase().includes('opus'));
-    if (!opusPayloadType) return sdp;
+    const opusPayloadType = lines.find((line) => line.includes('a=rtpmap') && line.toLowerCase().includes('opus'));
+    if (!opusPayloadType) return lines.join('\r\n');
 
     const match = opusPayloadType.match(/a=rtpmap:(\d+)\s+opus/i);
-    if (!match) return sdp;
+    if (!match) return lines.join('\r\n');
 
     const opusPt = match[1];
-    const mLineElements = sdpLines[mLineIndex].split(' ');
+    const mLineElements = lines[mLineIndex].split(' ');
     const header = mLineElements.slice(0, 3);
     const payloads = mLineElements.slice(3).filter((pt) => pt !== opusPt);
-    mLineElements.splice(0, mLineElements.length, ...header, opusPt, ...payloads);
-    sdpLines[mLineIndex] = mLineElements.join(' ');
+    lines[mLineIndex] = [...header, opusPt, ...payloads].join(' ');
 
-    return sdpLines.join('\r\n');
+    return lines.join('\r\n');
   }
 
   public setMicrophoneMuted(muted: boolean): void {
@@ -248,10 +307,13 @@ export class VoipPeerManager {
     if (this.peerConnection) {
       this.peerConnection.onicecandidate = null;
       this.peerConnection.ontrack = null;
+      this.peerConnection.oniceconnectionstatechange = null;
+      this.peerConnection.onconnectionstatechange = null;
       this.peerConnection.close();
       this.peerConnection = null;
     }
 
+    this.pendingCandidates = [];
     this.localStream = null;
     this.remoteStream = null;
   }

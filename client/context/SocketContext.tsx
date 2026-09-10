@@ -65,6 +65,8 @@ interface SocketContextValue {
     targetId?: string;
   }) => void;
   clearNewMissedCount: () => void;
+  registerActiveVoipPeer: (peer: any, callId: string) => void;
+  unregisterActiveVoipPeer: () => void;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -97,6 +99,8 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   const socketRef = useRef<Socket | null>(null);
   const myExtRef = useRef<string>('');
+  const activePeerManagerRef = useRef<{ peer: any; callId: string } | null>(null);
+  const queuedIceCandidatesRef = useRef<Map<string, any[]>>(new Map());
 
   // Fetch guaranteed VoIP extension for authenticated user
   const fetchExtension = useCallback(async () => {
@@ -194,6 +198,21 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
     instance.on('CALL_TIMEOUT', () => {
       setIncomingVoipCall(null);
+    });
+
+    // Global ICE Candidate Relay Listener (Buffered if peer is not yet created)
+    instance.on('ICE_CANDIDATE', (data: { candidate: any; callId?: string }) => {
+      console.log('[SocketContext] Received ICE candidate from peer for callId:', data?.callId);
+      if (data?.candidate) {
+        if (activePeerManagerRef.current && (!data.callId || activePeerManagerRef.current.callId === data.callId)) {
+          activePeerManagerRef.current.peer.addIceCandidate(data.candidate);
+        } else {
+          const cid = data.callId || 'default';
+          const list = queuedIceCandidatesRef.current.get(cid) || [];
+          list.push(data.candidate);
+          queuedIceCandidatesRef.current.set(cid, list);
+        }
+      }
     });
 
     // Real-time VoIP Missed Call & Voicemail
@@ -315,6 +334,31 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     setNewMissedCount(0);
   }, []);
 
+  const registerActiveVoipPeer = useCallback((peer: any, callId: string) => {
+    console.log('[SocketContext] Registering active VoIP peer for callId:', callId);
+    activePeerManagerRef.current = { peer, callId };
+
+    // Flush any early buffered ICE candidates for this call
+    const candidates = [
+      ...(queuedIceCandidatesRef.current.get(callId) || []),
+      ...(queuedIceCandidatesRef.current.get('default') || [])
+    ];
+    queuedIceCandidatesRef.current.delete(callId);
+    queuedIceCandidatesRef.current.delete('default');
+
+    if (candidates.length > 0) {
+      console.log(`[SocketContext] Flushing ${candidates.length} early buffered ICE candidates to active peer`);
+      candidates.forEach((candidate) => {
+        peer.addIceCandidate(candidate);
+      });
+    }
+  }, []);
+
+  const unregisterActiveVoipPeer = useCallback(() => {
+    console.log('[SocketContext] Unregistering active VoIP peer');
+    activePeerManagerRef.current = null;
+  }, []);
+
   return (
     <SocketContext.Provider
       value={{
@@ -341,7 +385,9 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         declineVideoCall,
         closeActiveVideoModal,
         startVideoCall,
-        clearNewMissedCount
+        clearNewMissedCount,
+        registerActiveVoipPeer,
+        unregisterActiveVoipPeer
       }}
     >
       {children}

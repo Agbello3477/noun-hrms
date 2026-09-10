@@ -336,8 +336,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 />
             )}
 
-            {/* Hidden HTML5 Remote Audio Element for seamless WebRTC two-way audio playback */}
-            <audio id="remoteAudio" autoPlay playsInline className="hidden" />
+            {/* Offscreen HTML5 Remote Audio Element for seamless WebRTC two-way audio playback */}
+            <audio id="remoteAudio" autoPlay playsInline className="fixed -top-96 -left-96 w-1 h-1 opacity-0 pointer-events-none" />
 
             {/* In-Portal Desktop Companion Promotion Prompt */}
             {mounted && <ExtensionPromptModal />}

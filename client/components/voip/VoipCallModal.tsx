@@ -74,7 +74,9 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
     missedCalls: socketMissedCalls, 
     newMissedCount,
     clearNewMissedCount,
-    registerExtension 
+    registerExtension,
+    registerActiveVoipPeer,
+    unregisterActiveVoipPeer
   } = useSocket();
 
   // VoIP Extension States
@@ -120,6 +122,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   // References
   const peerManagerRef = useRef<VoipPeerManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const voicemailAudioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const recTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -226,6 +229,24 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       globalAudio.srcObject = stream;
       globalAudio.volume = isSpeakerOn ? 1.0 : 0.4;
       globalAudio.play().catch((e) => console.log('[Global Audio Play]', e));
+    }
+
+    // Direct Web Audio API hardware routing fallback
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+          audioCtxRef.current = new AudioCtxClass();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume().catch((err) => console.log('[VoIP AudioCtx Resume]', err));
+        }
+        const source = audioCtxRef.current.createMediaStreamSource(stream);
+        source.connect(audioCtxRef.current.destination);
+        console.log('[VoIP UI] Web Audio API hardware routing connected directly to output destination');
+      }
+    } catch (audioCtxErr) {
+      console.log('[VoIP UI] AudioContext pipeline fallback:', audioCtxErr);
     }
   }, [isSpeakerOn]);
 
@@ -366,12 +387,21 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
   // Clean up WebRTC audio tracks and reset hardware
   const cleanupCallHardware = () => {
     stopIncomingCallRingtone();
+    unregisterActiveVoipPeer();
     if (peerManagerRef.current) {
       peerManagerRef.current.cleanup();
       peerManagerRef.current = null;
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
+    }
+    const globalAudio = document.getElementById('remoteAudio') as HTMLAudioElement;
+    if (globalAudio) {
+      globalAudio.srcObject = null;
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      audioCtxRef.current.close().catch((e) => console.log('[VoIP AudioCtx Close]', e));
+      audioCtxRef.current = null;
     }
   };
 
@@ -393,6 +423,10 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       return;
     }
 
+    const callId = currentCallIdRef.current || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    setCurrentCallId(callId);
+    currentCallIdRef.current = callId;
+
     setCallError('');
     setCallState('INITIATING');
     setShowVoicemailRecorder(false);
@@ -406,7 +440,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
           socket.emit('ICE_CANDIDATE', {
             targetExtension: ext,
             candidate,
-            callId: currentCallIdRef.current || currentCallId || ''
+            callId: currentCallIdRef.current || callId
           });
         },
         (remoteStream) => {
@@ -415,6 +449,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       );
 
       peerManagerRef.current = peer;
+      registerActiveVoipPeer(peer, callId);
 
       // Capture local microphone track and build RTCPeerConnection
       await peer.initializePeerConnection();
@@ -429,6 +464,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       });
 
       socket.emit('CALL_INITIATE', {
+        callId,
         targetExtension: ext,
         sdpOffer: offer,
         callerName: user?.name,
@@ -488,6 +524,7 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       );
 
       peerManagerRef.current = peer;
+      registerActiveVoipPeer(peer, callId);
 
       // Capture local microphone & create answer SDP
       await peer.initializePeerConnection();
@@ -757,8 +794,8 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   return (
     <>
-      {/* Hidden Audio Elements */}
-      <audio id="remoteAudioModal" ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+      {/* Offscreen Audio Elements for uninterrupted hardware playback */}
+      <audio id="remoteAudioModal" ref={remoteAudioRef} autoPlay playsInline className="fixed -top-96 -left-96 w-1 h-1 opacity-0 pointer-events-none" />
       <audio
         ref={voicemailAudioPlayerRef}
         playsInline
