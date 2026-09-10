@@ -58,18 +58,23 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
         working-directory: ./server
+        env:
+          DATABASE_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
+          DIRECT_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
 
       - name: Run Database Migrations (Test DB)
         run: npx prisma db push --accept-data-loss
         working-directory: ./server
         env:
           DATABASE_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
+          DIRECT_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
 
       - name: Run Backend Integration Tests
         run: npm run test
         working-directory: ./server
         env:
           DATABASE_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
+          DIRECT_URL: "postgresql://admin:admin123@localhost:5432/noun_hrms?schema=public"
           REDIS_URL: "redis://localhost:6379"
           JWT_SECRET: "ci_testing_jwt_secret"
           NODE_ENV: "test"
