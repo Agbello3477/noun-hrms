@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, ChevronRight, Phone } from 'lucide-react';
+import { Menu, Bell, Check, X, Info, AlertTriangle, CheckCircle, AlertOctagon, ChevronRight, Phone, Search, Command } from 'lucide-react';
 import api from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -121,51 +121,58 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
     const unreadNotificationsList = notifications.filter(n => !n.isRead);
 
     return (
-        <header className="flex h-16 w-full items-center justify-between bg-white px-4 md:px-8 shadow-sm z-20 relative">
+        <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 md:px-6 backdrop-blur-md transition-all">
             <div className="flex items-center gap-3">
                 {toggleSidebar && (
                     <button 
                         onClick={toggleSidebar} 
-                        className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                        className="md:hidden p-1.5 -ml-1 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        aria-label="Toggle Navigation Menu"
                     >
-                        <Menu size={24} />
+                        <Menu size={20} />
                     </button>
                 )}
-                <h2 className="text-lg md:text-xl font-semibold text-gray-800">
-                    {pathname.includes('hr') ? 'Registry Dashboard' :
-                        pathname.includes('bursary') ? 'Bursary Dashboard' :
-                            'Staff Dashboard'}
-                </h2>
+                <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-[#006533]"></span>
+                    <h2 className="text-sm md:text-base font-bold text-slate-800 tracking-tight">
+                        {pathname.includes('hr') || pathname.includes('registry') ? 'Registry Administration' :
+                            pathname.includes('bursary') || pathname.includes('payroll') ? 'Bursary & Financial Management' :
+                                pathname.includes('clinic') ? 'Clinical & Health Services' :
+                                    pathname.includes('security') ? 'Campus Security Operations' :
+                                        pathname.includes('academic') || pathname.includes('research') ? 'Academic & Research Services' :
+                                            pathname.includes('unit') ? 'Unit Directorate Command' :
+                                                'Staff Central Portal'}
+                    </h2>
+                </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
                 {/* Emergency Hotlines Quick Access Badge */}
-                <div className="flex flex-wrap items-center gap-2 border border-red-200 bg-red-50/90 text-red-700 px-2.5 py-1 rounded-xl text-xs font-bold shadow-sm">
+                <div className="hidden lg:flex items-center gap-2 border border-red-200/80 bg-red-50/90 text-red-700 px-3 py-1 rounded-full text-xs font-bold shadow-2xs">
                     <span className="relative flex h-2 w-2 shrink-0">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                     </span>
-                    <span className="text-[10px] md:text-[11px] uppercase tracking-wider font-extrabold text-red-900 shrink-0">Emergency:</span>
-                    <a href="tel:+2348031234567" className="hover:underline text-red-700 font-extrabold text-[11px] md:text-xs">Clinic (+234 803 123 4567)</a>
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold text-red-900 shrink-0">SOS:</span>
+                    <a href="tel:+2348031234567" className="hover:underline text-red-700 font-extrabold text-[11px]">Clinic (+234 803 123 4567)</a>
                     <span className="text-red-300 text-[10px]">|</span>
-                    <a href="tel:+2348037654321" className="hover:underline text-red-700 font-extrabold text-[11px] md:text-xs">Security (+234 803 765 4321)</a>
+                    <a href="tel:+2348037654321" className="hover:underline text-red-700 font-extrabold text-[11px]">Security (+234 803 765 4321)</a>
                 </div>
 
                 {/* VoIP Internal Intercom Phone Button */}
                 <button
                     onClick={handleOpenVoip}
-                    className="relative p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 transition-colors shadow-sm flex items-center justify-center"
+                    className="relative p-2 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 rounded-xl border border-emerald-200/80 transition-all shadow-2xs flex items-center justify-center gap-1.5"
                     title="Open VoIP Extension Intercom"
                 >
-                    <Phone size={18} className="text-emerald-700" />
+                    <Phone size={16} className="text-emerald-700" />
+                    <span className="hidden sm:inline text-xs font-extrabold text-emerald-900">Intercom</span>
                     {newMissedCount > 0 ? (
-                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-1 ring-white animate-pulse">
+                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white animate-pulse">
                             {newMissedCount > 9 ? '9+' : newMissedCount}
                         </span>
                     ) : (
-                        <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-bold text-white ring-1 ring-white">
-                            ✓
-                        </span>
+                        <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
                     )}
                 </button>
 
@@ -173,68 +180,69 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                 <div className="relative" ref={dropdownRef}>
                     <button
                         onClick={() => setIsOpen(!isOpen)}
-                        className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                        className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                        aria-label="Notifications"
                     >
-                        <Bell size={20} />
+                        <Bell size={18} />
                         {unreadCount > 0 && (
-                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white">
+                            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-extrabold text-white ring-2 ring-white">
                                 {unreadCount > 9 ? '9+' : unreadCount}
                             </span>
                         )}
                     </button>
 
                     {isOpen && (
-                        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 origin-top-right overflow-hidden">
-                            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                                <h3 className="text-sm font-bold text-gray-700">Notifications</h3>
+                        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white shadow-2xl border border-slate-200 ring-1 ring-black/5 origin-top-right overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                                <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">System Notifications</h3>
                                 {unreadCount > 0 && (
                                     <button
                                         onClick={markAllRead}
-                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                        className="text-xs text-blue-600 hover:text-blue-800 font-bold"
                                     >
                                         Mark all read
                                     </button>
                                 )}
                             </div>
 
-                            <div className="max-h-[70vh] overflow-y-auto">
+                            <div className="max-h-[65vh] overflow-y-auto divide-y divide-slate-100">
                                 {notifications.length === 0 ? (
-                                    <div className="px-4 py-8 text-center text-gray-500 text-sm">
-                                        No new notifications
+                                    <div className="px-4 py-8 text-center text-slate-400 text-xs font-medium">
+                                        No unread notifications
                                     </div>
                                 ) : (
                                     notifications.map(note => (
                                         <div
                                             key={note.id}
-                                            className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${!note.isRead ? 'bg-blue-50/50' : ''}`}
+                                            className={`px-4 py-3 hover:bg-slate-50/80 transition-colors cursor-pointer ${!note.isRead ? 'bg-emerald-50/30' : ''}`}
                                             onClick={() => !note.isRead && markOneRead(note.id)}
                                         >
                                             <div className="flex items-start gap-3">
                                                 <div className="mt-0.5 flex-shrink-0">
                                                     {getIcon(note.type)}
                                                 </div>
-                                                <div className="flex-1">
-                                                    <p className={`text-sm ${!note.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-xs ${!note.isRead ? 'font-bold text-slate-900' : 'text-slate-700'}`}>
                                                         {note.title}
                                                     </p>
-                                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
                                                         {note.message}
                                                     </p>
                                                     {note.link && (
                                                         <Link
                                                             href={note.link}
-                                                            className="text-xs text-nounGreen hover:underline mt-1.5 inline-block font-medium"
-                                                            onClick={() => setIsOpen(false)} // Close on nav
+                                                            className="text-[11px] text-[#006533] hover:underline mt-1 inline-block font-bold"
+                                                            onClick={() => setIsOpen(false)}
                                                         >
                                                             View Details →
                                                         </Link>
                                                     )}
-                                                    <p className="text-[10px] text-gray-400 mt-2">
+                                                    <p className="text-[10px] text-slate-400 mt-1.5">
                                                         {new Date(note.createdAt).toLocaleString()}
                                                     </p>
                                                 </div>
                                                 {!note.isRead && (
-                                                    <div className="h-2 w-2 bg-blue-500 rounded-full mt-2"></div>
+                                                    <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full mt-1.5"></div>
                                                 )}
                                             </div>
                                         </div>
@@ -245,18 +253,18 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                     )}
                 </div>
 
-                {/* User Profile */}
-                <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
+                {/* User Session Profile Chip */}
+                <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
                     <div className="text-right hidden sm:block">
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="text-xs font-extrabold text-slate-900 leading-tight">
                             {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name}` : user?.name}
                         </p>
-                        <p className="text-xs text-gray-500 truncate max-w-[150px]">
+                        <p className="text-[10px] text-slate-500 truncate max-w-[140px] font-medium">
                             {user?.staffProfile?.rank || user?.role?.replace(/_/g, ' ')}
                         </p>
                     </div>
-                    <div className="h-10 w-10 rounded-full bg-nounGreen/10 flex items-center justify-center text-nounGreen font-bold border border-nounGreen/20">
-                        {user?.name?.charAt(0)}
+                    <div className="h-8 w-8 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-[#006533] font-black text-xs shadow-2xs">
+                        {user?.name?.charAt(0) || 'U'}
                     </div>
                 </div>
             </div>

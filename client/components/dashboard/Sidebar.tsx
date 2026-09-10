@@ -34,27 +34,44 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const pathname = usePathname();
     const { user, logout } = useAuth();
 
-    const isActive = (path: string) => pathname === path;
+    const isActive = (path: string) => {
+        if (path === '/dashboard') return pathname === '/dashboard';
+        return pathname === path || pathname.startsWith(`${path}/`);
+    };
 
-    const LinkItem = ({ href, icon: Icon, label }: any) => (
-        <Link
-            href={href}
-            prefetch={true}
-            onClick={() => setIsOpen && setIsOpen(false)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive(href)
-                ? 'bg-primary/10 text-primary'
-                : 'text-gray-700 hover:bg-gray-100'
+    const LinkItem = ({ href, icon: Icon, label, badge }: any) => {
+        const active = isActive(href);
+        return (
+            <Link
+                href={href}
+                prefetch={true}
+                onClick={() => setIsOpen && setIsOpen(false)}
+                className={`group flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all duration-150 ${
+                    active
+                        ? 'bg-emerald-50/90 text-emerald-950 font-bold border border-emerald-200/60 shadow-xs relative before:absolute before:-left-3 before:top-1.5 before:bottom-1.5 before:w-1.5 before:rounded-r-full before:bg-[#006533]'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                 }`}
-        >
-            <Icon size={20} />
-            {label}
-        </Link>
-    );
-
+            >
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <Icon 
+                        size={17} 
+                        className={`flex-shrink-0 transition-colors ${
+                            active ? 'text-[#006533]' : 'text-slate-400 group-hover:text-slate-700'
+                        }`} 
+                    />
+                    <span className="truncate">{label}</span>
+                </div>
+                {badge && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-black rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {badge}
+                    </span>
+                )}
+            </Link>
+        );
+    };
 
     // Helper to determine active silos
     const role = user?.role;
-    // const dept = user?.staffProfile?.department; // Legacy check, use Role first now
 
     // Logic for Enterprise Roles
     const isSuperUser = role === 'SUPER_USER';
@@ -80,37 +97,42 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const isSecurity = ['SECURITY_HEAD', 'SECURITY_OFFICER'].includes(role || '') || isAdmin || isVC;
 
     return (
-        <aside className="h-screen w-52 flex-none border-r border-gray-200 bg-white overflow-y-auto">
-            <div className="flex h-16 items-center border-b px-6 gap-3">
-                <img src="/noun_logo.png" alt="NOUN" className="h-8 w-8 object-contain" />
-                <div className="text-xl font-bold text-nounGreen">NOUN HRMS</div>
+        <aside className="h-screen w-64 flex-none border-r border-slate-200/80 bg-white flex flex-col justify-between select-none">
+            {/* Header / Brand Logo */}
+            <div className="flex h-14 items-center border-b border-slate-200/80 px-4 gap-3 bg-white flex-shrink-0">
+                <img src="/noun_logo.png" alt="NOUN" className="h-8 w-8 object-contain rounded-lg shadow-2xs" />
+                <div className="flex flex-col">
+                    <span className="text-sm font-extrabold tracking-tight text-[#006533]">NOUN HRMS</span>
+                    <span className="text-[10px] font-semibold text-slate-400 -mt-0.5">Enterprise Portal</span>
+                </div>
             </div>
 
-            <nav className="flex-1 space-y-1 px-3 py-4">
+            {/* Scrollable Navigation Area */}
+            <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 scrollbar-thin">
                 <LinkItem href="/dashboard" icon={LayoutDashboard} label="Overview" />
 
                 {/* VC Executive Section */}
                 {(isVC || isSuperUser) && (
                     <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Executive
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Executive Oversight
                         </div>
                         <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />
                     </>
                 )}
 
-                {/* Core HR (Registry & Admins) */}
+                {/* Core Administration (Registry & Admins) */}
                 {isRegistry && (
                     <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Registry
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Core Administration
                         </div>
+                        <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
                         <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="Performance (APER)" />
-                        <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
                         <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
@@ -124,15 +146,14 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 {/* Unit Management (Directors, Deans, Center Managers) */}
                 {isUnitHead && (
                     <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            My Unit
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Unit Management
                         </div>
                         <LinkItem href="/dashboard/unit/staff" icon={Briefcase} label="Unit Staff" />
                         <LinkItem href="/dashboard/unit/leaves" icon={FileText} label="Leave Approvals" />
                         <LinkItem href="/dashboard/unit/aper" icon={ClipboardCheck} label="Appraisal Review" />
                         <LinkItem href="/dashboard/unit/memos" icon={Mail} label="Unit Memos" />
                         <LinkItem href="/dashboard/unit/transferred-staff" icon={ArrowLeftRight} label="Transferred Staff" />
-                        <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
                     </>
                 )}
 
@@ -141,20 +162,57 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     <LinkItem href="/dashboard/attendance" icon={MapPin} label="Attendance" />
                 )}
 
-                {/* Bursary Silo */}
+                {/* Bursary & Finance Silo */}
                 {isBursary && (
                     <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Bursary
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Bursary &amp; Finance
                         </div>
-                        <LinkItem href="/dashboard/payroll" icon={DollarSign} label="Payroll" />
-                        <LinkItem href="/dashboard/bursary" icon={Layers} label="Bursary Command" />
-                        {isAudit && <LinkItem href="/dashboard/bursary/audit" icon={Layers} label="Audit Logs" />}
+                        <LinkItem href="/dashboard/payroll" icon={DollarSign} label="Payroll Central" />
+                        <LinkItem href="/dashboard/bursary" icon={Layers} label="Bursary Operations" />
+                        {isAudit && <LinkItem href="/dashboard/bursary/audit" icon={Layers} label="Audit Verification" />}
                     </>
                 )}
 
-                {/* General Staff Actions (Visible to everyone essentially) */}
-                <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {/* Clinical Services */}
+                {isClinic && (
+                    <>
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Clinical Services
+                        </div>
+                        <LinkItem href="/dashboard/clinic" icon={HeartPulse} label="Health Services" />
+                    </>
+                )}
+
+                {/* Campus Safety */}
+                <>
+                    <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Campus Safety
+                    </div>
+                    <LinkItem 
+                        href="/dashboard/security" 
+                        icon={Shield} 
+                        label={['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role || '') ? "Command Center" : "Report Threat / Incident"} 
+                    />
+                    {(String(role) === 'SECURITY_HEAD' || isVC || isAdmin) && (
+                        <LinkItem href="/dashboard/security/reports" icon={FileText} label="Security Reports" />
+                    )}
+                </>
+
+                {/* Academic Research Services */}
+                {isAcademic && (
+                    <>
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Academic &amp; Research
+                        </div>
+                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
+                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
+                        <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
+                    </>
+                )}
+
+                {/* General Staff Self-Service */}
+                <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     Self Service
                 </div>
                 <LinkItem href="/dashboard/profile" icon={Users} label="My Profile" />
@@ -167,74 +225,39 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     </>
                 )}
                 {user?.staffProfile?.cadre !== 'ACADEMIC' && (
-                    <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Appraisal" />
+                    <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Staff Appraisal" />
                 )}
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
                 <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Applications" />
 
-                {/* Academic Services */}
-                {isAcademic && (
-                    <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Academic
-                        </div>
-                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
-                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
-                        <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
-                    </>
-                )}
-
-                {/* University Clinic & Security */}
-                {isClinic && (
-                    <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            University Clinic
-                        </div>
-                        <LinkItem href="/dashboard/clinic" icon={HeartPulse} label="Health Services" />
-                    </>
-                )}
-
-                <>
-                    <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Campus Security
-                    </div>
-                    <LinkItem 
-                        href="/dashboard/security" 
-                        icon={Shield} 
-                        label={['SECURITY_HEAD', 'SECURITY_OFFICER', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role || '') ? "Command Center" : "Report Threat / Incident"} 
-                    />
-                    {(String(role) === 'SECURITY_HEAD' || isVC || isAdmin) && (
-                        <LinkItem href="/dashboard/security/reports" icon={FileText} label="Security Reports" />
-                    )}
-                </>
-
-                {/* System */}
+                {/* System Administration */}
                 {isAdmin && (
                     <>
-                        <div className="pt-4 pb-1 pl-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            System
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            System Administration
                         </div>
                         <LinkItem href="/dashboard/settings" icon={Settings} label="Settings" />
-                        <LinkItem href="/dashboard/system/logs" icon={History} label="Activity Logs" />
+                        <LinkItem href="/dashboard/system/logs" icon={History} label="Audit Activity Logs" />
                     </>
                 )}
             </nav>
 
-            <div className="border-t p-4">
+            {/* Footer / Sign Out */}
+            <div className="border-t border-slate-200/80 p-3 bg-slate-50/50 flex-shrink-0">
                 <button
                     onClick={logout}
-                    className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200/60 transition-all"
                 >
-                    <LogOut size={20} />
-                    Sign Out
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
                 </button>
-                 <div className="mt-6 text-center opacity-75">
-                      <p className="text-[10px] text-gray-500 font-medium tracking-wide">
-                          Powered by: <span className="font-bold text-primary">MaSha Tech Innovations</span>
-                      </p>
-                 </div>
+                <div className="mt-2.5 text-center">
+                    <p className="text-[9px] text-slate-400 font-medium tracking-wide">
+                        Powered by <span className="font-bold text-[#006533]">MaSha Tech Innovations</span>
+                    </p>
+                </div>
             </div>
-        </aside >
+        </aside>
     );
 }

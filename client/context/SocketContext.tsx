@@ -175,7 +175,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     instance.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
-      setIncomingVideoCall((prev) => (prev?.roomName === data?.roomName ? null : prev));
+      setIncomingVideoCall((prev: IncomingVideoCallData | null) => (prev?.roomName === data?.roomName ? null : prev));
     });
 
     // Real-time VoIP Call Signaling (Voice Intercom)

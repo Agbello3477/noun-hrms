@@ -94,4 +94,12 @@ export default defineConfig({
       },
     },
   ],
+
+  /* Run local dev/prod server before starting the tests */
+  webServer: {
+    command: 'npm run start --workspace=client -- -p 3001',
+    url: 'http://localhost:3001',
+    reuseExistingServer: true,
+    timeout: 120 * 1000,
+  },
 });

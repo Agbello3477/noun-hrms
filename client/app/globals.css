@@ -38,3 +38,31 @@ html, body {
 .animate-scaleUp {
   animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
+
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Enterprise Card & Table Utilities */
+.enterprise-card {
+  background-color: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+}
+
+.enterprise-card:hover {
+  border-color: rgba(203, 213, 225, 0.9);
+}

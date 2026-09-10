@@ -297,7 +297,7 @@ export default function DashboardHome() {
         return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     };
 
-    const activeLeave = leaves.find(l => {
+    const activeLeave = leaves.find((l: any) => {
         if (l.status !== 'APPROVED') return false;
         const start = parseUTCDateToLocal(l.startDate);
         const end = parseUTCDateToLocal(l.endDate);
@@ -313,7 +313,7 @@ export default function DashboardHome() {
 
     // Resumption Date
     let resumptionDateStr = 'N/A';
-    const targetLeave = activeLeave || leaves.find(l => l.status === 'APPROVED');
+    const targetLeave = activeLeave || leaves.find((l: any) => l.status === 'APPROVED');
     if (targetLeave) {
         const resDate = new Date(targetLeave.endDate);
         resDate.setDate(resDate.getDate() + 1);
@@ -326,12 +326,12 @@ export default function DashboardHome() {
 
     // Remaining Annual Leave Days (30 - used annual leave days this year)
     const currentYear = today.getFullYear();
-    const approvedAnnualThisYear = leaves.filter(l => {
+    const approvedAnnualThisYear = leaves.filter((l: any) => {
         return l.status === 'APPROVED' && 
                l.type === 'ANNUAL' && 
                new Date(l.startDate).getFullYear() === currentYear;
     });
-    const usedDays = approvedAnnualThisYear.reduce((sum, l) => sum + (l.durationDays || 0), 0);
+    const usedDays = approvedAnnualThisYear.reduce((sum: number, l: any) => sum + (l.durationDays || 0), 0);
     const remainingDays = Math.max(0, 30 - usedDays);
 
     // VC Executive Portal Dashboard View
@@ -359,57 +359,57 @@ export default function DashboardHome() {
                 </div>
 
                 {/* Overall University Statistics */}
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Workforce</h3>
-                                <p className="mt-2 text-3xl font-black text-gray-900">
-                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : analytics.totalWorkforce}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Workforce</h3>
+                                <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-slate-400 inline" /> : analytics.totalWorkforce}
                                 </p>
                             </div>
-                            <span className="p-3 bg-blue-50 text-blue-600 rounded-xl"><FileText size={20} /></span>
+                            <span className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100/80"><FileText size={18} /></span>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Active registered profiles</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Active registered profiles</p>
                     </div>
 
-                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">On Active Leave</h3>
-                                <p className="mt-2 text-3xl font-black text-gray-900">
-                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : activeLeavesCount}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">On Active Leave</h3>
+                                <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-slate-400 inline" /> : activeLeavesCount}
                                 </p>
                             </div>
-                            <span className="p-3 bg-green-50 text-green-600 rounded-xl"><Calendar size={20} /></span>
+                            <span className="p-2.5 bg-emerald-50 text-[#006533] rounded-xl border border-emerald-100/80"><Calendar size={18} /></span>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Away from duty with approval</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Away from duty with approval</p>
                     </div>
 
-                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Active Duty</h3>
-                                <p className="mt-2 text-3xl font-black text-gray-900">
-                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : activeDutyCount}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Duty</h3>
+                                <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-slate-400 inline" /> : activeDutyCount}
                                 </p>
                             </div>
-                            <span className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><MapPin size={20} /></span>
+                            <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100/80"><MapPin size={18} /></span>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Currently available at placement</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Currently available at placement</p>
                     </div>
 
-                    <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-150">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Action</h3>
-                                <p className="mt-2 text-3xl font-black text-red-600">
-                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-gray-400 inline" /> : pendingActionsCount}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Action</h3>
+                                <p className="mt-2 text-3xl font-black text-rose-600 tracking-tight">
+                                    {loadingActivities ? <Loader2 className="animate-spin h-6 w-6 text-slate-400 inline" /> : pendingActionsCount}
                                 </p>
                             </div>
-                            <span className="p-3 bg-red-50 text-red-600 rounded-xl"><AlertTriangle size={20} /></span>
+                            <span className="p-2.5 bg-rose-50 text-rose-700 rounded-xl border border-rose-100/80"><AlertTriangle size={18} /></span>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-4 font-medium">Transfers & disciplinary audits</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Transfers &amp; disciplinary audits</p>
                     </div>
                 </div>
 
@@ -599,7 +599,7 @@ export default function DashboardHome() {
                             </div>
                         ) : (
                             <div className="relative pl-6 border-l-2 border-gray-150 space-y-6 ml-3 py-1">
-                                {activities.map((act) => {
+                                {activities.map((act: any) => {
                                     let IconComponent = FileText;
                                     let iconBg = 'bg-blue-50 text-blue-700 border-blue-150';
                                     if (act.type === 'TRANSFER') {
@@ -668,70 +668,70 @@ export default function DashboardHome() {
                 </div>
 
                 {/* Manager Stats Grid */}
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Staff</h3>
-                                <p className="mt-2 text-2xl font-black text-gray-905">
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.totalStaff}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Staff</h3>
+                                <p className="mt-2 text-2xl font-black text-slate-900 tracking-tight">
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.totalStaff}
                                 </p>
                             </div>
-                            <span className="p-2 bg-blue-50 text-blue-605 rounded-lg"><FileText size={18} /></span>
+                            <span className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100/80"><FileText size={18} /></span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Active unit personnel</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Active unit personnel</p>
                     </div>
 
-                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">On Active Leave</h3>
-                                <p className="mt-2 text-2xl font-black text-gray-905">
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.activeLeaves}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">On Active Leave</h3>
+                                <p className="mt-2 text-2xl font-black text-slate-900 tracking-tight">
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.activeLeaves}
                                 </p>
                             </div>
-                            <span className="p-2 bg-green-50 text-green-605 rounded-lg"><MapPin size={18} /></span>
+                            <span className="p-2.5 bg-emerald-50 text-[#006533] rounded-xl border border-emerald-100/80"><MapPin size={18} /></span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Currently away from duty</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Currently away from duty</p>
                     </div>
 
-                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Leaves</h3>
-                                <p className={`mt-2 text-2xl font-black ${managerStats.pendingLeaves > 0 ? 'text-orange-600' : 'text-gray-905'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.pendingLeaves}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Leaves</h3>
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.pendingLeaves > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.pendingLeaves}
                                 </p>
                             </div>
-                            <span className={`p-2 rounded-lg ${managerStats.pendingLeaves > 0 ? 'bg-orange-50 text-orange-605' : 'bg-gray-50 text-gray-400'}`}><Clock size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${managerStats.pendingLeaves > 0 ? 'bg-amber-50 text-amber-700 border-amber-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><Clock size={18} /></span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Awaiting review</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Awaiting review</p>
                     </div>
 
-                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Appraisals</h3>
-                                <p className={`mt-2 text-2xl font-black ${managerStats.pendingAper > 0 ? 'text-indigo-600' : 'text-gray-905'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.pendingAper}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Appraisals</h3>
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.pendingAper > 0 ? 'text-indigo-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.pendingAper}
                                 </p>
                             </div>
-                            <span className={`p-2 rounded-lg ${managerStats.pendingAper > 0 ? 'bg-indigo-50 text-indigo-605' : 'bg-gray-50 text-gray-400'}`}><ClipboardCheck size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${managerStats.pendingAper > 0 ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><ClipboardCheck size={18} /></span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Pending APER review</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Pending APER review</p>
                     </div>
 
-                    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-150 relative overflow-hidden group">
+                    <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Open Queries</h3>
-                                <p className={`mt-2 text-2xl font-black ${managerStats.activeQueries > 0 ? 'text-red-650' : 'text-gray-905'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-gray-400" /> : managerStats.activeQueries}
+                                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Open Queries</h3>
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.activeQueries > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.activeQueries}
                                 </p>
                             </div>
-                            <span className={`p-2 rounded-lg ${managerStats.activeQueries > 0 ? 'bg-red-50 text-red-605' : 'bg-gray-50 text-gray-400'}`}><AlertTriangle size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${managerStats.activeQueries > 0 ? 'bg-rose-50 text-rose-700 border-rose-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><AlertTriangle size={18} /></span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-3 font-medium">Disciplinary actions open</p>
+                        <p className="text-[11px] text-slate-500 mt-3 font-medium">Disciplinary actions open</p>
                     </div>
                 </div>
 
@@ -788,7 +788,7 @@ export default function DashboardHome() {
                                     No notifications found.
                                 </div>
                             ) : (
-                                notifications.slice(0, 5).map((note) => (
+                                notifications.slice(0, 5).map((note: any) => (
                                     <div
                                         key={note.id}
                                         className={`relative rounded-lg border border-gray-100 p-4 hover:bg-gray-50 transition-all ${
@@ -939,7 +939,7 @@ export default function DashboardHome() {
                                     No notifications found.
                                 </div>
                             ) : (
-                                notifications.slice(0, 5).map((note) => (
+                                notifications.slice(0, 5).map((note: any) => (
                                     <div
                                         key={note.id}
                                         className={`relative rounded-lg border border-gray-100 p-4 hover:bg-gray-50 transition-all ${
@@ -1027,46 +1027,71 @@ export default function DashboardHome() {
     const activeDutyCount = Math.max(0, analytics.totalWorkforce - activeLeavesCount);
 
     return (
-        <div>
-            <h1 className="mb-6 text-3xl font-bold text-gray-800">
-                HQ Registry Overview
-            </h1>
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+                    HQ Registry Overview
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5">Central workforce analytics, leave tracking, and administrative pipelines.</p>
+            </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {/* Stat Card 1 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-500">Total Staff</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : analytics.totalWorkforce}
+                <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Staff</h3>
+                            <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                {loadingActivities ? <Loader2 className="animate-spin text-slate-400 inline h-6 w-6" /> : analytics.totalWorkforce}
+                            </p>
+                        </div>
+                        <span className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100/80"><FileText size={18} /></span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 font-semibold mt-3 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Registered system profiles
                     </p>
-                    <span className="text-sm text-green-600 font-medium">Registered system profiles</span>
                 </div>
 
                 {/* Stat Card 2 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-500">Active Duty</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : activeDutyCount}
-                    </p>
-                    <span className="text-sm text-gray-500">Currently available</span>
+                <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Duty</h3>
+                            <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                {loadingActivities ? <Loader2 className="animate-spin text-slate-400 inline h-6 w-6" /> : activeDutyCount}
+                            </p>
+                        </div>
+                        <span className="p-2.5 bg-emerald-50 text-[#006533] rounded-xl border border-emerald-100/80"><MapPin size={18} /></span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-3">Currently available on duty</p>
                 </div>
 
                 {/* Stat Card 3 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-500">Staff on Leave</h3>
-                    <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : activeLeavesCount}
-                    </p>
-                    <span className="text-sm text-blue-600 font-medium">Approved requests</span>
+                <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Staff on Leave</h3>
+                            <p className="mt-2 text-3xl font-black text-slate-900 tracking-tight">
+                                {loadingActivities ? <Loader2 className="animate-spin text-slate-400 inline h-6 w-6" /> : activeLeavesCount}
+                            </p>
+                        </div>
+                        <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100/80"><Calendar size={18} /></span>
+                    </div>
+                    <p className="text-[11px] text-blue-600 font-medium mt-3">Approved leave instances</p>
                 </div>
 
                 {/* Stat Card 4 */}
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-500">Pending Actions</h3>
-                    <p className="mt-2 text-3xl font-bold text-red-600">
-                        {loadingActivities ? <Loader2 className="animate-spin text-gray-400 inline h-6 w-6" /> : pendingActionsCount}
-                    </p>
-                    <span className="text-sm text-red-600 font-medium">Transfers & Queries</span>
+                <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 hover:border-slate-300 transition-all">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Actions</h3>
+                            <p className="mt-2 text-3xl font-black text-rose-600 tracking-tight">
+                                {loadingActivities ? <Loader2 className="animate-spin text-slate-400 inline h-6 w-6" /> : pendingActionsCount}
+                            </p>
+                        </div>
+                        <span className="p-2.5 bg-rose-50 text-rose-700 rounded-xl border border-rose-100/80"><AlertTriangle size={18} /></span>
+                    </div>
+                    <p className="text-[11px] text-rose-600 font-semibold mt-3">Transfers &amp; Disciplinary Queries</p>
                 </div>
             </div>
 
@@ -1315,7 +1340,7 @@ export default function DashboardHome() {
                         </div>
                     ) : (
                         <div className="relative pl-6 border-l-2 border-gray-150 space-y-6 ml-3 py-1">
-                            {activities.map((act) => {
+                            {activities.map((act: any) => {
                                 // Determine icon based on activity type
                                 let IconComponent = FileText;
                                 let iconBg = 'bg-blue-50 text-blue-700 border-blue-150';
