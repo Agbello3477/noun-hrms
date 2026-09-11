@@ -8,7 +8,7 @@ export interface IceServerConfig {
 
 export const rtcConfiguration: RTCConfiguration = {
   iceServers: [
-    // High-availability public Google STUN servers
+    // High-availability public STUN servers for reliable NAT traversal
     {
       urls: [
         'stun:stun.l.google.com:19302',
@@ -16,17 +16,10 @@ export const rtcConfiguration: RTCConfiguration = {
         'stun:stun2.l.google.com:19302',
         'stun:stun3.l.google.com:19302',
         'stun:stun4.l.google.com:19302',
+        'stun:stun.cloudflare.com:3478',
+        'stun:stun.services.mozilla.com:3478'
       ],
-    },
-    // Dedicated Coturn TURN server fallback for symmetric NAT traversal
-    {
-      urls: [
-        'turn:turn.yourdomain.com:3478?transport=udp',
-        'turn:turn.yourdomain.com:3478?transport=tcp'
-      ],
-      username: 'turnuser',
-      credential: 'StrongSecurePassword123!',
-    },
+    }
   ],
   iceCandidatePoolSize: 10,
 };
@@ -51,16 +44,15 @@ export const fetchDynamicIceServers = async (authToken?: string): Promise<IceSer
 
     const { data } = await api.get('/api/v1/webrtc/ice-servers', { headers });
     if (data?.iceServers && Array.isArray(data.iceServers)) {
-      // Ensure public STUN is always included alongside dynamic TURN credentials
+      // Filter out any placeholder / invalid domains
+      const validFetched = data.iceServers.filter((s: IceServerConfig) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        return urls.every((u) => !u.includes('yourdomain.com'));
+      });
+
       const mergedServers: IceServerConfig[] = [
-        {
-          urls: [
-            'stun:stun.l.google.com:19302',
-            'stun:stun1.l.google.com:19302',
-            'stun:stun2.l.google.com:19302',
-          ]
-        },
-        ...data.iceServers
+        ...DEFAULT_ICE_SERVERS,
+        ...validFetched
       ];
 
       cachedIceServers = {
@@ -122,30 +114,36 @@ export class VoipPeerManager {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 48000,
-          channelCount: 1
+          autoGainControl: true
         },
         video: false
       });
 
-      // Ensure every track is actively enabled
+      // Ensure every audio track is active and unmuted
       this.localStream.getAudioTracks().forEach((track) => {
         track.enabled = true;
+        console.log('[WebRTC] Local microphone track acquired:', track.id, 'label:', track.label);
       });
 
       return this.localStream;
     } catch (error: any) {
       console.error('[WebRTC] Microphone access error:', error);
-      throw new Error('Microphone access denied or device unavailable.');
+      throw new Error('Microphone access denied or audio device unavailable.');
     }
   }
 
   public async initializePeerConnection(): Promise<RTCPeerConnection> {
     if (this.peerConnection) return this.peerConnection;
 
+    const validIceServers = this.iceServers && this.iceServers.length > 0
+      ? this.iceServers.filter(s => {
+          const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+          return urls.every(u => !u.includes('yourdomain.com'));
+        })
+      : DEFAULT_ICE_SERVERS;
+
     const pc = new RTCPeerConnection({
-      iceServers: this.iceServers,
+      iceServers: validIceServers.length > 0 ? validIceServers : DEFAULT_ICE_SERVERS,
       iceCandidatePoolSize: 10
     });
     this.peerConnection = pc;
@@ -154,13 +152,16 @@ export class VoipPeerManager {
 
     // Attach local audio track to Peer Connection
     const localStream = await this.getAudioStream();
-    localStream.getTracks().forEach((track) => {
+    localStream.getAudioTracks().forEach((track) => {
       pc.addTrack(track, localStream);
     });
 
+    // Apply W3C standard Opus codec preferences across transceivers
+    this.applyCodecPreferences(pc);
+
     // Handle incoming remote audio tracks with live unmute listener
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
+      console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id, 'readyState:', event.track.readyState, 'enabled:', event.track.enabled);
       let stream: MediaStream;
       if (event.streams && event.streams[0]) {
         stream = event.streams[0];
@@ -175,7 +176,7 @@ export class VoipPeerManager {
 
       const dispatchRemoteStream = () => {
         if (this.onTrackReceived && stream) {
-          console.log('[WebRTC] Dispatching remote audio stream to caller/callee listeners');
+          console.log('[WebRTC] Dispatching remote audio stream to listeners');
           this.onTrackReceived(stream);
         }
       };
@@ -192,11 +193,12 @@ export class VoipPeerManager {
     // Handle ICE Candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidate) {
+        console.log('[WebRTC] Local ICE candidate gathered:', event.candidate.type, event.candidate.protocol, event.candidate.address || event.candidate.relatedAddress);
         this.onIceCandidate(event.candidate);
       }
     };
 
-    // Monitor ICE Connection State
+    // Monitor Connection States for diagnostics and auto-recovery
     pc.oniceconnectionstatechange = () => {
       console.log('[WebRTC] ICE Connection State changed to:', pc.iceConnectionState);
     };
@@ -205,19 +207,43 @@ export class VoipPeerManager {
       console.log('[WebRTC] Peer Connection State changed to:', pc.connectionState);
     };
 
+    pc.onsignalingstatechange = () => {
+      console.log('[WebRTC] Signaling State changed to:', pc.signalingState);
+    };
+
     return pc;
+  }
+
+  private applyCodecPreferences(pc: RTCPeerConnection): void {
+    try {
+      if (typeof RTCRtpSender !== 'undefined' && typeof RTCRtpSender.getCapabilities === 'function') {
+        const capabilities = RTCRtpSender.getCapabilities('audio');
+        if (capabilities && capabilities.codecs) {
+          const opusCodecs = capabilities.codecs.filter(c => c.mimeType.toLowerCase() === 'audio/opus');
+          const otherCodecs = capabilities.codecs.filter(c => c.mimeType.toLowerCase() !== 'audio/opus');
+          const preferredCodecs = [...opusCodecs, ...otherCodecs];
+
+          pc.getTransceivers().forEach((transceiver) => {
+            if (transceiver.receiver.track.kind === 'audio' && typeof transceiver.setCodecPreferences === 'function') {
+              try {
+                transceiver.setCodecPreferences(preferredCodecs);
+                console.log('[WebRTC] Successfully set Opus codec preference via standard setCodecPreferences');
+              } catch (err) {
+                console.warn('[WebRTC] setCodecPreferences non-critical warning:', err);
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[WebRTC] Codec preference discovery not available:', e);
+    }
   }
 
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     const pc = await this.initializePeerConnection();
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: false
-    });
-
-    // Line-break safe Opus Codec Priority in SDP
-    const modifiedSdp = this.preferOpusCodec(offer.sdp || '');
-    await pc.setLocalDescription({ type: offer.type, sdp: modifiedSdp });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
     return pc.localDescription!;
   }
 
@@ -226,12 +252,8 @@ export class VoipPeerManager {
     await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
     await this.flushPendingCandidates();
 
-    const answer = await pc.createAnswer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: false
-    });
-    const modifiedSdp = this.preferOpusCodec(answer.sdp || '');
-    await pc.setLocalDescription({ type: answer.type, sdp: modifiedSdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
     return pc.localDescription!;
   }
 
@@ -270,33 +292,12 @@ export class VoipPeerManager {
     }
   }
 
-  // Ensure Opus audio codec is prioritized safely with line-ending normalization
-  private preferOpusCodec(sdp: string): string {
-    if (!sdp) return sdp;
-    const lines = sdp.split(/\r\n|\r|\n/);
-    const mLineIndex = lines.findIndex((line) => line.startsWith('m=audio'));
-    if (mLineIndex === -1) return lines.join('\r\n');
-
-    const opusPayloadType = lines.find((line) => line.includes('a=rtpmap') && line.toLowerCase().includes('opus'));
-    if (!opusPayloadType) return lines.join('\r\n');
-
-    const match = opusPayloadType.match(/a=rtpmap:(\d+)\s+opus/i);
-    if (!match) return lines.join('\r\n');
-
-    const opusPt = match[1];
-    const mLineElements = lines[mLineIndex].split(' ');
-    const header = mLineElements.slice(0, 3);
-    const payloads = mLineElements.slice(3).filter((pt) => pt !== opusPt);
-    lines[mLineIndex] = [...header, opusPt, ...payloads].join(' ');
-
-    return lines.join('\r\n');
-  }
-
   public setMicrophoneMuted(muted: boolean): void {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach((track) => {
         track.enabled = !muted;
       });
+      console.log(`[WebRTC] Microphone ${muted ? 'MUTED' : 'UNMUTED'}`);
     }
   }
 
@@ -309,6 +310,7 @@ export class VoipPeerManager {
       this.peerConnection.ontrack = null;
       this.peerConnection.oniceconnectionstatechange = null;
       this.peerConnection.onconnectionstatechange = null;
+      this.peerConnection.onsignalingstatechange = null;
       this.peerConnection.close();
       this.peerConnection = null;
     }
@@ -318,3 +320,4 @@ export class VoipPeerManager {
     this.remoteStream = null;
   }
 }
+

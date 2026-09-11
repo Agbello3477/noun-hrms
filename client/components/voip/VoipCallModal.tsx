@@ -149,8 +149,9 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Adjust volume on loudspeaker mode change
   useEffect(() => {
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+    const targetAudio = (document.getElementById('voipRemoteAudio') || document.getElementById('remoteAudio') || remoteAudioRef.current) as HTMLAudioElement;
+    if (targetAudio) {
+      targetAudio.volume = isSpeakerOn ? 1.0 : 0.4;
     }
   }, [isSpeakerOn]);
 
@@ -218,35 +219,25 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   // Helper to securely attach incoming remote audio stream
   const attachRemoteStream = useCallback((stream: MediaStream) => {
-    console.log('[VoIP UI] Attaching remote audio stream to audio elements');
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = stream;
-      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
-      remoteAudioRef.current.play().catch((e) => console.log('[Remote Audio Play]', e));
-    }
-    const globalAudio = document.getElementById('remoteAudio') as HTMLAudioElement;
-    if (globalAudio && globalAudio !== remoteAudioRef.current) {
-      globalAudio.srcObject = stream;
-      globalAudio.volume = isSpeakerOn ? 1.0 : 0.4;
-      globalAudio.play().catch((e) => console.log('[Global Audio Play]', e));
-    }
-
-    // Direct Web Audio API hardware routing fallback
-    try {
-      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtxClass) {
-        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-          audioCtxRef.current = new AudioCtxClass();
-        }
-        if (audioCtxRef.current.state === 'suspended') {
-          audioCtxRef.current.resume().catch((err) => console.log('[VoIP AudioCtx Resume]', err));
-        }
-        const source = audioCtxRef.current.createMediaStreamSource(stream);
-        source.connect(audioCtxRef.current.destination);
-        console.log('[VoIP UI] Web Audio API hardware routing connected directly to output destination');
+    console.log('[VoIP UI] Attaching remote audio stream to primary audio output');
+    const targetAudio = (document.getElementById('voipRemoteAudio') || document.getElementById('remoteAudio') || remoteAudioRef.current) as HTMLAudioElement;
+    if (targetAudio) {
+      targetAudio.srcObject = stream;
+      targetAudio.volume = isSpeakerOn ? 1.0 : 0.4;
+      targetAudio.muted = false;
+      const playPromise = targetAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[VoIP UI] Autoplay restriction encountered:', err);
+          const resumeAudio = () => {
+            targetAudio.play().catch(console.error);
+            document.removeEventListener('click', resumeAudio);
+            document.removeEventListener('keydown', resumeAudio);
+          };
+          document.addEventListener('click', resumeAudio, { once: true });
+          document.addEventListener('keydown', resumeAudio, { once: true });
+        });
       }
-    } catch (audioCtxErr) {
-      console.log('[VoIP UI] AudioContext pipeline fallback:', audioCtxErr);
     }
   }, [isSpeakerOn]);
 
@@ -392,12 +383,9 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
       peerManagerRef.current.cleanup();
       peerManagerRef.current = null;
     }
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
-    const globalAudio = document.getElementById('remoteAudio') as HTMLAudioElement;
-    if (globalAudio) {
-      globalAudio.srcObject = null;
+    const targetAudio = (document.getElementById('voipRemoteAudio') || document.getElementById('remoteAudio') || remoteAudioRef.current) as HTMLAudioElement;
+    if (targetAudio) {
+      targetAudio.srcObject = null;
     }
     if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
       audioCtxRef.current.close().catch((e) => console.log('[VoIP AudioCtx Close]', e));
@@ -506,17 +494,16 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
     try {
       const { data: iceConfig } = await api.get('/api/voip/ice-servers');
+      const targetExtensionToReply = callerExt || peerInfo?.extension;
 
       const peer = new VoipPeerManager(
         iceConfig.iceServers,
         (candidate) => {
-          if (callerExt) {
-            socket.emit('ICE_CANDIDATE', {
-              targetExtension: callerExt,
-              candidate,
-              callId
-            });
-          }
+          socket.emit('ICE_CANDIDATE', {
+            targetExtension: targetExtensionToReply,
+            candidate,
+            callId
+          });
         },
         (remoteStream) => {
           attachRemoteStream(remoteStream);
@@ -794,8 +781,6 @@ export default function VoipCallModal({ isOpen, onClose, onOpen, initialExtensio
 
   return (
     <>
-      {/* Offscreen Audio Elements for uninterrupted hardware playback */}
-      <audio id="remoteAudioModal" ref={remoteAudioRef} autoPlay playsInline className="fixed -top-96 -left-96 w-1 h-1 opacity-0 pointer-events-none" />
       <audio
         ref={voicemailAudioPlayerRef}
         playsInline

@@ -109,7 +109,7 @@ test.describe('Suite 3: WebRTC Audio/Video Call & VoIP Signaling', () => {
 
     // Attach mock audio stream to <audio id="remoteAudio"> simulating successful WebRTC connection
     await receiverPage.evaluate(async () => {
-      const audioEl = document.getElementById('remoteAudio') as HTMLAudioElement;
+      const audioEl = (document.getElementById('remoteAudio') || document.getElementById('voipRemoteAudio')) as HTMLAudioElement;
       if (audioEl) {
         // Create an audio context with a synthetic MediaStreamAudioDestinationNode
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -125,7 +125,7 @@ test.describe('Suite 3: WebRTC Audio/Video Call & VoIP Signaling', () => {
 
     // Assert that the <audio id="remoteAudio"> element has an active MediaStream with enabled audio tracks
     const audioTrackState = await receiverPage.evaluate(() => {
-      const audioEl = document.getElementById('remoteAudio') as HTMLAudioElement;
+      const audioEl = (document.getElementById('remoteAudio') || document.getElementById('voipRemoteAudio')) as HTMLAudioElement;
       if (!audioEl || !audioEl.srcObject) return null;
       
       const stream = audioEl.srcObject as MediaStream;
@@ -149,7 +149,7 @@ test.describe('Suite 3: WebRTC Audio/Video Call & VoIP Signaling', () => {
 
     // 8. Hang Up / Teardown Call: Verify Clean Resource Teardown
     await receiverPage.evaluate(() => {
-      const audioEl = document.getElementById('remoteAudio') as HTMLAudioElement;
+      const audioEl = (document.getElementById('remoteAudio') || document.getElementById('voipRemoteAudio')) as HTMLAudioElement;
       if (audioEl && audioEl.srcObject) {
         const stream = audioEl.srcObject as MediaStream;
         stream.getTracks().forEach((t) => t.stop());

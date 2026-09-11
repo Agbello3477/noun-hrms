@@ -91,7 +91,7 @@ export default function GlobalIncomingCallModal() {
 
     const handleAccept = () => {
         // Fulfill browser autoplay policy immediately on user click
-        const remoteAudio = document.getElementById('remoteAudio') as HTMLAudioElement;
+        const remoteAudio = (document.getElementById('voipRemoteAudio') || document.getElementById('remoteAudio')) as HTMLAudioElement;
         if (remoteAudio) {
             remoteAudio.play().catch((err) => console.log('[Autoplay Trigger]', err));
         }

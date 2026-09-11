@@ -195,10 +195,15 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         session.status = 'ACCEPTED';
         userActiveCall.set(user.id, data.callId);
 
-        io.to(`voip_user_${session.callerUserId}`).emit('CALL_ACCEPTED', {
+        const payload = {
           callId: data.callId,
           sdpAnswer: data.sdpAnswer
-        });
+        };
+
+        io.to(`voip_user_${session.callerUserId}`).emit('CALL_ACCEPTED', payload);
+        if (session.callerExtension) {
+          io.to(`voip_ext_${session.callerExtension}`).emit('CALL_ACCEPTED', payload);
+        }
       }
     });
 
@@ -209,10 +214,15 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         if (session.timer) clearTimeout(session.timer);
         session.status = 'ENDED';
 
-        io.to(`voip_user_${session.callerUserId}`).emit('CALL_REJECTED', {
+        const payload = {
           callId: data.callId,
           reason: data.reason || 'Call was declined by recipient'
-        });
+        };
+
+        io.to(`voip_user_${session.callerUserId}`).emit('CALL_REJECTED', payload);
+        if (session.callerExtension) {
+          io.to(`voip_ext_${session.callerExtension}`).emit('CALL_REJECTED', payload);
+        }
 
         activeCalls.delete(data.callId);
         userActiveCall.delete(session.callerUserId);
@@ -227,10 +237,14 @@ export const setupVoipSocket = (io: SocketIOServer) => {
         if (session.timer) clearTimeout(session.timer);
         session.status = 'ENDED';
 
-        io.to(`voip_user_${session.callerUserId}`).emit('CALL_ENDED', { callId: data.callId });
-        io.to(`voip_ext_${session.targetExtension}`).emit('CALL_ENDED', { callId: data.callId });
+        const payload = { callId: data.callId };
+        io.to(`voip_user_${session.callerUserId}`).emit('CALL_ENDED', payload);
+        io.to(`voip_ext_${session.targetExtension}`).emit('CALL_ENDED', payload);
+        if (session.callerExtension) {
+          io.to(`voip_ext_${session.callerExtension}`).emit('CALL_ENDED', payload);
+        }
         if (session.targetUserId) {
-          io.to(`voip_user_${session.targetUserId}`).emit('CALL_ENDED', { callId: data.callId });
+          io.to(`voip_user_${session.targetUserId}`).emit('CALL_ENDED', payload);
         }
 
         activeCalls.delete(data.callId);
@@ -240,44 +254,35 @@ export const setupVoipSocket = (io: SocketIOServer) => {
     });
 
     // Relay WebRTC ICE Candidate
-    socket.on('ICE_CANDIDATE', (data: { targetExtension?: string; candidate: any; callId: string }) => {
+    socket.on('ICE_CANDIDATE', (data: { targetExtension?: string; targetUserId?: string; candidate: any; callId: string }) => {
       const session = activeCalls.get(data.callId);
+      const candidatePayload = {
+        callerUserId: user.id,
+        candidate: data.candidate,
+        callId: data.callId
+      };
+
       if (session) {
         if (user.id === session.callerUserId) {
           // Caller -> Callee: emit to both extension room and user room
-          io.to(`voip_ext_${session.targetExtension}`).emit('ICE_CANDIDATE', {
-            callerUserId: user.id,
-            candidate: data.candidate,
-            callId: data.callId
-          });
+          io.to(`voip_ext_${session.targetExtension}`).emit('ICE_CANDIDATE', candidatePayload);
           if (session.targetUserId) {
-            io.to(`voip_user_${session.targetUserId}`).emit('ICE_CANDIDATE', {
-              callerUserId: user.id,
-              candidate: data.candidate,
-              callId: data.callId
-            });
+            io.to(`voip_user_${session.targetUserId}`).emit('ICE_CANDIDATE', candidatePayload);
           }
         } else {
           // Callee -> Caller: emit to caller's user room and caller's extension room
-          io.to(`voip_user_${session.callerUserId}`).emit('ICE_CANDIDATE', {
-            callerUserId: user.id,
-            candidate: data.candidate,
-            callId: data.callId
-          });
+          io.to(`voip_user_${session.callerUserId}`).emit('ICE_CANDIDATE', candidatePayload);
           if (session.callerExtension) {
-            io.to(`voip_ext_${session.callerExtension}`).emit('ICE_CANDIDATE', {
-              callerUserId: user.id,
-              candidate: data.candidate,
-              callId: data.callId
-            });
+            io.to(`voip_ext_${session.callerExtension}`).emit('ICE_CANDIDATE', candidatePayload);
           }
         }
-      } else if (data.targetExtension) {
-        io.to(`voip_ext_${data.targetExtension}`).emit('ICE_CANDIDATE', {
-          callerUserId: user.id,
-          candidate: data.candidate,
-          callId: data.callId
-        });
+      } else {
+        if (data.targetExtension) {
+          io.to(`voip_ext_${data.targetExtension}`).emit('ICE_CANDIDATE', candidatePayload);
+        }
+        if (data.targetUserId) {
+          io.to(`voip_user_${data.targetUserId}`).emit('ICE_CANDIDATE', candidatePayload);
+        }
       }
     });
 
