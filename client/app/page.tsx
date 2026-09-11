@@ -147,10 +147,15 @@ export default function Home() {
           {/* Right Controls: Location Status Pill & Auth Action */}
           <div className="flex items-center gap-3">
             {/* Real-time Dynamic Network Location Status Indicator Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 border border-slate-200/80 text-xs font-medium text-slate-600 transition-all">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <button
+              type="button"
+              onClick={() => userLocation.requestPreciseLocation()}
+              title="Click to refine location via device GPS"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 hover:bg-slate-200/80 active:scale-95 border border-slate-200/80 text-xs font-medium text-slate-600 transition-all cursor-pointer select-none"
+            >
+              <span className={`inline-block w-2 h-2 rounded-full ${userLocation.isLoading ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
               <span className="font-semibold text-slate-800">{userLocation.statusText}</span>
-            </div>
+            </button>
 
             {user ? (
               <Link
@@ -196,10 +201,15 @@ export default function Home() {
         {mobileMenuOpen && (
           <div className="lg:hidden border-b border-slate-200 bg-white/98 backdrop-blur-xl px-4 pt-3 pb-5 space-y-2 shadow-xl animate-fadeIn">
             {/* Mobile Dynamic Network Location Status Indicator Pill */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 mb-2 rounded-full bg-slate-100/80 border border-slate-200/80 text-xs font-medium text-slate-600 w-max">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <button
+              type="button"
+              onClick={() => userLocation.requestPreciseLocation()}
+              title="Click to refine location via device GPS"
+              className="flex items-center gap-1.5 px-3 py-1.5 mb-2 rounded-full bg-slate-100/80 hover:bg-slate-200/80 active:scale-95 border border-slate-200/80 text-xs font-medium text-slate-600 w-max cursor-pointer select-none"
+            >
+              <span className={`inline-block w-2 h-2 rounded-full ${userLocation.isLoading ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
               <span className="font-semibold text-slate-800">{userLocation.statusText}</span>
-            </div>
+            </button>
             <button 
               onClick={() => scrollToSection('payroll')} 
               className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100"
