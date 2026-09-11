@@ -9,11 +9,13 @@ import {
   X, Radio, FileText, AlertCircle, ExternalLink, UserCheck, HeartPulse
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useUserLocation } from '../hooks/useUserLocation';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 
 export default function Home() {
   const { user } = useAuth();
+  const userLocation = useUserLocation();
   const [activeView, setActiveView] = useState<'hero' | 'login' | 'register'>(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
@@ -25,7 +27,6 @@ export default function Home() {
   });
   const [selectedRoleHint, setSelectedRoleHint] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [latency, setLatency] = useState<number>(18);
 
   useEffect(() => {
     // Synchronize URL parameters if changed dynamically
@@ -41,13 +42,6 @@ export default function Home() {
     }
   }, []);
 
-  // Subtle natural network jitter simulation for edge latency pill
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLatency(prev => Math.min(24, Math.max(14, prev + (Math.random() > 0.5 ? 1 : -1))));
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleRoleGatewayClick = (roleTitle: string) => {
     setSelectedRoleHint(roleTitle);
@@ -150,16 +144,12 @@ export default function Home() {
             </nav>
           )}
 
-          {/* Right Controls: Edge Latency Pill & Auth Action */}
+          {/* Right Controls: Location Status Pill & Auth Action */}
           <div className="flex items-center gap-3">
-            {/* Real-time Network Latency Indicator Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200/80 text-[11px] font-medium text-slate-600">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="font-semibold text-slate-800">Lagos Edge Online</span>
-              <span className="text-slate-400 font-mono">· {latency}ms</span>
+            {/* Real-time Dynamic Network Location Status Indicator Pill */}
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 border border-slate-200/80 text-xs font-medium text-slate-600 transition-all">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-semibold text-slate-800">{userLocation.statusText}</span>
             </div>
 
             {user ? (
@@ -205,6 +195,11 @@ export default function Home() {
         {/* Mobile Dropdown Drawer */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-b border-slate-200 bg-white/98 backdrop-blur-xl px-4 pt-3 pb-5 space-y-2 shadow-xl animate-fadeIn">
+            {/* Mobile Dynamic Network Location Status Indicator Pill */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 mb-2 rounded-full bg-slate-100/80 border border-slate-200/80 text-xs font-medium text-slate-600 w-max">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-semibold text-slate-800">{userLocation.statusText}</span>
+            </div>
             <button 
               onClick={() => scrollToSection('payroll')} 
               className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100"
