@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface UserLocationState {
   state: string;
@@ -9,8 +9,9 @@ export interface UserLocationState {
   statusText: string;
   isLoading: boolean;
   isError: boolean;
-  source: 'gps' | 'ip' | 'fallback' | 'cached';
+  source: 'gps' | 'ip' | 'fallback';
   requestPreciseLocation: () => Promise<void>;
+  refreshLocation: () => Promise<void>;
 }
 
 interface StoredLocation {
@@ -18,18 +19,19 @@ interface StoredLocation {
   country: string;
   formatted: string;
   source: 'gps' | 'ip' | 'fallback';
-  timestamp?: number;
+  timestamp: number;
 }
 
-const STORAGE_KEY = 'user_geo_location';
+const STORAGE_KEY = 'user_geo_location_v2';
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes cache lifetime
 const DEFAULT_FALLBACK_STATE = 'Campus Network';
 const DEFAULT_FALLBACK_COUNTRY = 'Nigeria';
 
 function cleanStateName(rawState?: string, city?: string): string {
-  if (!rawState) return city ? city.trim() : '';
-  let s = rawState.trim();
-  if (/federal capital territory/i.test(s)) return 'Abuja';
-  s = s.replace(/\s+(State|state|Province|province|Region|region)$/i, '');
+  if (!rawState && !city) return '';
+  let s = (rawState || city || '').trim();
+  if (/federal capital territory|fct|abuja/i.test(s)) return 'Abuja';
+  s = s.replace(/\s+(State|state|Province|province|Region|region)$/i, '').trim();
   return s || (city ? city.trim() : '');
 }
 
@@ -51,7 +53,7 @@ async function reverseGeocode(
   lon: number,
   signal?: AbortSignal
 ): Promise<{ state: string; country: string } | null> {
-  // 1. Primary reverse geocoder: BigDataCloud client API (free, fast, keyless)
+  // 1. Primary: BigDataCloud client reverse geocode API (free, fast, keyless)
   try {
     const res = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
@@ -70,11 +72,9 @@ async function reverseGeocode(
         }
       }
     }
-  } catch (e) {
-    // Ignore and proceed to fallback
-  }
+  } catch (e) {}
 
-  // 2. Fallback reverse geocoder: OpenStreetMap Nominatim
+  // 2. Fallback: OpenStreetMap Nominatim
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
@@ -93,34 +93,13 @@ async function reverseGeocode(
         }
       }
     }
-  } catch (e) {
-    // Ignore
-  }
+  } catch (e) {}
 
   return null;
 }
 
-async function resolveIpLocation(signal?: AbortSignal): Promise<{ state: string; country: string } | null> {
-  // 1. Primary: ipapi.co
-  try {
-    const res = await fetch('https://ipapi.co/json/', {
-      signal,
-      headers: { Accept: 'application/json' }
-    }).catch(() => null);
-
-    if (res && res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data && !data.error && (data.region || data.city || data.country_name)) {
-        const state = cleanStateName(data.region || data.city || '', data.city);
-        const country = cleanCountryName(data.country_name || data.country || '');
-        if (state || country) {
-          return { state: state || 'Abuja', country: country || 'Nigeria' };
-        }
-      }
-    }
-  } catch (e) {}
-
-  // 2. Fallback: ipwho.is
+async function resolveLiveIpLocation(signal?: AbortSignal): Promise<{ state: string; country: string } | null> {
+  // 1. Primary: ipwho.is (fast, highly accurate regional mapping)
   try {
     const res = await fetch('https://ipwho.is/', {
       signal,
@@ -139,7 +118,45 @@ async function resolveIpLocation(signal?: AbortSignal): Promise<{ state: string;
     }
   } catch (e) {}
 
-  // 3. Fallback: api.country.is
+  // 2. Secondary: api.db-ip.com
+  try {
+    const res = await fetch('https://api.db-ip.com/v2/free/self', {
+      signal,
+      headers: { Accept: 'application/json' }
+    }).catch(() => null);
+
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && (data.stateProv || data.city || data.countryName)) {
+        const state = cleanStateName(data.stateProv || data.city || '', data.city);
+        const country = cleanCountryName(data.countryName || data.countryCode || '');
+        if (state || country) {
+          return { state: state || 'Abuja', country: country || 'Nigeria' };
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Fallback: ipapi.co
+  try {
+    const res = await fetch('https://ipapi.co/json/', {
+      signal,
+      headers: { Accept: 'application/json' }
+    }).catch(() => null);
+
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && !data.error && (data.region || data.city || data.country_name)) {
+        const state = cleanStateName(data.region || data.city || '', data.city);
+        const country = cleanCountryName(data.country_name || data.country || '');
+        if (state || country) {
+          return { state: state || 'Abuja', country: country || 'Nigeria' };
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 4. Fallback: api.country.is
   try {
     const res = await fetch('https://api.country.is/', {
       signal,
@@ -158,13 +175,14 @@ async function resolveIpLocation(signal?: AbortSignal): Promise<{ state: string;
 }
 
 export function useUserLocation(): UserLocationState {
+  // Synchronous optimistic initialization from sessionStorage if fresh (< 3 mins old)
   const [locationData, setLocationData] = useState<StoredLocation | null>(() => {
     if (typeof window !== 'undefined') {
       try {
         const cached = sessionStorage.getItem(STORAGE_KEY);
         if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && parsed.formatted) {
+          const parsed = JSON.parse(cached) as StoredLocation;
+          if (parsed && parsed.formatted && parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL_MS) {
             return parsed;
           }
         }
@@ -175,6 +193,7 @@ export function useUserLocation(): UserLocationState {
 
   const [isLoading, setIsLoading] = useState<boolean>(!locationData);
   const [isError, setIsError] = useState<boolean>(false);
+  const isGpsResolvedRef = useRef<boolean>(false);
 
   // Helper to persist and update location state
   const applyLocation = useCallback((state: string, country: string, source: 'gps' | 'ip' | 'fallback') => {
@@ -197,13 +216,22 @@ export function useUserLocation(): UserLocationState {
     setIsLoading(false);
   }, []);
 
-  // Precise device/GPS location request (can be triggered by user gesture or permission query)
+  // Force a live, fresh location detection using device GPS coordinates
   const requestPreciseLocation = useCallback(async (): Promise<void> => {
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
     setIsLoading(true);
+    isGpsResolvedRef.current = false;
+
+    if (!navigator.geolocation) {
+      // If GPS unsupported, re-run live IP lookup
+      const ipLoc = await resolveLiveIpLocation();
+      if (ipLoc) {
+        applyLocation(ipLoc.state, ipLoc.country, 'ip');
+      }
+      setIsLoading(false);
+      return;
+    }
 
     return new Promise<void>((resolve) => {
       navigator.geolocation.getCurrentPosition(
@@ -212,99 +240,91 @@ export function useUserLocation(): UserLocationState {
             const { latitude, longitude } = position.coords;
             const geo = await reverseGeocode(latitude, longitude);
             if (geo && geo.state) {
+              isGpsResolvedRef.current = true;
               applyLocation(geo.state, geo.country, 'gps');
               resolve();
               return;
             }
           } catch (e) {}
 
-          // Fallback if reverse geocoding failed
+          // If reverse geocoding failed, fallback to live IP
+          const ipLoc = await resolveLiveIpLocation();
+          if (ipLoc) {
+            applyLocation(ipLoc.state, ipLoc.country, 'ip');
+          }
           resolve();
         },
-        (error) => {
-          // Geolocation permission denied or timed out
+        async () => {
+          // If user denies GPS or it times out, fallback to live IP
+          const ipLoc = await resolveLiveIpLocation();
+          if (ipLoc) {
+            applyLocation(ipLoc.state, ipLoc.country, 'ip');
+          }
           resolve();
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
-          maximumAge: 60000
+          timeout: 6000,
+          maximumAge: 0 // Always force fresh hardware sensor position
         }
       );
     });
   }, [applyLocation]);
 
+  // Unconditional live revalidation on every page mount
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
 
-    const resolveInitialLocation = async () => {
-      // 1. If we already have GPS-verified location cached, don't re-fetch
-      if (locationData && locationData.source === 'gps') {
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Check if browser has Geolocation permission granted
+    const revalidateLocation = async () => {
+      // 1. Attempt non-blocking real-time device GPS lookup with maximumAge: 0
       if (typeof window !== 'undefined' && navigator.geolocation) {
-        // Attempt quick non-blocking GPS lookup
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             if (!isMounted) return;
             try {
               const geo = await reverseGeocode(pos.coords.latitude, pos.coords.longitude, controller.signal);
               if (geo && isMounted) {
+                isGpsResolvedRef.current = true;
                 applyLocation(geo.state, geo.country, 'gps');
                 return;
               }
             } catch (e) {}
           },
-          async () => {
-            // If GPS denied/unavailable and we don't have cached data, resolve via IP
-            if (!isMounted) return;
-            if (!locationData) {
-              const ipLoc = await resolveIpLocation(controller.signal);
-              if (ipLoc && isMounted) {
-                applyLocation(ipLoc.state, ipLoc.country, 'ip');
-              } else if (isMounted) {
-                applyLocation(DEFAULT_FALLBACK_STATE, DEFAULT_FALLBACK_COUNTRY, 'fallback');
-              }
-            }
+          () => {
+            // Geolocation not granted or unavailable; IP fallback handles it
           },
           {
             enableHighAccuracy: true,
-            timeout: 3000,
-            maximumAge: 120000
+            timeout: 3500,
+            maximumAge: 0 // Do NOT accept stale GPS positions
           }
         );
       }
 
-      // 3. Simultaneously resolve IP geolocation as fast baseline if nothing is loaded yet
-      if (!locationData) {
-        try {
-          const ipLoc = await resolveIpLocation(controller.signal);
-          if (ipLoc && isMounted) {
-            // Apply IP location as baseline
-            applyLocation(ipLoc.state, ipLoc.country, 'ip');
-          } else if (isMounted && !locationData) {
-            applyLocation(DEFAULT_FALLBACK_STATE, DEFAULT_FALLBACK_COUNTRY, 'fallback');
-          }
-        } catch (err) {
-          if (isMounted && !locationData) {
-            setIsError(true);
-            applyLocation(DEFAULT_FALLBACK_STATE, DEFAULT_FALLBACK_COUNTRY, 'fallback');
-          }
+      // 2. Concurrently fetch fresh live IP location
+      try {
+        const ipLoc = await resolveLiveIpLocation(controller.signal);
+        if (ipLoc && isMounted && !isGpsResolvedRef.current) {
+          applyLocation(ipLoc.state, ipLoc.country, 'ip');
+        } else if (isMounted && !locationData && !isGpsResolvedRef.current) {
+          applyLocation(DEFAULT_FALLBACK_STATE, DEFAULT_FALLBACK_COUNTRY, 'fallback');
+        }
+      } catch (err) {
+        if (isMounted && !locationData && !isGpsResolvedRef.current) {
+          setIsError(true);
+          applyLocation(DEFAULT_FALLBACK_STATE, DEFAULT_FALLBACK_COUNTRY, 'fallback');
         }
       }
     };
 
-    resolveInitialLocation();
+    revalidateLocation();
 
     return () => {
       isMounted = false;
       controller.abort();
     };
-  }, [applyLocation, locationData]);
+  }, [applyLocation]); // Runs unconditionally on mount
 
   const state = locationData?.state || (isLoading ? 'Detecting Node...' : DEFAULT_FALLBACK_STATE);
   const country = locationData?.country || '';
@@ -320,6 +340,7 @@ export function useUserLocation(): UserLocationState {
     isLoading,
     isError,
     source,
-    requestPreciseLocation
+    requestPreciseLocation,
+    refreshLocation: requestPreciseLocation
   };
 }
