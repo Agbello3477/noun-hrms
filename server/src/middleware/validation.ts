@@ -139,11 +139,16 @@ export const memoCreateSchema = z.object({
     body: z.object({
         title: z.string().min(3, 'Memo title must be at least 3 characters').max(100).transform(stripHtml),
         content: z.string().min(10, 'Memo content must be at least 10 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml),
-        recipientId: z.string().uuid('Invalid recipient ID format').optional().nullable(),
+        recipientId: z.string().optional().nullable(),
+        recipientIds: z.union([
+            z.array(z.string()),
+            z.string()
+        ]).optional().nullable(),
+        isUniversityBroadcast: z.union([z.boolean(), z.string()]).optional().nullable(),
         allowResponses: z.preprocess(val => {
             if (val === 'true' || val === true) return true;
             if (val === 'false' || val === false) return false;
             return val;
         }, z.boolean().optional())
-    })
+    }).passthrough()
 });

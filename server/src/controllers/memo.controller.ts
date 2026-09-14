@@ -50,19 +50,23 @@ export const createMemo = async (req: Request, res: Response) => {
         let parsedRecipientIds: string[] = [];
         if (recipientIds) {
             if (Array.isArray(recipientIds)) {
-                parsedRecipientIds = recipientIds;
+                parsedRecipientIds = recipientIds.map(s => String(s).trim()).filter(Boolean);
             } else if (typeof recipientIds === 'string') {
                 try {
                     const parsed = JSON.parse(recipientIds);
                     if (Array.isArray(parsed)) {
-                        parsedRecipientIds = parsed;
+                        parsedRecipientIds = parsed.map(s => String(s).trim()).filter(Boolean);
+                    } else if (typeof parsed === 'string' && parsed.trim()) {
+                        parsedRecipientIds = [parsed.trim()];
                     } else {
-                        parsedRecipientIds = [recipientIds];
+                        parsedRecipientIds = [recipientIds.trim()];
                     }
                 } catch {
                     parsedRecipientIds = recipientIds.split(',').map(s => s.trim()).filter(Boolean);
                 }
             }
+        } else if (recipientId && typeof recipientId === 'string' && recipientId.trim()) {
+            parsedRecipientIds = [recipientId.trim()];
         }
 
         // Check if sender is a Unit Manager (not HR/Admin)
@@ -109,28 +113,6 @@ export const createMemo = async (req: Request, res: Response) => {
                 });
 
                 if (invalidRecipient || recipientsProfiles.length !== parsedRecipientIds.length) {
-                    return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center or to university managers' });
-                }
-            } else if (recipientId) {
-                // Validate single recipient
-                const recipientProfile = await prisma.staffProfile.findUnique({
-                    where: { userId: recipientId },
-                    select: { 
-                        unitId: true, 
-                        centerId: true,
-                        user: { select: { role: true } }
-                    }
-                });
-
-                if (!recipientProfile) {
-                    return res.status(404).json({ message: 'Recipient staff member profile not found' });
-                }
-
-                const sameUnit = managerProfile.unitId && recipientProfile.unitId === managerProfile.unitId;
-                const sameCenter = managerProfile.centerId && recipientProfile.centerId === managerProfile.centerId;
-                const isManagerOrAdmin = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(recipientProfile.user.role);
-
-                if (!sameUnit && !sameCenter && !isManagerOrAdmin) {
                     return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center or to university managers' });
                 }
             } else {
@@ -210,74 +192,44 @@ export const createMemo = async (req: Request, res: Response) => {
             return res.status(201).json(createdMemos[0]);
         }
 
-        if (recipientId) {
-            const recipientUser = await prisma.user.findUnique({
-                where: { id: recipientId, isActive: true }
-            });
-            if (!recipientUser) {
-                return res.status(404).json({ message: 'Recipient staff member not found or inactive' });
-            }
-        }
-
-        // Create the memo in DB
+        // Create the broadcast memo in DB
         const memo = await prisma.memo.create({
             data: {
                 title,
                 content,
                 allowResponses: allowResponses,
                 senderId,
-                recipientId: recipientId || null,
+                recipientId: null,
                 attachmentUrl,
                 attachmentName
             }
         });
 
-        if (recipientId) {
-            // Private targeted memo - notify only the recipient
-            await prisma.notification.create({
-                data: {
-                    userId: recipientId,
-                    title: 'New Private Memo',
-                    message: title,
-                    type: 'INFO',
-                    link: `/dashboard/memos?id=${memo.id}`
-                }
+        // Fetch all active users to notify for general broadcast
+        const activeUsers = await prisma.user.findMany({
+            where: { isActive: true },
+            select: { id: true }
+        });
+
+        if (activeUsers.length > 0) {
+            const notificationsData = activeUsers.map(user => ({
+                userId: user.id,
+                title: 'New Memo Broadcast',
+                message: title,
+                type: 'INFO',
+                link: `/dashboard/memos?id=${memo.id}`
+            }));
+
+            await prisma.notification.createMany({
+                data: notificationsData
             });
 
             sendPushNotification(
-                [recipientId],
-                'New Private Memo',
+                activeUsers.map(u => u.id),
+                'New Memo Broadcast',
                 title,
                 `/dashboard/memos?id=${memo.id}`
             ).catch(err => console.error('FCM push failed:', err));
-        } else {
-            // Fetch all active users to notify
-            const activeUsers = await prisma.user.findMany({
-                where: { isActive: true },
-                select: { id: true }
-            });
-
-            // Batch create notifications for all users
-            if (activeUsers.length > 0) {
-                const notificationsData = activeUsers.map(user => ({
-                    userId: user.id,
-                    title: 'New Memo Broadcast',
-                    message: title,
-                    type: 'INFO',
-                    link: `/dashboard/memos?id=${memo.id}`
-                }));
-
-                await prisma.notification.createMany({
-                    data: notificationsData
-                });
-
-                sendPushNotification(
-                    activeUsers.map(u => u.id),
-                    'New Memo Broadcast',
-                    title,
-                    `/dashboard/memos?id=${memo.id}`
-                ).catch(err => console.error('FCM push failed:', err));
-            }
         }
 
         res.status(201).json(memo);
@@ -287,32 +239,20 @@ export const createMemo = async (req: Request, res: Response) => {
     }
 };
 
-// Get list of memos (with response count if HR)
+// Get list of memos (strictly filtered to recipient, sender, or general broadcast)
 export const getMemos = async (req: Request, res: Response) => {
     try {
         // @ts-ignore
         const role = req.user?.role;
         // @ts-ignore
         const userId = req.user?.id;
-        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role);
 
         const pageNum = req.query.page ? parseInt(String(req.query.page)) : 1;
         const limitNum = Math.min(parseInt(String(req.query.limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
 
-        const whereClause: any = isHR ? {
-            OR: [
-                {
-                    sender: {
-                        role: {
-                            in: ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR']
-                        }
-                    }
-                },
-                { recipientId: null },
-                { recipientId: userId }
-            ]
-        } : {
+        // Strict privacy where clause: only broadcasts (recipientId null), memos addressed to current user, or memos sent by current user
+        const whereClause: any = {
             OR: [
                 { recipientId: null },
                 { recipientId: userId },
@@ -403,7 +343,8 @@ export const getMemoById = async (req: Request, res: Response) => {
         const isRecipient = memoCheck.recipientId === userId;
         const isBroadcast = memoCheck.recipientId === null;
 
-        if (!isHR && !isSender && !isRecipient && !isBroadcast) {
+        // Access check: only sender, recipient, or if broadcast
+        if (!isSender && !isRecipient && !isBroadcast) {
             return res.status(403).json({ message: 'Access denied to this memo' });
         }
 

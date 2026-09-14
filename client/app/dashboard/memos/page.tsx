@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useAuth } from '../../../hooks/useAuth';
 import api, { getImageUrl } from '../../../lib/api';
 import { Mail, Calendar, User, MessageSquare, Send, CheckCircle, Loader2, Info, Paperclip, Download } from 'lucide-react';
 
@@ -37,8 +38,10 @@ interface Memo {
 }
 
 function MemosContent() {
+    const { user } = useAuth();
     const searchParams = useSearchParams();
     const memoIdParam = searchParams.get('id');
+    const storageKey = user?.id ? `noun_memos_list_${user.id}` : 'noun_memos_list';
 
     const [memos, setMemos] = useState<Memo[]>([]);
     const [loading, setLoading] = useState(true);
@@ -52,9 +55,11 @@ function MemosContent() {
         try {
             const res = await api.get('/api/memos');
             setMemos(res.data);
-            try {
-                sessionStorage.setItem('noun_memos_list', JSON.stringify(res.data));
-            } catch {}
+            if (user?.id) {
+                try {
+                    sessionStorage.setItem(`noun_memos_list_${user.id}`, JSON.stringify(res.data));
+                } catch {}
+            }
 
             // Determine initial memo to select immediately
             if (res.data.length > 0) {
@@ -85,22 +90,24 @@ function MemosContent() {
     };
 
     useEffect(() => {
-        try {
-            const cachedMemos = sessionStorage.getItem('noun_memos_list');
-            if (cachedMemos) {
-                const parsed = JSON.parse(cachedMemos);
-                setMemos(parsed);
-                setLoading(false);
-                if (parsed.length > 0) {
-                    const initialId = memoIdParam || parsed[0].id;
-                    const found = parsed.find((m: Memo) => m.id === initialId) || parsed[0];
-                    if (found) setSelectedMemo(found);
+        if (user?.id) {
+            try {
+                const cachedMemos = sessionStorage.getItem(`noun_memos_list_${user.id}`);
+                if (cachedMemos) {
+                    const parsed = JSON.parse(cachedMemos);
+                    setMemos(parsed);
+                    setLoading(false);
+                    if (parsed.length > 0) {
+                        const initialId = memoIdParam || parsed[0].id;
+                        const found = parsed.find((m: Memo) => m.id === initialId) || parsed[0];
+                        if (found) setSelectedMemo(found);
+                    }
                 }
-            }
-        } catch {}
+            } catch {}
+        }
 
         fetchMemos();
-    }, [memoIdParam]);
+    }, [memoIdParam, user?.id]);
 
     const handleSelectMemo = (id: string) => {
         fetchMemoDetails(id);
