@@ -49,8 +49,7 @@ import { scheduleRetirementCron } from './jobs/retirementCron';
 import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
 import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
 import { RlsService } from './services/rls.service';
-
-
+import { startDatabaseKeepalive } from './prisma';
 
 import compression from 'compression';
 
@@ -261,6 +260,9 @@ wss.on('connection', setupDocSocket);
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    // Start background database connection keepalive watchdog
+    startDatabaseKeepalive();
+
     // Start background queue worker
     jobQueueService.startWorker();
     
