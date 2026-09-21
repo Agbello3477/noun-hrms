@@ -138,7 +138,33 @@ export const getRecruitmentAnalytics = async (req: Request, res: Response) => {
 
 export const getHRAnalytics = async (req: Request, res: Response) => {
     try {
-        const CACHE_KEY = 'hr:analytics:dashboard';
+        // @ts-ignore
+        const requesterId = req.user?.id;
+        // @ts-ignore
+        const requesterRole = req.user?.role;
+        const isGlobalAdmin = requesterRole === Role.SUPER_USER || requesterRole === Role.VICE_CHANCELLOR;
+
+        let requesterProfile: { unitId: string | null; centerId: string | null; unit?: { name: string; type: string } | null; studyCenter?: { name: string } | null } | null = null;
+        if (requesterId) {
+            requesterProfile = await prisma.staffProfile.findUnique({
+                where: { userId: requesterId },
+                select: {
+                    unitId: true,
+                    centerId: true,
+                    unit: { select: { name: true, type: true } },
+                    studyCenter: { select: { name: true } }
+                }
+            });
+        }
+
+        const isHQAdmin = isGlobalAdmin || (
+            (requesterRole === Role.HR_ADMIN || requesterRole === Role.ADMIN) && 
+            !requesterProfile?.unitId && 
+            !requesterProfile?.centerId
+        );
+
+        const cacheScope = isHQAdmin ? 'HQ_GLOBAL' : `${requesterRole}_U${requesterProfile?.unitId || 'NONE'}_C${requesterProfile?.centerId || 'NONE'}`;
+        const CACHE_KEY = `hr:analytics:dashboard:${cacheScope}`;
         const cached = await redisService.get(CACHE_KEY);
         if (cached) {
             return res.json(cached);
@@ -146,6 +172,20 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
 
         // Parallelise all independent DB queries — eliminates sequential latency
         const today = new Date();
+
+        let unitScopeFilter: any = undefined;
+        if (!isHQAdmin && requesterProfile) {
+            if (requesterProfile.unitId) {
+                unitScopeFilter = { unitId: requesterProfile.unitId };
+            } else if (requesterProfile.centerId) {
+                unitScopeFilter = { centerId: requesterProfile.centerId };
+            }
+        }
+
+        const staffProfileWhere = {
+            isDeleted: false,
+            ...(unitScopeFilter || {})
+        };
 
         const [
             totalStaff,
@@ -155,8 +195,10 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             activeLeavesList
         ] = await Promise.all([
             // 1. Total Workforce Count
-            prisma.user.count({
+            isHQAdmin ? prisma.user.count({
                 where: { role: { not: 'SUPER_USER' } }
+            }) : prisma.staffProfile.count({
+                where: staffProfileWhere
             }),
 
             // 2. Leave Statistics — aggregate active leaves by type
@@ -164,7 +206,8 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
                 by: ['type'],
                 where: {
                     status: LeaveStatus.APPROVED,
-                    endDate: { gte: today }
+                    endDate: { gte: today },
+                    ...(unitScopeFilter ? { staff: unitScopeFilter } : {})
                 },
                 _count: { _all: true }
             }),
@@ -172,13 +215,14 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             // 3. Gender Distribution
             prisma.staffProfile.groupBy({
                 by: ['gender'],
+                where: staffProfileWhere,
                 _count: { _all: true }
             }),
 
             // 4. Geo-political Zone Distribution
             prisma.staffProfile.groupBy({
                 by: ['stateOfOrigin'],
-                where: { isDeleted: false },
+                where: staffProfileWhere,
                 _count: { _all: true }
             }),
 
@@ -186,7 +230,8 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             prisma.leaveRequest.findMany({
                 where: {
                     status: LeaveStatus.APPROVED,
-                    endDate: { gte: today }
+                    endDate: { gte: today },
+                    ...(unitScopeFilter ? { staff: unitScopeFilter } : {})
                 },
                 select: {
                     id: true,
@@ -257,6 +302,8 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
             activeLeaves: leaveStats,
             genderDistribution: genderDist,
             zoneDistribution,
+            unitName: requesterProfile?.unit?.name || requesterProfile?.studyCenter?.name || null,
+            isGlobalScope: isHQAdmin,
             activeLeavesList: activeLeavesList.map(l => ({
                 id: l.id,
                 type: l.type,
@@ -539,29 +586,60 @@ export const getVcExecutiveAnalytics = async (req: Request, res: Response) => {
     }
 };
 
-// GET /api/analytics/dashboard-bootstrap (Consolidated Single-Payload Bootstrap)
+// GET /api/analytics/dashboard-bootstrap (Consolidated Single-Payload Bootstrap with RBAC Scoping)
 export const getDashboardBootstrap = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const userId = user?.id;
         const userRole = user?.role;
-        const isRegistry = userRole === Role.HR_ADMIN || userRole === Role.SUPER_USER || userRole === Role.ADMIN || userRole === Role.VICE_CHANCELLOR;
-        const isUnitManager = userRole === Role.STUDY_CENTER_MANAGER || userRole === Role.UNIT_HEAD || userRole === Role.UNIT_ADMIN;
 
-        // Fetch User's Staff Profile ID, Unit ID and Center ID
+        // Fetch User's Staff Profile ID, Unit, Center, and Department for strict RBAC scoping
         let profileId: string | null = null;
         let userUnitId: string | null = null;
         let userCenterId: string | null = null;
+        let unitName = 'Registry / Headquarters';
+        let unitType = 'HEADQUARTERS';
 
         if (userId) {
             const profile = await prisma.staffProfile.findUnique({
                 where: { userId },
-                select: { id: true, unitId: true, centerId: true }
+                include: {
+                    unit: { select: { id: true, name: true, type: true } },
+                    studyCenter: { select: { id: true, name: true, code: true } }
+                }
             });
             profileId = profile?.id || null;
             userUnitId = profile?.unitId || null;
             userCenterId = profile?.centerId || null;
+
+            if (profile?.unit?.name) {
+                unitName = profile.unit.name;
+                unitType = profile.unit.type || 'DIRECTORATE';
+            } else if (profile?.studyCenter?.name) {
+                unitName = profile.studyCenter.name;
+                unitType = 'STUDY_CENTER';
+            } else if (profile?.department) {
+                unitName = String(profile.department).replace(/_/g, ' ');
+            }
         }
+
+        const isGlobalHQAdmin = (
+            userRole === Role.SUPER_USER || 
+            userRole === Role.VICE_CHANCELLOR || 
+            ((userRole === Role.ADMIN || userRole === Role.HR_ADMIN) && !userUnitId && !userCenterId)
+        );
+        const isRegistry = userRole === Role.HR_ADMIN || userRole === Role.SUPER_USER || userRole === Role.ADMIN || userRole === Role.VICE_CHANCELLOR;
+        const isUnitManager = userRole === Role.STUDY_CENTER_MANAGER || userRole === Role.UNIT_HEAD || userRole === Role.UNIT_ADMIN;
+
+        const hasUnitPlacement = Boolean(userUnitId || userCenterId);
+        const unitScopeFilter = hasUnitPlacement ? {
+            OR: [
+                ...(userUnitId ? [{ unitId: userUnitId }] : []),
+                ...(userCenterId ? [{ centerId: userCenterId }] : [])
+            ]
+        } : null;
+
+        const today = new Date();
 
         // Execute parallel non-blocking queries across all dashboard sections
         const [
@@ -570,26 +648,29 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
             memosResult,
             transfersResult,
             queriesResult,
-            workforceResult,
-            activeLeavesResult,
-            managerStaffCountResult,
-            managerPendingLeavesResult,
-            managerPendingAperResult,
-            managerActiveQueriesResult
+            globalWorkforceResult,
+            globalActiveLeavesResult,
+            unitStaffCountResult,
+            unitActiveLeavesResult,
+            unitPendingLeavesResult,
+            unitPendingAperResult,
+            unitActiveQueriesResult
         ] = await Promise.allSettled([
-            // 1. Notifications
+            // 1. User Notifications
             userId ? prisma.notification.findMany({
                 where: { userId },
                 orderBy: { createdAt: 'desc' },
                 take: 10
             }) : Promise.resolve([]),
+
             // 2. User Leaves
             profileId ? prisma.leaveRequest.findMany({
                 where: { staffId: profileId },
                 orderBy: { createdAt: 'desc' },
                 take: 10
             }) : Promise.resolve([]),
-            // 3. Memos (Activities)
+
+            // 3. Memos (Timeline)
             prisma.memo.findMany({
                 include: {
                     sender: { select: { name: true } },
@@ -598,69 +679,68 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
                 orderBy: { createdAt: 'desc' },
                 take: 10
             }),
-            // 4. Transfers (Activities)
+
+            // 4. Transfers (Timeline)
             prisma.transferLog.findMany({
                 include: { staff: { select: { name: true } } },
                 orderBy: { createdAt: 'desc' },
                 take: 10
             }),
-            // 5. Queries (Activities)
+
+            // 5. Queries (Timeline)
             prisma.staffQuery.findMany({
                 include: { staff: { select: { user: { select: { name: true } } } } },
                 orderBy: { createdAt: 'desc' },
                 take: 10
             }),
-            // 6. Workforce count (Registry)
-            isRegistry ? prisma.staffProfile.count({ where: { isDeleted: false } }) : Promise.resolve(0),
-            // 7. Active leaves breakdown (Registry)
-            isRegistry ? prisma.leaveRequest.findMany({
-                where: { status: LeaveStatus.APPROVED },
+
+            // 6. Global Workforce count (HQ Admin only)
+            isGlobalHQAdmin ? prisma.staffProfile.count({ where: { isDeleted: false } }) : Promise.resolve(0),
+
+            // 7. Global Active leaves list (HQ Admin only)
+            isGlobalHQAdmin ? prisma.leaveRequest.findMany({
+                where: { status: LeaveStatus.APPROVED, endDate: { gte: today } },
                 include: { staff: { select: { surname: true, otherNames: true, staffId: true, rank: true } } }
             }) : Promise.resolve([]),
-            // 8. Manager: Unit Staff Count
-            (isUnitManager && (userUnitId || userCenterId)) ? prisma.staffProfile.count({
+
+            // 8. Directorate / Unit Staff Count
+            hasUnitPlacement ? prisma.staffProfile.count({
                 where: {
                     isDeleted: false,
-                    OR: [
-                        ...(userUnitId ? [{ unitId: userUnitId }] : []),
-                        ...(userCenterId ? [{ centerId: userCenterId }] : [])
-                    ]
+                    ...unitScopeFilter
+                }
+            }) : Promise.resolve(1),
+
+            // 9. Directorate / Unit Active Leaves
+            hasUnitPlacement ? prisma.leaveRequest.count({
+                where: {
+                    status: LeaveStatus.APPROVED,
+                    endDate: { gte: today },
+                    staff: unitScopeFilter!
                 }
             }) : Promise.resolve(0),
-            // 9. Manager: Pending Unit Leaves
-            (isUnitManager && (userUnitId || userCenterId)) ? prisma.leaveRequest.count({
+
+            // 10. Directorate / Unit Pending Leaves
+            hasUnitPlacement ? prisma.leaveRequest.count({
                 where: {
                     status: LeaveStatus.PENDING,
-                    staff: {
-                        OR: [
-                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
-                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
-                        ]
-                    }
+                    staff: unitScopeFilter!
                 }
             }) : Promise.resolve(0),
-            // 10. Manager: Pending Unit APER
-            (isUnitManager && (userUnitId || userCenterId)) ? prisma.aperForm.count({
+
+            // 11. Directorate / Unit Pending APER
+            hasUnitPlacement ? prisma.aperForm.count({
                 where: {
                     status: AperStatus.SUBMITTED,
-                    staff: {
-                        OR: [
-                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
-                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
-                        ]
-                    }
+                    staff: unitScopeFilter!
                 }
             }) : Promise.resolve(0),
-            // 11. Manager: Active Unit Queries
-            (isUnitManager && (userUnitId || userCenterId)) ? prisma.staffQuery.count({
+
+            // 12. Directorate / Unit Active Queries
+            hasUnitPlacement ? prisma.staffQuery.count({
                 where: {
                     status: 'OPEN',
-                    staff: {
-                        OR: [
-                            ...(userUnitId ? [{ unitId: userUnitId }] : []),
-                            ...(userCenterId ? [{ centerId: userCenterId }] : [])
-                        ]
-                    }
+                    staff: unitScopeFilter!
                 }
             }) : Promise.resolve(0)
         ]);
@@ -670,11 +750,9 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
             securityControlRoomPhone: '+234 803 765 4321'
         };
 
-        // Parse Notifications
+        // Parse Notifications & Leaves
         const notifications = notificationsResult.status === 'fulfilled' ? notificationsResult.value : [];
         const unreadNotificationsCount = notifications.filter((n: any) => !n.isRead).length;
-
-        // Parse User Leaves
         const myLeaves = leavesResult.status === 'fulfilled' ? leavesResult.value : [];
 
         // Parse Timeline Activities
@@ -718,37 +796,54 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 15);
 
-        // Parse Registry Analytics
-        const totalWorkforce = workforceResult.status === 'fulfilled' ? workforceResult.value : 0;
-        const allActiveLeaves = activeLeavesResult.status === 'fulfilled' ? activeLeavesResult.value : [];
+        // Parse Global vs Unit Stats
+        const globalWorkforce = globalWorkforceResult.status === 'fulfilled' ? globalWorkforceResult.value : 0;
+        const globalActiveLeaves = globalActiveLeavesResult.status === 'fulfilled' ? globalActiveLeavesResult.value : [];
+        
+        const unitStaffCount = unitStaffCountResult.status === 'fulfilled' ? unitStaffCountResult.value : 1;
+        const unitActiveLeaves = unitActiveLeavesResult.status === 'fulfilled' ? unitActiveLeavesResult.value : 0;
+        const unitPendingLeaves = unitPendingLeavesResult.status === 'fulfilled' ? unitPendingLeavesResult.value : 0;
+        const unitPendingAper = unitPendingAperResult.status === 'fulfilled' ? unitPendingAperResult.value : 0;
+        const unitActiveQueries = unitActiveQueriesResult.status === 'fulfilled' ? unitActiveQueriesResult.value : 0;
+
         const activeLeavesBreakdown: Record<string, number> = {
             annual: 0, study: 0, sick: 0, sabbatical: 0, maternity: 0, paternity: 0, withoutPay: 0
         };
-        allActiveLeaves.forEach((l: any) => {
+        globalActiveLeaves.forEach((l: any) => {
             const key = (l.type || '').toLowerCase();
             if (activeLeavesBreakdown[key] !== undefined) {
                 activeLeavesBreakdown[key]++;
             }
         });
 
-        const analytics = isRegistry ? {
-            totalWorkforce,
+        const unitStats = {
+            totalStaff: unitStaffCount,
+            activeLeaves: unitActiveLeaves,
+            pendingLeaves: unitPendingLeaves,
+            pendingAper: unitPendingAper,
+            activeQueries: unitActiveQueries,
+            unitName,
+            unitType
+        };
+
+        const analytics = isGlobalHQAdmin ? {
+            totalWorkforce: globalWorkforce,
             activeLeaves: activeLeavesBreakdown,
-            activeLeavesList: allActiveLeaves.slice(0, 10)
-        } : null;
+            activeLeavesList: globalActiveLeaves.slice(0, 10),
+            isGlobalScope: true
+        } : {
+            totalWorkforce: unitStaffCount,
+            unitName,
+            activeLeaves: activeLeavesBreakdown,
+            activeLeavesList: [],
+            isGlobalScope: false
+        };
 
-        // Parse Manager Stats
-        const managerStats = isUnitManager ? {
-            totalStaff: managerStaffCountResult.status === 'fulfilled' ? managerStaffCountResult.value : 0,
-            activeLeaves: 0,
-            pendingLeaves: managerPendingLeavesResult.status === 'fulfilled' ? managerPendingLeavesResult.value : 0,
-            pendingAper: managerPendingAperResult.status === 'fulfilled' ? managerPendingAperResult.value : 0,
-            activeQueries: managerActiveQueriesResult.status === 'fulfilled' ? managerActiveQueriesResult.value : 0
-        } : null;
+        const managerStats = (isUnitManager || hasUnitPlacement) ? unitStats : null;
 
-        const pendingActionsCount = isRegistry
-            ? (rawQueries.filter((q: any) => q.status === 'OPEN').length + (allActiveLeaves.length > 0 ? 1 : 0))
-            : (managerStats ? (managerStats.pendingLeaves + managerStats.pendingAper + managerStats.activeQueries) : 0);
+        const pendingActionsCount = isGlobalHQAdmin
+            ? (rawQueries.filter((q: any) => q.status === 'OPEN').length + (globalActiveLeaves.length > 0 ? 1 : 0))
+            : (unitPendingLeaves + unitPendingAper + unitActiveQueries);
 
         res.json({
             hotlines,
@@ -758,6 +853,9 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
             activities,
             analytics,
             managerStats,
+            unitStats,
+            isGlobalScope: isGlobalHQAdmin,
+            unitName,
             pendingActionsCount
         });
     } catch (error: any) {

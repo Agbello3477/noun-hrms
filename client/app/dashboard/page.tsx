@@ -6,7 +6,7 @@ import api, { getImageUrl } from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
     Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar,
-    Filter, Users, TrendingUp, BarChart2, Shield, Phone
+    Filter, Users, TrendingUp, BarChart2, Shield, Phone, Building
 } from 'lucide-react';
 import { useSwrData } from '../../hooks/useSwrData';
 import Link from 'next/link';
@@ -88,7 +88,6 @@ function mapActivitiesToTimeline(memos: any[], transfers: any[], queries: any[])
 
 export default function DashboardHome() {
     const { user, isLoading } = useAuth();
-    const isRegistry = user?.role === 'HR_ADMIN' || user?.role === 'SUPER_USER' || user?.role === 'ADMIN' || user?.role === 'VICE_CHANCELLOR';
     const isVC = user?.role === 'VICE_CHANCELLOR';
     const isUnitManager = user?.role === 'STUDY_CENTER_MANAGER' || user?.role === 'UNIT_HEAD' || user?.role === 'UNIT_ADMIN';
 
@@ -101,11 +100,28 @@ export default function DashboardHome() {
         activities: any[];
         analytics: any;
         managerStats: any;
+        unitStats: {
+            totalStaff: number;
+            activeLeaves: number;
+            pendingLeaves: number;
+            pendingAper: number;
+            activeQueries: number;
+            unitName: string | null;
+            unitType: string | null;
+        } | null;
+        isGlobalScope: boolean;
+        unitName: string | null;
         pendingActionsCount: number;
     }>(
         user ? '/api/analytics/dashboard-bootstrap' : null,
         { ttl: 60000, sessionPersist: true, revalidateOnFocus: true }
     );
+
+    const isHQGlobalAdmin = (user?.role === 'SUPER_USER' || user?.role === 'VICE_CHANCELLOR') || (
+        (user?.role === 'HR_ADMIN' || user?.role === 'ADMIN') && bootstrapData?.isGlobalScope === true
+    );
+    const hasUnitPlacement = Boolean(bootstrapData?.unitName || user?.staffProfile?.unitId || user?.staffProfile?.centerId);
+    const isUnitLeader = isUnitManager || (user?.role !== 'STAFF' && hasUnitPlacement && !isHQGlobalAdmin);
 
     const emergencyHotlines = bootstrapData?.hotlines;
     const leaves = bootstrapData?.myLeaves || [];
@@ -257,7 +273,7 @@ export default function DashboardHome() {
     // Recruitment analytics fetch
     useEffect(() => {
         const fetchRecruitmentData = async () => {
-            if (!isRegistry || !user) return;
+            if (!isHQGlobalAdmin || !user) return;
             try {
                 setLoadingRecruit(true);
                 const params = new URLSearchParams();
@@ -274,7 +290,7 @@ export default function DashboardHome() {
             }
         };
         fetchRecruitmentData();
-    }, [user, isRegistry, recruitYear, recruitMonth, recruitGender, recruitZone]);
+    }, [user, isHQGlobalAdmin, recruitYear, recruitMonth, recruitGender, recruitZone]);
 
     // Guard: show loading spinner while auth state is resolving or user is not yet set
     // (must be after all hooks to respect React Rules of Hooks)
@@ -645,21 +661,28 @@ export default function DashboardHome() {
         );
     }
 
-    // Premium Manager Dashboard View
-    if (!isRegistry && isUnitManager) {
+    // Premium Manager / Directorate Dashboard View
+    if (isUnitLeader || (!isHQGlobalAdmin && !isVC && isUnitManager)) {
+        const activeUnitName = bootstrapData?.unitName || user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Your Managed Unit';
+        const displayTotalStaff = bootstrapData?.unitStats?.totalStaff ?? managerStats.totalStaff;
+        const displayActiveLeaves = bootstrapData?.unitStats?.activeLeaves ?? managerStats.activeLeaves;
+        const displayPendingLeaves = bootstrapData?.unitStats?.pendingLeaves ?? managerStats.pendingLeaves;
+        const displayPendingAper = bootstrapData?.unitStats?.pendingAper ?? managerStats.pendingAper;
+        const displayActiveQueries = bootstrapData?.unitStats?.activeQueries ?? managerStats.activeQueries;
+
         return (
             <div className="space-y-6">
                 {/* Welcome Header */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-900 p-8 text-white shadow-xl animate-in fade-in slide-in-from-top duration-500">
                     <div className="relative z-10">
                         <span className="bg-white/20 text-white border border-white/20 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
-                            Manager Portal
+                            Directorate &amp; Unit Portal
                         </span>
                         <h1 className="text-3xl font-bold tracking-tight mb-2">
                             Welcome back, {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name?.split(' ')[0]}` : user?.name?.split(' ')[0]}!
                         </h1>
                         <p className="text-blue-100 max-w-lg text-sm opacity-90 leading-relaxed">
-                            Overview for <span className="font-bold underline">{user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Your Managed Unit'}</span>. Track active staff, recommendation pipelines, and appraise performance.
+                            Overview for <span className="font-bold underline">{activeUnitName}</span>. Track active staff, recommendation pipelines, and appraise performance.
                         </p>
                     </div>
                     {/* Decorative Background Elements */}
@@ -674,7 +697,7 @@ export default function DashboardHome() {
                             <div>
                                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Staff</h3>
                                 <p className="mt-2 text-2xl font-black text-slate-900 tracking-tight">
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.totalStaff}
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : displayTotalStaff}
                                 </p>
                             </div>
                             <span className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100/80"><FileText size={18} /></span>
@@ -687,7 +710,7 @@ export default function DashboardHome() {
                             <div>
                                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">On Active Leave</h3>
                                 <p className="mt-2 text-2xl font-black text-slate-900 tracking-tight">
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.activeLeaves}
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : displayActiveLeaves}
                                 </p>
                             </div>
                             <span className="p-2.5 bg-emerald-50 text-[#006533] rounded-xl border border-emerald-100/80"><MapPin size={18} /></span>
@@ -699,11 +722,11 @@ export default function DashboardHome() {
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Leaves</h3>
-                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.pendingLeaves > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.pendingLeaves}
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${displayPendingLeaves > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : displayPendingLeaves}
                                 </p>
                             </div>
-                            <span className={`p-2.5 rounded-xl border ${managerStats.pendingLeaves > 0 ? 'bg-amber-50 text-amber-700 border-amber-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><Clock size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${displayPendingLeaves > 0 ? 'bg-amber-50 text-amber-700 border-amber-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><Clock size={18} /></span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-3 font-medium">Awaiting review</p>
                     </div>
@@ -712,11 +735,11 @@ export default function DashboardHome() {
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Appraisals</h3>
-                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.pendingAper > 0 ? 'text-indigo-600' : 'text-slate-900'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.pendingAper}
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${displayPendingAper > 0 ? 'text-indigo-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : displayPendingAper}
                                 </p>
                             </div>
-                            <span className={`p-2.5 rounded-xl border ${managerStats.pendingAper > 0 ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><ClipboardCheck size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${displayPendingAper > 0 ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><ClipboardCheck size={18} /></span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-3 font-medium">Pending APER review</p>
                     </div>
@@ -725,11 +748,11 @@ export default function DashboardHome() {
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Open Queries</h3>
-                                <p className={`mt-2 text-2xl font-black tracking-tight ${managerStats.activeQueries > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : managerStats.activeQueries}
+                                <p className={`mt-2 text-2xl font-black tracking-tight ${displayActiveQueries > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                                    {loadingManagerStats ? <Loader2 className="animate-spin h-5 w-5 text-slate-400" /> : displayActiveQueries}
                                 </p>
                             </div>
-                            <span className={`p-2.5 rounded-xl border ${managerStats.activeQueries > 0 ? 'bg-rose-50 text-rose-700 border-rose-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><AlertTriangle size={18} /></span>
+                            <span className={`p-2.5 rounded-xl border ${displayActiveQueries > 0 ? 'bg-rose-50 text-rose-700 border-rose-200/60' : 'bg-slate-50 text-slate-400 border-slate-200/60'}`}><AlertTriangle size={18} /></span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-3 font-medium">Disciplinary actions open</p>
                     </div>
@@ -868,7 +891,10 @@ export default function DashboardHome() {
     }
 
     // Premium Staff Dashboard View
-    if (!isRegistry) {
+    if (!isHQGlobalAdmin && !isVC) {
+        const staffUnitName = bootstrapData?.unitName || user?.staffProfile?.unit?.name || user?.staffProfile?.studyCenter?.name || 'Assigned Directorate';
+        const staffUnitCount = bootstrapData?.unitStats?.totalStaff ?? 1;
+
         return (
             <div className="space-y-6">
                 {/* Welcome Header */}
@@ -884,6 +910,45 @@ export default function DashboardHome() {
                     {/* Decorative Background Elements */}
                     <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
                     <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
+                </div>
+
+                {/* Staff Directorate / Unit Scoped Info Banner */}
+                <div className="rounded-2xl bg-white p-5 shadow-2xs border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                        <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
+                            <Building size={22} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                                    {user?.staffProfile?.unit ? 'Directorate / Unit' : user?.staffProfile?.studyCenter ? 'Study Center' : 'Directorate / Faculty'}
+                                </span>
+                                <span className="text-xs text-slate-300 font-medium">|</span>
+                                <span className="text-xs text-slate-500 font-semibold">{user?.staffProfile?.rank || user?.role?.replace(/_/g, ' ')}</span>
+                            </div>
+                            <h2 className="text-base font-black text-slate-900 mt-0.5">
+                                {staffUnitName}
+                            </h2>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+                        <div className="text-left sm:text-right">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unit Workforce</p>
+                            <p className="text-lg font-black text-slate-900">
+                                {staffUnitCount} <span className="text-xs font-medium text-slate-500">Staff Members</span>
+                            </p>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
+                        <div className="text-right">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duty Status</p>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                                isOnLeave ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${isOnLeave ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                                {dutyStatus}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Quick Actions Grid */}
@@ -987,10 +1052,14 @@ export default function DashboardHome() {
                         <h2 className="text-lg font-bold text-gray-800 mb-4">Current Status</h2>
                         <div className="space-y-4">
                             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Assigned Unit</span>
+                                <span className="text-sm font-bold text-gray-900 truncate max-w-[200px]">{staffUnitName}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <span className="text-sm text-gray-600 font-medium">Duty Status</span>
                                 <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
                                     isOnLeave ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
-                                }`}>
+                                }}`}>
                                     {dutyStatus}
                                 </span>
                             </div>

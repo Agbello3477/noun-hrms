@@ -13,8 +13,30 @@ export const getAllStaff = async (req: Request, res: Response) => {
     try {
         const { status, page, limit, search, role, cadre, location } = req.query;
 
-        // Redis cache check
-        const cacheKey = `staff:all:${JSON.stringify(req.query)}`;
+        // @ts-ignore
+        const requesterId = req.user?.id;
+        // @ts-ignore
+        const requesterRole = req.user?.role;
+        const isGlobalAdmin = requesterRole === Role.SUPER_USER || requesterRole === Role.VICE_CHANCELLOR;
+
+        // Fetch Requester Profile for Placement Scoping
+        let requesterProfile: { unitId: string | null; centerId: string | null } | null = null;
+        if (requesterId) {
+            requesterProfile = await prisma.staffProfile.findUnique({
+                where: { userId: requesterId },
+                select: { unitId: true, centerId: true }
+            });
+        }
+
+        const isHQAdmin = isGlobalAdmin || (
+            (requesterRole === Role.HR_ADMIN || requesterRole === Role.ADMIN) && 
+            !requesterProfile?.unitId && 
+            !requesterProfile?.centerId
+        );
+
+        // Redis cache check — Strictly partitioned by role and unit/center placement
+        const cacheScope = isHQAdmin ? 'HQ_GLOBAL' : `${requesterRole}_U${requesterProfile?.unitId || 'NONE'}_C${requesterProfile?.centerId || 'NONE'}`;
+        const cacheKey = `staff:list:${cacheScope}:${JSON.stringify(req.query)}`;
         const cached = await redisService.get<any>(cacheKey);
         if (cached) {
             res.setHeader('X-Total-Count', cached.total.toString());
@@ -58,25 +80,18 @@ export const getAllStaff = async (req: Request, res: Response) => {
 
         let profileFilters: any = {};
 
-        // Role Scoping & Placement Boundaries
-        // @ts-ignore
-        const requesterId = req.user?.id;
-        // @ts-ignore
-        const requesterRole = req.user?.role;
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(requesterRole as any);
-
+        // Enforce Placement Boundaries for Unit Heads, Managers, and Scoped Admins
         if (!isHQAdmin) {
-            if ([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER].includes(requesterRole as any)) {
-                const headProfile = await prisma.staffProfile.findUnique({
-                    where: { userId: requesterId },
-                    select: { unitId: true, centerId: true }
-                });
-
-                if (headProfile) {
-                    if (requesterRole === Role.STUDY_CENTER_MANAGER && headProfile.centerId) {
-                        profileFilters.centerId = headProfile.centerId;
-                    } else if ((requesterRole === Role.UNIT_HEAD || requesterRole === Role.UNIT_ADMIN) && headProfile.unitId) {
-                        profileFilters.unitId = headProfile.unitId;
+            if ([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.HR_ADMIN, Role.ADMIN, Role.STAFF].includes(requesterRole as any)) {
+                if (requesterProfile) {
+                    if (requesterRole === Role.STUDY_CENTER_MANAGER && requesterProfile.centerId) {
+                        profileFilters.centerId = requesterProfile.centerId;
+                    } else if (requesterProfile.unitId) {
+                        profileFilters.unitId = requesterProfile.unitId;
+                    } else if (requesterProfile.centerId) {
+                        profileFilters.centerId = requesterProfile.centerId;
+                    } else {
+                        return res.json([]);
                     }
                 } else {
                     return res.json([]);
