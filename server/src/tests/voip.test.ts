@@ -22,10 +22,10 @@ async function runTests() {
   try {
     console.log('🔄 Setting up temporary test user with 4-digit VoIP extension...');
 
-    // 1. Create a test user & profile with 4-digit VoIP Extension 1001
+    // 1. Create a test user & profile with 4-digit VoIP Extension 9988
     const testUser = await prisma.user.create({
       data: {
-        email: 'voip_tester_1001@noun.edu.ng',
+        email: 'voip_tester_9988@noun.edu.ng',
         password: 'password123',
         name: 'Capt. VoIP Test',
         role: 'SUPER_USER',
@@ -33,9 +33,9 @@ async function runTests() {
           create: {
             surname: 'Test',
             otherNames: 'VoIP',
-            staffId: 'ST-VOIP-1001',
+            staffId: 'ST-VOIP-9988',
             status: 'ACTIVE',
-            voipExtension: '1001'
+            voipExtension: '9988'
           }
         }
       },
@@ -46,7 +46,7 @@ async function runTests() {
 
     // 2. Test GET /api/voip/directory controller
     const reqDir = {
-      query: { query: '1001' },
+      query: { query: '9988' },
       user: { id: testUser.id, role: 'SUPER_USER' }
     } as unknown as Request;
 
@@ -62,13 +62,13 @@ async function runTests() {
     await getVoipDirectory(reqDir, resDir);
 
     assert(Array.isArray(dirResponseData), 'getVoipDirectory returns an array of staff profiles');
-    const matchedProfile = dirResponseData.find((p: any) => p.extension === '1001');
-    assert(!!matchedProfile, 'Directory includes created test extension 1001');
+    const matchedProfile = dirResponseData.find((p: any) => p.extension === '9988');
+    assert(!!matchedProfile, 'Directory includes created test extension 9988');
     assert(matchedProfile?.name.includes('VoIP') || matchedProfile?.name.includes('Test'), 'Directory returns full name');
 
     // 3. Test GET /api/voip/lookup/:extension controller
     const reqLookup = {
-      params: { extension: '1001' },
+      params: { extension: '9988' },
       user: { id: testUser.id, role: 'SUPER_USER' }
     } as unknown as Request;
 
@@ -83,7 +83,7 @@ async function runTests() {
 
     await lookupExtension(reqLookup, resLookup);
 
-    assert(lookupData?.extension === '1001', 'lookupExtension successfully resolves extension 1001');
+    assert(lookupData?.extension === '9988', 'lookupExtension successfully resolves extension 9988');
     assert(lookupData?.status === 'ACTIVE', 'Resolved extension status is ACTIVE');
 
     // 4. Test Invalid Short Extension
