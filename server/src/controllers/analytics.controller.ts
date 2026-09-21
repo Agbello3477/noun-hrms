@@ -144,14 +144,14 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
         const requesterRole = req.user?.role;
         const isGlobalAdmin = requesterRole === Role.SUPER_USER || requesterRole === Role.VICE_CHANCELLOR;
 
-        let requesterProfile: { unitId: string | null; centerId: string | null; unit?: { name: string; type: string } | null; studyCenter?: { name: string } | null } | null = null;
+        let requesterProfile: { unitId: string | null; centerId: string | null; unit?: { id: string; name: string; type: string; code: string | null } | null; studyCenter?: { name: string } | null } | null = null;
         if (requesterId) {
             requesterProfile = await prisma.staffProfile.findUnique({
                 where: { userId: requesterId },
                 select: {
                     unitId: true,
                     centerId: true,
-                    unit: { select: { name: true, type: true } },
+                    unit: { select: { id: true, name: true, type: true, code: true } },
                     studyCenter: { select: { name: true } }
                 }
             });
@@ -176,7 +176,32 @@ export const getHRAnalytics = async (req: Request, res: Response) => {
         let unitScopeFilter: any = undefined;
         if (!isHQAdmin && requesterProfile) {
             if (requesterProfile.unitId) {
-                unitScopeFilter = { unitId: requesterProfile.unitId };
+                if (requesterProfile.unit?.type === 'FACULTY') {
+                    const facultyCode = requesterProfile.unit.code || '';
+                    const mapping: Record<string, string[]> = {
+                        'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                        'FAC-LAW': ['DEP-LAW'],
+                        'FAC-SOCIA': ['DEP-POL'],
+                        'FAC-MANAG': ['DEP-ACC'],
+                        'FAC-EDUCA': ['DEP-EDT'],
+                        'FAC-HEALT': ['DEP-PBH'],
+                        'FAC-AGRIC': ['DEP-AGR'],
+                        'FAC-ARTS': ['DEP-ART'],
+                        'FAC-COMPU': ['DEP-CMP']
+                    };
+                    const deptCodes = mapping[facultyCode] || [];
+                    if (deptCodes.length > 0) {
+                        const deptUnits = await prisma.unit.findMany({
+                            where: { code: { in: deptCodes } },
+                            select: { id: true }
+                        });
+                        unitScopeFilter = { unitId: { in: [requesterProfile.unitId, ...deptUnits.map(d => d.id)] } };
+                    } else {
+                        unitScopeFilter = { unitId: requesterProfile.unitId };
+                    }
+                } else {
+                    unitScopeFilter = { unitId: requesterProfile.unitId };
+                }
             } else if (requesterProfile.centerId) {
                 unitScopeFilter = { centerId: requesterProfile.centerId };
             }
@@ -345,7 +370,12 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
 
         const managerProfile = await prisma.staffProfile.findUnique({
             where: { userId },
-            select: { id: true, unitId: true, centerId: true }
+            select: {
+                id: true,
+                unitId: true,
+                centerId: true,
+                unit: { select: { id: true, type: true, code: true } }
+            }
         });
 
         if (!managerProfile) {
@@ -367,10 +397,48 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
             return res.json(emptyResult);
         }
 
-        const staffOrClause = [
-            ...(unitId ? [{ unitId }] : []),
-            ...(centerId ? [{ centerId }] : [])
-        ];
+        let targetUnitIds: string[] = [];
+        if (unitId) {
+            targetUnitIds.push(unitId);
+            if (managerProfile.unit?.type === 'FACULTY') {
+                const facultyCode = managerProfile.unit.code || '';
+                const mapping: Record<string, string[]> = {
+                    'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                    'FAC-LAW': ['DEP-LAW'],
+                    'FAC-SOCIA': ['DEP-POL'],
+                    'FAC-MANAG': ['DEP-ACC'],
+                    'FAC-EDUCA': ['DEP-EDT'],
+                    'FAC-HEALT': ['DEP-PBH'],
+                    'FAC-AGRIC': ['DEP-AGR'],
+                    'FAC-ARTS': ['DEP-ART'],
+                    'FAC-COMPU': ['DEP-CMP']
+                };
+                const deptCodes = mapping[facultyCode] || [];
+                if (deptCodes.length > 0) {
+                    const deptUnits = await prisma.unit.findMany({
+                        where: { code: { in: deptCodes } },
+                        select: { id: true }
+                    });
+                    targetUnitIds.push(...deptUnits.map(d => d.id));
+                }
+            }
+        }
+
+        const staffFilter = targetUnitIds.length > 0
+            ? { unitId: { in: targetUnitIds } }
+            : (centerId ? { centerId } : null);
+
+        if (!staffFilter) {
+            const emptyResult = {
+                totalStaff: 0,
+                activeLeaves: 0,
+                pendingLeaves: 0,
+                pendingAper: 0,
+                activeQueries: 0
+            };
+            await redisService.set(CACHE_KEY, emptyResult, 30);
+            return res.json(emptyResult);
+        }
 
         const today = new Date();
 
@@ -386,7 +454,8 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
                 where: {
                     isActive: true,
                     staffProfile: {
-                        OR: staffOrClause
+                        isDeleted: false,
+                        ...staffFilter
                     }
                 }
             }),
@@ -394,33 +463,25 @@ export const getManagerDashboardStats = async (req: Request, res: Response) => {
                 where: {
                     status: LeaveStatus.APPROVED,
                     endDate: { gte: today },
-                    staff: {
-                        OR: staffOrClause
-                    }
+                    staff: staffFilter
                 }
             }),
             prisma.leaveRequest.count({
                 where: {
                     status: LeaveStatus.PENDING,
-                    staff: {
-                        OR: staffOrClause
-                    }
+                    staff: staffFilter
                 }
             }),
             prisma.aperForm.count({
                 where: {
                     status: AperStatus.SUBMITTED,
-                    staff: {
-                        OR: staffOrClause
-                    }
+                    staff: staffFilter
                 }
             }),
             prisma.staffQuery.count({
                 where: {
                     status: 'OPEN',
-                    staff: {
-                        OR: staffOrClause
-                    }
+                    staff: staffFilter
                 }
             })
         ]);
@@ -599,12 +660,12 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
         let userCenterId: string | null = null;
         let unitName = 'Registry / Headquarters';
         let unitType = 'HEADQUARTERS';
-
+        let targetUnitIds: string[] = [];
         if (userId) {
             const profile = await prisma.staffProfile.findUnique({
                 where: { userId },
                 include: {
-                    unit: { select: { id: true, name: true, type: true } },
+                    unit: { select: { id: true, name: true, type: true, code: true } },
                     studyCenter: { select: { id: true, name: true, code: true } }
                 }
             });
@@ -621,6 +682,32 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
             } else if (profile?.department) {
                 unitName = String(profile.department).replace(/_/g, ' ');
             }
+
+            if (userUnitId) {
+                targetUnitIds.push(userUnitId);
+                if (profile?.unit?.type === 'FACULTY') {
+                    const facultyCode = profile.unit.code || '';
+                    const mapping: Record<string, string[]> = {
+                        'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                        'FAC-LAW': ['DEP-LAW'],
+                        'FAC-SOCIA': ['DEP-POL'],
+                        'FAC-MANAG': ['DEP-ACC'],
+                        'FAC-EDUCA': ['DEP-EDT'],
+                        'FAC-HEALT': ['DEP-PBH'],
+                        'FAC-AGRIC': ['DEP-AGR'],
+                        'FAC-ARTS': ['DEP-ART'],
+                        'FAC-COMPU': ['DEP-CMP']
+                    };
+                    const deptCodes = mapping[facultyCode] || [];
+                    if (deptCodes.length > 0) {
+                        const deptUnits = await prisma.unit.findMany({
+                            where: { code: { in: deptCodes } },
+                            select: { id: true }
+                        });
+                        targetUnitIds.push(...deptUnits.map(d => d.id));
+                    }
+                }
+            }
         }
 
         const isGlobalHQAdmin = (
@@ -631,13 +718,11 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
         const isRegistry = userRole === Role.HR_ADMIN || userRole === Role.SUPER_USER || userRole === Role.ADMIN || userRole === Role.VICE_CHANCELLOR;
         const isUnitManager = userRole === Role.STUDY_CENTER_MANAGER || userRole === Role.UNIT_HEAD || userRole === Role.UNIT_ADMIN;
 
-        const hasUnitPlacement = Boolean(userUnitId || userCenterId);
-        const unitScopeFilter = hasUnitPlacement ? {
-            OR: [
-                ...(userUnitId ? [{ unitId: userUnitId }] : []),
-                ...(userCenterId ? [{ centerId: userCenterId }] : [])
-            ]
-        } : null;
+        const unitScopeFilter = targetUnitIds.length > 0
+            ? { unitId: { in: targetUnitIds } }
+            : (userCenterId ? { centerId: userCenterId } : null);
+
+        const hasUnitPlacement = Boolean(unitScopeFilter);
 
         const today = new Date();
 

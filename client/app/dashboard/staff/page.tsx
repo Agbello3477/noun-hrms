@@ -77,9 +77,12 @@ export default function StaffPage() {
     const [page, setPage] = useState(1);
     const [pageSize] = useState(12);
 
+    const staffCacheKey = user ? `noun_staff_list_cache_${user.id}` : 'noun_staff_list_cache';
+
     useEffect(() => {
+        if (!user) return;
         try {
-            const cachedStaff = sessionStorage.getItem('noun_staff_list_cache');
+            const cachedStaff = sessionStorage.getItem(staffCacheKey);
             if (cachedStaff) {
                 setStaffList(JSON.parse(cachedStaff));
                 setLoading(false);
@@ -87,7 +90,7 @@ export default function StaffPage() {
             const cachedOrg = sessionStorage.getItem('noun_org_structure_cache');
             if (cachedOrg) setOrgData(JSON.parse(cachedOrg));
         } catch {}
-    }, []);
+    }, [user, staffCacheKey]);
 
     const fetchStaffAndOrg = async () => {
         try {
@@ -98,7 +101,7 @@ export default function StaffPage() {
             ]);
             if (staffRes.data) {
                 setStaffList(staffRes.data);
-                try { sessionStorage.setItem('noun_staff_list_cache', JSON.stringify(staffRes.data)); } catch {}
+                try { sessionStorage.setItem(staffCacheKey, JSON.stringify(staffRes.data)); } catch {}
             }
             if (orgRes.data) {
                 setOrgData(orgRes.data);

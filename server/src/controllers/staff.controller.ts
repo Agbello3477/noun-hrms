@@ -20,11 +20,15 @@ export const getAllStaff = async (req: Request, res: Response) => {
         const isGlobalAdmin = requesterRole === Role.SUPER_USER || requesterRole === Role.VICE_CHANCELLOR;
 
         // Fetch Requester Profile for Placement Scoping
-        let requesterProfile: { unitId: string | null; centerId: string | null } | null = null;
+        let requesterProfile: { unitId: string | null; centerId: string | null; unit?: { id: string; type: string; code: string | null } | null } | null = null;
         if (requesterId) {
             requesterProfile = await prisma.staffProfile.findUnique({
                 where: { userId: requesterId },
-                select: { unitId: true, centerId: true }
+                select: {
+                    unitId: true,
+                    centerId: true,
+                    unit: { select: { id: true, type: true, code: true } }
+                }
             });
         }
 
@@ -84,10 +88,35 @@ export const getAllStaff = async (req: Request, res: Response) => {
         if (!isHQAdmin) {
             if ([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.HR_ADMIN, Role.ADMIN, Role.STAFF].includes(requesterRole as any)) {
                 if (requesterProfile) {
-                    if (requesterRole === Role.STUDY_CENTER_MANAGER && requesterProfile.centerId) {
+                    if (requesterRole === Role.STUDY_CENTER_MANAGER && requesterProfile.centerId && !requesterProfile.unitId) {
                         profileFilters.centerId = requesterProfile.centerId;
                     } else if (requesterProfile.unitId) {
-                        profileFilters.unitId = requesterProfile.unitId;
+                        if (requesterProfile.unit?.type === 'FACULTY') {
+                            const facultyCode = requesterProfile.unit.code || '';
+                            const mapping: Record<string, string[]> = {
+                                'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                                'FAC-LAW': ['DEP-LAW'],
+                                'FAC-SOCIA': ['DEP-POL'],
+                                'FAC-MANAG': ['DEP-ACC'],
+                                'FAC-EDUCA': ['DEP-EDT'],
+                                'FAC-HEALT': ['DEP-PBH'],
+                                'FAC-AGRIC': ['DEP-AGR'],
+                                'FAC-ARTS': ['DEP-ART'],
+                                'FAC-COMPU': ['DEP-CMP']
+                            };
+                            const deptCodes = mapping[facultyCode] || [];
+                            if (deptCodes.length > 0) {
+                                const deptUnits = await prisma.unit.findMany({
+                                    where: { code: { in: deptCodes } },
+                                    select: { id: true }
+                                });
+                                profileFilters.unitId = { in: [requesterProfile.unitId, ...deptUnits.map(d => d.id)] };
+                            } else {
+                                profileFilters.unitId = requesterProfile.unitId;
+                            }
+                        } else {
+                            profileFilters.unitId = requesterProfile.unitId;
+                        }
                     } else if (requesterProfile.centerId) {
                         profileFilters.centerId = requesterProfile.centerId;
                     } else {
@@ -476,7 +505,13 @@ export const createStaff = async (req: Request, res: Response) => {
             console.error('Failed to send account creation notification:', err);
         });
 
-        await redisService.clearPattern('staff:all:*');
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*'),
+            redisService.clearPattern('hr:analytics:*'),
+            redisService.clearPattern('manager:dashboard:*'),
+            redisService.clearPattern('vc:executive:*')
+        ]);
         res.status(201).json({ message: 'Staff created successfully', user });
 
     } catch (error: any) {
@@ -502,11 +537,50 @@ export const getUnitStaff = async (req: Request, res: Response) => {
         // 1. Get current user's profile to find their Unit/Center
         const headProfile = await prisma.staffProfile.findUnique({
             where: { userId },
-            select: { unitId: true, centerId: true }
+            select: {
+                unitId: true,
+                centerId: true,
+                unit: { select: { id: true, type: true, code: true } }
+            }
         });
 
         if (!headProfile || (!headProfile.unitId && !headProfile.centerId)) {
-            return res.status(403).json({ message: 'You differ not appear to belong to a Unit or Center.' });
+            return res.status(403).json({ message: 'You do not appear to belong to a Unit or Center.' });
+        }
+
+        let targetUnitIds: string[] = [];
+        if (headProfile.unitId) {
+            targetUnitIds.push(headProfile.unitId);
+            if (headProfile.unit?.type === 'FACULTY') {
+                const facultyCode = headProfile.unit.code || '';
+                const mapping: Record<string, string[]> = {
+                    'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                    'FAC-LAW': ['DEP-LAW'],
+                    'FAC-SOCIA': ['DEP-POL'],
+                    'FAC-MANAG': ['DEP-ACC'],
+                    'FAC-EDUCA': ['DEP-EDT'],
+                    'FAC-HEALT': ['DEP-PBH'],
+                    'FAC-AGRIC': ['DEP-AGR'],
+                    'FAC-ARTS': ['DEP-ART'],
+                    'FAC-COMPU': ['DEP-CMP']
+                };
+                const deptCodes = mapping[facultyCode] || [];
+                if (deptCodes.length > 0) {
+                    const deptUnits = await prisma.unit.findMany({
+                        where: { code: { in: deptCodes } },
+                        select: { id: true }
+                    });
+                    targetUnitIds.push(...deptUnits.map(d => d.id));
+                }
+            }
+        }
+
+        const staffFilter = targetUnitIds.length > 0
+            ? { unitId: { in: targetUnitIds } }
+            : (headProfile.centerId ? { centerId: headProfile.centerId } : null);
+
+        if (!staffFilter) {
+            return res.json([]);
         }
 
         // 2. Fetch staff belonging to that Unit or Center
@@ -514,10 +588,8 @@ export const getUnitStaff = async (req: Request, res: Response) => {
             where: {
                 isActive: true,
                 staffProfile: {
-                    OR: [
-                        ...(headProfile.unitId ? [{ unitId: headProfile.unitId }] : []),
-                        ...(headProfile.centerId ? [{ centerId: headProfile.centerId }] : [])
-                    ]
+                    isDeleted: false,
+                    ...staffFilter
                 }
             },
             include: {
@@ -755,8 +827,14 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             }
         }
 
-        await redisService.clearPattern('staff:all:*');
-        await redisService.del(`user:session:${user.id}`);
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*'),
+            redisService.clearPattern('hr:analytics:*'),
+            redisService.clearPattern('manager:dashboard:*'),
+            redisService.clearPattern('vc:executive:*'),
+            redisService.del(`user:session:${user.id}`)
+        ]);
         res.json({ message: 'Profile updated successfully', passportUrl });
 
     } catch (error) {
@@ -1217,7 +1295,13 @@ export const deleteStaffNoId = async (req: Request, res: Response) => {
         ]);
 
         // Invalidate Redis caches
-        await redisService.clearPattern('staff:all:*');
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*'),
+            redisService.clearPattern('hr:analytics:*'),
+            redisService.clearPattern('manager:dashboard:*'),
+            redisService.clearPattern('vc:executive:*')
+        ]);
         for (const uid of userIds) {
             await redisService.del(`user:session:${uid}`);
         }

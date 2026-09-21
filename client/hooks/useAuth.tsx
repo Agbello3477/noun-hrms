@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import api from '../lib/api';
 import { useRouter } from 'next/navigation';
+import { clearSwrMemoryCache } from './useSwrData';
 
 
 interface User {
@@ -186,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = (token: string, userData: User) => {
+        clearSwrMemoryCache();
         if (typeof window !== 'undefined') {
             sessionStorage.setItem('token', token);
             try {
@@ -204,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = (currentPath?: any) => {
+        clearSwrMemoryCache();
         if (typeof window !== 'undefined') {
             if (currentPath && typeof currentPath === 'string') {
                 sessionStorage.setItem('auth_return_url', currentPath);

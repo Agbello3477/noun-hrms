@@ -170,30 +170,42 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
         if (unit) {
             targetUnitIds.push(unit.id);
             if (unit.type === 'FACULTY') {
-                const relatedUnits = await prisma.unit.findMany({
-                    where: {
-                        OR: [
-                            { type: 'DEPARTMENT' },
-                            { code: { startsWith: unit.code ? unit.code.replace('FAC-', 'DEP-') : '' } }
-                        ]
-                    },
-                    select: { id: true }
-                });
-                targetUnitIds.push(...relatedUnits.map(u => u.id));
+                const facultyCode = unit.code || '';
+                const mapping: Record<string, string[]> = {
+                    'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                    'FAC-LAW': ['DEP-LAW'],
+                    'FAC-SOCIA': ['DEP-POL'],
+                    'FAC-MANAG': ['DEP-ACC'],
+                    'FAC-EDUCA': ['DEP-EDT'],
+                    'FAC-HEALT': ['DEP-PBH'],
+                    'FAC-AGRIC': ['DEP-AGR'],
+                    'FAC-ARTS': ['DEP-ART'],
+                    'FAC-COMPU': ['DEP-CMP']
+                };
+                const deptCodes = mapping[facultyCode] || [];
+                if (deptCodes.length > 0) {
+                    const relatedUnits = await prisma.unit.findMany({
+                        where: { code: { in: deptCodes } },
+                        select: { id: true }
+                    });
+                    targetUnitIds.push(...relatedUnits.map(u => u.id));
+                }
             }
+        }
+
+        const staffFilter = targetUnitIds.length > 0
+            ? { unitId: { in: targetUnitIds } }
+            : (centerId ? { centerId } : null);
+
+        if (!staffFilter) {
+            return res.json([]);
         }
 
         const leaves = await prisma.leaveRequest.findMany({
             where: {
                 status: { in: [LeaveStatus.PENDING, LeaveStatus.RECOMMENDED] },
                 staffId: { not: headProfile.id },
-                staff: {
-                    OR: [
-                        ...(targetUnitIds.length > 0 ? [{ unitId: { in: targetUnitIds } }] : []),
-                        ...(centerId ? [{ centerId }] : []),
-                        ...(!unit && !centerId ? [{}] : [])
-                    ]
-                }
+                staff: staffFilter
             },
             include: {
                 staff: {

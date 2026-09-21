@@ -6,6 +6,22 @@ import api from '../lib/api';
 // In-Memory global cache map for instant 0ms retrieval
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 
+export function clearSwrMemoryCache() {
+  memoryCache.clear();
+  if (typeof window !== 'undefined') {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith('swr_cache_') || k.startsWith('noun_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => sessionStorage.removeItem(k));
+    } catch {}
+  }
+}
+
 interface SwrOptions<T> {
   initialData?: T;
   revalidateOnFocus?: boolean;
