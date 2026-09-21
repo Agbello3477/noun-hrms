@@ -25,11 +25,16 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
 
         const settings = getEmailSettings();
         const resendKey = (process.env.RESEND_API_KEY || settings.resendApiKey || '').trim();
-        const resendFrom = (process.env.RESEND_FROM_EMAIL || settings.resendFromEmail || 'onboarding@resend.dev').trim();
+        let resendFrom = (process.env.RESEND_FROM_EMAIL || settings.resendFromEmail || 'onboarding@resend.dev').trim();
+        
+        // Ensure standard "Name <email>" format for Resend if not already specified
+        if (resendFrom && !resendFrom.includes('<') && resendFrom.includes('@')) {
+            resendFrom = `NOUN HRMS <${resendFrom}>`;
+        }
 
-        // If a real Resend API Key exists, dispatch via Resend immediately
+        // 1. If a real Resend API Key exists, dispatch via Resend immediately
         if (resendKey) {
-            console.log(`[EMAIL_SERVICE] Dispatching via Resend API (${resendFrom}) to ${to}...`);
+            console.log(`[EMAIL_SERVICE] Dispatching via Resend API (From: ${resendFrom}) to: ${to}...`);
             const resendClient = new Resend(resendKey);
             const response = await resendClient.emails.send({
                 from: resendFrom,
@@ -39,20 +44,24 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
             });
 
             if (response.error) {
-                console.error(`[EMAIL_SERVICE] Resend API Error:`, response.error);
-                throw new Error(response.error.message);
+                console.error(`[EMAIL_SERVICE] Resend API Rejected Dispatch:`, response.error);
+                throw new Error(`Resend Error (${response.error.name}): ${response.error.message}`);
             }
-            console.log(`[EMAIL_SERVICE] Email sent via Resend API to ${to}. Message ID: ${response.data?.id}`);
+            console.log(`[EMAIL_SERVICE] ✅ Email sent via Resend API to ${to}. Message ID: ${response.data?.id}`);
             return true;
         }
 
-        const mockMode = settings.mockEmailMode !== undefined ? settings.mockEmailMode : true;
+        // Check if mock mode is forced or configured
+        const isMockEnv = process.env.MOCK_EMAIL_MODE === 'true';
+        const isLiveEnv = process.env.MOCK_EMAIL_MODE === 'false';
+        const mockMode = isLiveEnv ? false : (isMockEnv || (settings.mockEmailMode !== undefined ? settings.mockEmailMode : false));
+
         if (mockMode) {
             console.log(`[EMAIL_SERVICE] [MOCK MODE ACTIVE] Email simulated to ${to}:\nSubject: ${subject}\nHTML:\n${html}`);
             return true;
         }
 
-        // 2. Custom SMTP Transporter
+        // 2. Custom SMTP Transporter Fallback
         const host = settings.smtpHost || process.env.SMTP_HOST;
         const port = Number(settings.smtpPort || process.env.SMTP_PORT || 587);
         const user = settings.smtpUser || process.env.SMTP_USER;
