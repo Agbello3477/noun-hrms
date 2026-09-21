@@ -42,4 +42,8 @@ router.get('/files/:id', requireRole(fileRoles), getStaffFile);
 router.get('/files', requireRole(fileRoles), getJobFiles);
 router.delete('/files/:id', requireRole(fileRoles), deleteStaffFile);
 
+// Promotion & Annual Maturity Subsystem
+import promotionRoutes from './promotion.routes';
+router.use('/promotions', promotionRoutes);
+
 export default router;

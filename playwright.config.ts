@@ -97,9 +97,9 @@ export default defineConfig({
 
   /* Run local dev/prod server before starting the tests */
   webServer: {
-    command: 'npm run start --workspace=client -- -p 3001',
+    command: 'cp -rf client/.next/static client/.next/standalone/client/.next/ 2>/dev/null; cp -rf client/public client/.next/standalone/client/ 2>/dev/null; PORT=3001 node client/.next/standalone/client/server.js',
     url: 'http://localhost:3001',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120 * 1000,
   },
 });

@@ -129,6 +129,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/payroll', payrollRouter);
 app.use('/api/registry', registryRoutes);
+app.use('/api/v1/registry', registryRoutes);
 app.use('/api/workflow', workflowRoutes);
 app.use('/api/leaves', leaveRoutes);
 app.use('/api/org', orgRoutes);

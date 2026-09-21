@@ -1,132 +1,65 @@
 import cron from 'node-cron';
-import prisma from '../prisma';
-import { sendPromotionNotificationEmail } from '../services/email.service';
+import { PromotionService } from '../services/promotion.service';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Core promotion job — callable by cron OR manually from the API
-// ─────────────────────────────────────────────────────────────────────────────
-export const runPromotionJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'): Promise<{
+/**
+ * Core promotion maturity worker — callable by cron OR manually from the API.
+ * Evaluates cadre-based intervals, filters integrity holds (queries/suspensions), stages dockets, and dispatches multi-tier notifications.
+ */
+export const runPromotionJob = async (
+    triggeredBy: 'CRON' | 'MANUAL' = 'CRON',
+    cycleYear: number = new Date().getFullYear()
+): Promise<{
     processed: number;
     skipped: number;
     errors: string[];
     log: string[];
+    maturedCount?: number;
+    integrityHoldsCount?: number;
 }> => {
-    const log: string[] = [];
-    const errors: string[] = [];
-    const calendarYear = new Date().getFullYear();
-    let processed = 0;
-    let skipped = 0;
-
-    const startTs = new Date().toISOString();
-    log.push(`[${startTs}] 🚀 Promotion Cron Job STARTED (trigger=${triggeredBy}, year=${calendarYear})`);
-    console.log(`[PROMOTION_CRON] Job started at ${startTs}. Trigger: ${triggeredBy}`);
-
     try {
-        // 1 ─ Query all staff flagged as due for promotion (not yet logged for this year)
-        const dueStaff = await prisma.staffProfile.findMany({
-            where: {
-                isDueForPromotion: true,
-                isDeleted: false,
-                status: 'ACTIVE',
-            },
-            include: {
-                user: {
-                    select: { id: true, email: true, name: true }
-                },
-                unit: { select: { name: true } },
-                promotionLogs: {
-                    where: { calendarYear },
-                    select: { id: true }
-                }
-            }
-        });
-
-        log.push(`[PROMOTION_CRON] Found ${dueStaff.length} staff flagged as due for promotion.`);
-        console.log(`[PROMOTION_CRON] Processing ${dueStaff.length} staff members...`);
-
-        for (const profile of dueStaff) {
-            // Skip if already logged for this calendar year (idempotency guard)
-            if (profile.promotionLogs.length > 0) {
-                skipped++;
-                log.push(`[SKIP] Staff ${profile.staffId} already has a promotion log for ${calendarYear}.`);
-                continue;
-            }
-
-            try {
-                const staffName = `${profile.surname || ''} ${profile.otherNames || ''}`.trim() || profile.user?.name || 'Staff Member';
-                const staffEmail = profile.user?.email;
-                const staffId   = profile.staffId || 'N/A';
-                const unitName  = profile.unit?.name || profile.department || 'Unknown Unit';
-
-                // 2 ─ Create PromotionLog record
-                await prisma.promotionLog.create({
-                    data: {
-                        staffProfileId: profile.id,
-                        snapshotRank:   profile.rank || profile.currentRank || null,
-                        snapshotLevel:  profile.level ? `${profile.level}${profile.step ? '/' + profile.step : ''}` : null,
-                        snapshotUnit:   unitName,
-                        status:         'DUE_FOR_PROMOTION',
-                        calendarYear,
-                        triggeredBy,
-                        cronExecutedAt: new Date(),
-                    }
-                });
-
-                // 3 ─ In-app notification
-                if (profile.user?.id) {
-                    await prisma.notification.create({
-                        data: {
-                            userId:  profile.user.id,
-                            title:   '⭐ Promotion Eligibility Notice',
-                            message: 'You are due for promotion this year. The Registry will communicate the official interview/review date to you in due course.',
-                            type:    'SUCCESS',
-                            link:    '/dashboard/profile',
-                        }
-                    });
-                }
-
-                // 4 ─ Email alert
-                if (staffEmail) {
-                    await sendPromotionNotificationEmail(staffEmail, staffName, staffId);
-                }
-
-                processed++;
-                log.push(`[OK] Processed: ${staffName} (${staffId}) — rank: ${profile.rank || 'N/A'}, unit: ${unitName}`);
-                console.log(`[PROMOTION_CRON] ✅ Notified: ${staffName} <${staffEmail}>`);
-
-            } catch (innerErr: any) {
-                const msg = `[ERROR] Failed for profile ${profile.id}: ${innerErr.message}`;
-                errors.push(msg);
-                log.push(msg);
-                console.error(`[PROMOTION_CRON] ❌ ${msg}`);
-            }
-        }
-
-    } catch (outerErr: any) {
-        const msg = `[FATAL] Promotion job crashed: ${outerErr.message}`;
-        errors.push(msg);
-        log.push(msg);
-        console.error(`[PROMOTION_CRON] ❌ ${msg}`);
+        const result = await PromotionService.evaluateMaturityCycle(cycleYear, undefined, triggeredBy);
+        return {
+            processed: result.totalCandidates,
+            skipped: result.skippedCount,
+            errors: result.errors,
+            log: result.log,
+            maturedCount: result.maturedCount,
+            integrityHoldsCount: result.integrityHoldsCount
+        };
+    } catch (error: any) {
+        console.error('[PROMOTION_CRON] Fatal execution failure:', error);
+        return {
+            processed: 0,
+            skipped: 0,
+            errors: [error.message || 'Fatal error in promotion maturity worker'],
+            log: [`[FATAL] ${error.message}`]
+        };
     }
-
-    const endTs = new Date().toISOString();
-    const summary = `[${endTs}] ✅ Job COMPLETE — processed=${processed}, skipped=${skipped}, errors=${errors.length}`;
-    log.push(summary);
-    console.log(`[PROMOTION_CRON] ${summary}`);
-
-    return { processed, skipped, errors, log };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Schedule: 00:00 on January 1st every year  →  "0 0 1 1 *"
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Scheduled background workers for Promotion Maturity Tracking:
+ * 1. Annual Main Cycle Run: 00:00 on January 1st every year (WAT) -> "0 0 1 1 *"
+ * 2. Quarterly Refresh & Staging Check: 00:00 on April 1st, July 1st, October 1st (WAT) -> "0 0 1 4,7,10 *"
+ */
 export const schedulePromotionCron = () => {
+    // Annual January 1st Run
     cron.schedule('0 0 1 1 *', async () => {
-        console.log('[PROMOTION_CRON] 🕛 January 1st triggered — running annual promotion check...');
-        await runPromotionJob('CRON');
+        const year = new Date().getFullYear();
+        console.log(`[PROMOTION_CRON] 🕛 January 1st annual promotion cycle triggered for year ${year}...`);
+        await runPromotionJob('CRON', year);
     }, {
-        timezone: 'Africa/Lagos'   // WAT — West Africa Time (UTC+1)
+        timezone: 'Africa/Lagos' // WAT (UTC+1)
     });
 
-    console.log('[PROMOTION_CRON] ✅ Annual promotion cron scheduled (Jan 1 00:00 WAT).');
+    // Quarterly Maturity Alignment (evaluates current & upcoming cycle)
+    cron.schedule('0 0 1 4,7,10 *', async () => {
+        const year = new Date().getFullYear();
+        console.log(`[PROMOTION_CRON] 🔄 Quarterly promotion maturity alignment check for year ${year}...`);
+        await runPromotionJob('CRON', year);
+    }, {
+        timezone: 'Africa/Lagos'
+    });
+
+    console.log('[PROMOTION_CRON] ✅ Promotion maturity background workers scheduled (Annual Jan 1 + Quarterly WAT).');
 };

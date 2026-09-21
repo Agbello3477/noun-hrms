@@ -82,6 +82,9 @@ model User {
   sentVoicemails     Voicemail[]    @relation("SentVoicemails")
   receivedVoicemails Voicemail[]    @relation("ReceivedVoicemails")
 
+  // Promotion Audit Logs
+  promotionAuditLogs PromotionAuditLog[] @relation("PromotionAuditActor")
+
   @@map("users")
 }
 
@@ -129,6 +132,23 @@ enum Cadre {
   JUNIOR
   MEDICAL
   SECURITY
+}
+
+enum CadreType {
+  ACADEMIC
+  SENIOR_ADMIN
+  JUNIOR_STAFF
+  TECHNICAL
+  MEDICAL
+  SECURITY
+}
+
+enum PromotionEligibilityStatus {
+  PENDING_MATURITY
+  DUE_FOR_REVIEW
+  UNDER_EVALUATION
+  APPROVED
+  DEFERRED
 }
 
 enum UnitType {
@@ -235,13 +255,25 @@ model StaffProfile {
   // Phase 13b: APER
   aperForms       AperForm[]
 
-  // Promotion Tracking
-  dateOfLastPromotion   DateTime?
+  // Promotion Tracking & Annual Maturity Subsystem
+  dateOfLastPromotion   DateTime? // Retained for backward compatibility
+  lastPromotionDate     DateTime? // Canonical promotion / appointment maturity date
+  cadreType             CadreType?
+  currentGradeLevel     String?   // e.g. CONUASS 04, CONTISS 11
+  nextDueYear           Int?      // Indexed for fast annual eligibility queries
+  nextDueDate           DateTime? // Exact maturity milestone date
+  eligibilityStatus     PromotionEligibilityStatus @default(PENDING_MATURITY)
+  registryOverride      Boolean   @default(false)
+  overrideReason        String?   @db.Text
+  evaluatedForYear      Int?
+
   currentRank           String?   // Current rank/grade at time of flagging
   isDueForPromotion     Boolean   @default(false) // Registry-toggled flag
   promotionFlaggedAt    DateTime? // When Registry flagged this staff
   promotionFlaggedById  String?   // Who in Registry flagged them
   promotionLogs         PromotionLog[]
+  promotionAuditLogs    PromotionAuditLog[]
+  promotionCandidates   PromotionBatchCandidate[]
 
   // Retirement Tracking
   dateOfBirth              DateTime?
@@ -273,6 +305,9 @@ model StaffProfile {
   @@index([status])
   @@index([isDueForPromotion])
   @@index([isDeleted, status])
+  @@index([nextDueYear])
+  @@index([eligibilityStatus])
+  @@index([cadreType])
 }
 
 model AcademicProgramme {
@@ -909,6 +944,80 @@ model PromotionLog {
   @@map("promotion_logs")
   @@index([staffProfileId])
   @@index([calendarYear])
+  @@index([status])
+}
+
+// Immutable Registry Promotion Audit Log for Schedule Overrides & Lifecycle Governance
+model PromotionAuditLog {
+  id              String                      @id @default(uuid())
+
+  staffProfileId  String
+  staffProfile    StaffProfile                @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  actorId         String
+  actor           User                        @relation("PromotionAuditActor", fields: [actorId], references: [id])
+
+  action          String                      // MANUAL_OVERRIDE, SCHEDULE_CONFIG, CRON_EVALUATED, STATUS_TRANSITION, DEFERRED, APPROVED_FOR_DOCKET
+  previousDueYear Int?
+  newDueYear      Int?
+  previousStatus  PromotionEligibilityStatus?
+  newStatus       PromotionEligibilityStatus?
+  reason          String                      @db.Text
+  metadata        Json?
+
+  createdAt       DateTime                    @default(now())
+
+  @@map("promotion_audit_logs")
+  @@index([staffProfileId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// Annual Promotion Batch Docket Table
+model PromotionBatch {
+  id             String                    @id @default(uuid())
+  cycleYear      Int                       @unique
+  status         String                    @default("OPEN") // OPEN, SUBMITTED_TO_COUNCIL, CONCLUDED
+  candidateCount Int                       @default(0)
+  generatedAt    DateTime                  @default(now())
+  notes          String?                   @db.Text
+
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  candidates     PromotionBatchCandidate[]
+
+  @@map("annual_promotion_batches")
+  @@index([cycleYear])
+  @@index([status])
+}
+
+// Candidates staged in the Annual Promotion Docket
+model PromotionBatchCandidate {
+  id                     String                     @id @default(uuid())
+
+  batchId                String
+  batch                  PromotionBatch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  staffProfileId         String
+  staffProfile           StaffProfile               @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  cadreSnapshot          String?
+  rankSnapshot           String?
+  levelSnapshot          String?
+  unitSnapshot           String?
+  status                 PromotionEligibilityStatus @default(DUE_FOR_REVIEW)
+  integrityClear         Boolean                    @default(true)
+  disqualificationReason String?                    @db.Text
+
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  @@unique([batchId, staffProfileId])
+  @@map("promotion_batch_candidates")
+  @@index([batchId])
+  @@index([staffProfileId])
   @@index([status])
 }
 
