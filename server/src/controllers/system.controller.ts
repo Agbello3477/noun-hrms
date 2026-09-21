@@ -3,6 +3,7 @@ import prisma from '../prisma';
 import fs from 'fs';
 import path from 'path';
 import { RlsService } from '../services/rls.service';
+import { sendEmail } from '../services/email.service';
 
 export const getAuditLogs = async (req: Request, res: Response) => {
     try {
@@ -317,6 +318,48 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Error in updateSystemSettings:', error);
         res.status(500).json({ message: error?.message || 'Internal server error' });
+    }
+};
+
+export const sendTestEmail = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const targetEmail = (req.body.email || user?.email || '').trim();
+        if (!targetEmail) {
+            return res.status(400).json({ message: "Recipient email is required." });
+        }
+
+        const success = await sendEmail(
+            targetEmail,
+            'NOUN HRMS — Test Gateway Verification',
+            `
+            <div style="font-family: Arial, sans-serif; max-width: 550px; margin: 20px auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <div style="background-color: #006533; color: white; padding: 12px 18px; border-radius: 6px; text-align: center;">
+                    <h3 style="margin: 0; font-size: 18px;">NOUN HRMS Notification Gateway</h3>
+                </div>
+                <div style="padding: 18px 0; color: #334155; line-height: 1.6;">
+                    <p>Hello <strong>${user?.name || 'Administrator'}</strong>,</p>
+                    <p>This is a verification test dispatch from the NOUN Unified Human Resource Management System.</p>
+                    <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 16px 0; border-radius: 4px; font-weight: 500; color: #166534;">
+                        ✅ Your live email delivery provider is configured properly and dispatching messages.
+                    </div>
+                    <p>Staff registration welcome emails, password resets, and transfer notices will now reach inboxes automatically.</p>
+                </div>
+                <div style="font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                    National Open University of Nigeria &mdash; Registry Directorate
+                </div>
+            </div>
+            `
+        );
+
+        if (success) {
+            return res.json({ message: `Test email dispatched successfully to ${targetEmail}. Please check your inbox and spam folder.` });
+        } else {
+            return res.status(500).json({ message: "Email dispatch failed. Please check your SMTP or Resend credentials." });
+        }
+    } catch (error: any) {
+        console.error('Error in sendTestEmail:', error);
+        res.status(500).json({ message: error?.message || 'Failed to dispatch test email.' });
     }
 };
 

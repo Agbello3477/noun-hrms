@@ -51,6 +51,7 @@ export default function SettingsPage() {
     const [dbChecking, setDbChecking] = useState(false);
     const [dbStatus, setDbStatus] = useState<'online' | 'error' | null>(null);
     const [flushingCache, setFlushingCache] = useState(false);
+    const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
     useEffect(() => {
         if (!authLoading && user && !ALLOWED_ROLES.includes(user.role)) {
@@ -92,6 +93,19 @@ export default function SettingsPage() {
             showToast(err.response?.data?.message || 'Failed to save settings.', 'error');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSendTestEmail = async () => {
+        if (!user?.email) return;
+        setSendingTestEmail(true);
+        try {
+            const res = await api.post('/api/system/test-email', { email: user.email });
+            showToast(res.data.message || 'Test email dispatched successfully!', 'success');
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to send test email. Please check your SMTP or Resend credentials.', 'error');
+        } finally {
+            setSendingTestEmail(false);
         }
     };
 
@@ -491,6 +505,12 @@ export default function SettingsPage() {
                                                 </p>
                                             )}
                                         </div>
+
+                                        <button type="button" onClick={handleSendTestEmail} disabled={sendingTestEmail || !canWrite}
+                                            className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-100 transition text-blue-700 w-full md:w-auto">
+                                            {sendingTestEmail ? <RefreshCw className="animate-spin" size={14} /> : <Mail size={14} />}
+                                            Send Test Email
+                                        </button>
 
                                         <button type="button" onClick={handleFlushCache} disabled={flushingCache}
                                             className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition text-gray-700 w-full md:w-auto">
