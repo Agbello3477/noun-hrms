@@ -4,6 +4,8 @@ import { Role } from '@prisma/client';
 import {
     updatePromotionDueDate,
     getPromotionDueList,
+    getPromotionCandidates,
+    syncPromotionCandidates,
     evaluatePromotionCycle,
     batchActionPromotions,
     getPromotionAuditLogs,
@@ -21,8 +23,12 @@ const promotionManageRoles = [Role.HR_ADMIN, Role.VICE_CHANCELLOR, Role.SUPER_US
 // Preview / Calculation helper
 router.get('/calculate', requireRole(promotionViewRoles), calculateMaturityPreview);
 
-// Paginated Due List & Export
+// Paginated Due List & Candidates View
 router.get('/due-list', requireRole(promotionViewRoles), getPromotionDueList);
+router.get('/candidates', requireRole(promotionViewRoles), getPromotionCandidates);
+
+// On-demand Candidate Sync
+router.post('/sync-candidates', requireRole(promotionManageRoles), syncPromotionCandidates);
 
 // Audit trail for a specific staff member
 router.get('/audit-logs/:staffId', requireRole(promotionViewRoles), getPromotionAuditLogs);
@@ -37,3 +43,4 @@ router.post('/evaluate-cycle', requireRole(promotionManageRoles), evaluatePromot
 router.post('/batch-action', requireRole(promotionManageRoles), batchActionPromotions);
 
 export default router;
+

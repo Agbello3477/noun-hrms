@@ -1,10 +1,9 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Calendar, TrendingUp, AlertCircle, Info, Shield } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
+import Button from '../ui/Button';
 
 interface AddStaffModalProps {
     onClose: () => void;
@@ -36,9 +35,20 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
 
         // Career / Role
         role: 'STAFF',
-        cadre: '', // ACADEMIC, SENIOR, etc.
+        cadre: 'ADMINISTRATIVE', // Default
+        cadreType: 'SENIOR_ADMIN',
         level: '',
         step: '',
+        dateOfFirstAppointment: '',
+
+        // Promotion Maturity & Scheduling
+        lastPromotionDate: '',
+        cadreAppraisalRule: 'SENIOR_ADMIN_3',
+        nextPromotionDueYear: '',
+        nextPromotionDueDate: '',
+        isDueImmediately: false,
+        overrideReason: '',
+        isYearOverridden: false,
 
         // Organization
         centerId: '',
@@ -99,18 +109,105 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         }
     }, [currentUser, isHrAdmin]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+    // Live Statutory Calculation for Promotion Maturity
+    const computedPromotionSchedule = useMemo(() => {
+        const baseDateStr = formData.lastPromotionDate || formData.dateOfFirstAppointment;
+        const baseYear = baseDateStr ? new Date(baseDateStr).getFullYear() : new Date().getFullYear();
+        const validBaseYear = isNaN(baseYear) ? new Date().getFullYear() : baseYear;
 
-        if (name === 'stateOfOrigin') {
-            setFormData(prev => ({ ...prev, stateOfOrigin: value, lga: '' }));
+        let interval = 3;
+        let monthDay = '01-01'; // Default January 1st
+        let ruleDescription = 'Senior Administrative / Standard (3-Year Cycle, Jan 1)';
+
+        const rule = formData.cadreAppraisalRule;
+        if (rule === 'ACADEMIC_3' || formData.cadre === 'ACADEMIC' || formData.cadreType === 'ACADEMIC') {
+            interval = 3;
+            monthDay = '10-01'; // October 1st
+            ruleDescription = 'Academic Cadre: 3-Year Statutory Waiting Period (October 1st Review Cycle)';
+        } else if (rule === 'SENIOR_ADMIN_4') {
+            interval = 4;
+            monthDay = '01-01';
+            ruleDescription = 'Senior Administrative (CONTISS 12+): 4-Year Statutory Period for Principal/Directorate Grades (Jan 1)';
+        } else if (rule === 'JUNIOR_2') {
+            interval = 2;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff Cadre: Fast-Track 2-Year Waiting Period (Jan 1)';
+        } else if (rule === 'JUNIOR_3') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff Cadre: Standard 3-Year Waiting Period (Jan 1)';
+        } else if (rule === 'CUSTOM') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Custom Institutional Review Schedule';
+        } else {
+            // Default 3 year
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Standard Institutional 3-Year Review Cycle (Jan 1)';
         }
+
+        const calculatedYear = validBaseYear + interval;
+        const calculatedDate = `${calculatedYear}-${monthDay}`;
+
+        return {
+            calculatedYear,
+            calculatedDate,
+            interval,
+            ruleDescription
+        };
+    }, [formData.lastPromotionDate, formData.dateOfFirstAppointment, formData.cadreAppraisalRule, formData.cadre, formData.cadreType]);
+
+    // Synchronize auto-calculated promotion year & target date when inputs change unless manually overridden
+    useEffect(() => {
+        if (!formData.isYearOverridden) {
+            setFormData(prev => ({
+                ...prev,
+                nextPromotionDueYear: String(computedPromotionSchedule.calculatedYear),
+                nextPromotionDueDate: computedPromotionSchedule.calculatedDate
+            }));
+        }
+    }, [computedPromotionSchedule, formData.isYearOverridden]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value, type } = e.target;
+        const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+
+        setFormData(prev => {
+            const next = { ...prev, [name]: val };
+
+            if (name === 'stateOfOrigin') {
+                next.lga = '';
+            }
+
+            if (name === 'cadre') {
+                if (value === 'ACADEMIC') {
+                    next.cadreType = 'ACADEMIC';
+                    next.cadreAppraisalRule = 'ACADEMIC_3';
+                } else if (value === 'JUNIOR') {
+                    next.cadreType = 'JUNIOR_STAFF';
+                    next.cadreAppraisalRule = 'JUNIOR_3';
+                } else if (value === 'TECHNICAL') {
+                    next.cadreType = 'TECHNICAL';
+                    next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                } else if (value === 'MEDICAL') {
+                    next.cadreType = 'MEDICAL';
+                    next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                } else if (value === 'SECURITY') {
+                    next.cadreType = 'SECURITY';
+                    next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                } else {
+                    next.cadreType = 'SENIOR_ADMIN';
+                    next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                }
+            }
+
+            return next;
+        });
 
         // Check for HQ Selection to trigger conditional logic
         if (name === 'centerId') {
             const selectedCenter = orgData.centers.find(c => c.id === value);
-            // Check if code contains HQ or is the Abuja HQ
             const isHQSelected = selectedCenter?.code === 'HQ-001';
             setIsHQ(isHQSelected);
 
@@ -121,19 +218,33 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         }
     };
 
+    const handleNextYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        const isOverridden = Number(val) !== computedPromotionSchedule.calculatedYear;
+        setFormData(prev => ({
+            ...prev,
+            nextPromotionDueYear: val,
+            isYearOverridden: isOverridden
+        }));
+    };
+
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { value } = e.target;
-        // Keep only digits
         const digits = value.replace(/\D/g, '');
-        // Limit to 11 characters
         const limitedDigits = digits.slice(0, 11);
         setFormData(prev => ({ ...prev, phone: limitedDigits }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+
+        if (formData.isYearOverridden && (!formData.overrideReason || formData.overrideReason.trim().length < 5)) {
+            setError('A valid administrative override justification (minimum 5 characters) is required when modifying the calculated promotion year.');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             let dbRole = formData.role;
@@ -179,8 +290,18 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 phone: submittedPhone,
                 role: dbRole,
                 rank: assignedRank,
-                // Ensure unitId is null if empty string
                 unitId: formData.unitId || undefined,
+
+                // Promotion Fields
+                lastPromotionDate: formData.lastPromotionDate || formData.dateOfFirstAppointment || undefined,
+                dateOfFirstAppointment: formData.dateOfFirstAppointment || undefined,
+                cadreType: formData.cadreType,
+                currentGradeLevel: formData.level ? `CONTISS ${formData.level}` : undefined,
+                nextPromotionDueYear: formData.nextPromotionDueYear ? parseInt(formData.nextPromotionDueYear, 10) : computedPromotionSchedule.calculatedYear,
+                nextPromotionDueDate: formData.nextPromotionDueDate || computedPromotionSchedule.calculatedDate,
+                isDueImmediately: formData.isDueImmediately,
+                registryOverride: formData.isYearOverridden,
+                overrideReason: formData.isYearOverridden ? formData.overrideReason : undefined,
 
                 // Phase 9 Logic: Facilitator Info
                 facilitatorInfo: formData.cadre === 'ACADEMIC' ? {
@@ -208,16 +329,20 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
             <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                <div className="px-6 py-4 flex items-center justify-between border-b flex-shrink-0">
-                    <h3 className="text-xl font-bold text-gray-900">Add New Staff Member</h3>
+                <div className="px-6 py-4 flex items-center justify-between border-b flex-shrink-0 bg-slate-50">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900">Add New Staff Member</h3>
+                        <p className="text-xs text-gray-500">Create new staff file with complete bio-data & career promotion milestones</p>
+                    </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 rounded-lg transition-colors">
                         <X size={24} />
                     </button>
                 </div>
 
                 {error && (
-                    <div className="mx-6 mt-4 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-                        {error}
+                    <div className="mx-6 mt-4 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center gap-2">
+                        <AlertCircle size={18} className="flex-shrink-0 text-red-600" />
+                        <span>{error}</span>
                     </div>
                 )}
 
@@ -320,7 +445,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
 
                     {/* Section 2: Organization & Career */}
                     <div className="space-y-4">
-                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Official Service Record</h4>
+                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Official Service Record & Placement</h4>
 
                         {!isHrAdmin ? (
                             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm">
@@ -389,11 +514,11 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     value={formData.cadre}
                                     onChange={handleChange}
                                 >
-                                    <option value="">-- Select Cadre --</option>
                                     <option value="ACADEMIC">Academic Staff</option>
-                                    <option value="NON_ACADEMIC">Non-Academic Staff</option>
+                                    <option value="ADMINISTRATIVE">Administrative Staff</option>
                                     <option value="SENIOR">Senior Staff</option>
                                     <option value="JUNIOR">Junior Staff</option>
+                                    <option value="TECHNICAL">Technical</option>
                                     <option value="MEDICAL">Medical</option>
                                     <option value="SECURITY">Security</option>
                                 </select>
@@ -408,6 +533,17 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                 <input type="number" name="step" required placeholder="e.g. 2" className="mt-1 w-full border rounded p-2"
                                     value={formData.step} onChange={handleChange} />
                             </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700">Date of First Appointment</label>
+                            <input
+                                type="date"
+                                name="dateOfFirstAppointment"
+                                className="mt-1 w-full border rounded p-2 text-black"
+                                value={formData.dateOfFirstAppointment}
+                                onChange={handleChange}
+                            />
                         </div>
 
                         {isHrAdmin ? (
@@ -446,7 +582,134 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                         )}
                     </div>
 
-                    {/* Section 3: Academic Specifics */}
+                    <hr />
+
+                    {/* Section 3: Promotion Maturity & Scheduling Subsection */}
+                    <div className="space-y-4 bg-emerald-50/50 p-5 rounded-xl border border-emerald-200">
+                        <div className="flex items-center gap-2">
+                            <TrendingUp className="text-emerald-700" size={18} />
+                            <h4 className="text-sm font-bold text-emerald-900 uppercase tracking-wider">
+                                Promotion Maturity & Scheduling
+                            </h4>
+                        </div>
+                        <p className="text-xs text-emerald-700">
+                            Establish statutory maturity dates and legacy promotion milestones for automated tracking and appraisal staging.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700">
+                                    Last Promotion / Substantive Appointment Date
+                                </label>
+                                <input
+                                    type="date"
+                                    name="lastPromotionDate"
+                                    className="mt-1 w-full border border-emerald-300 rounded-lg p-2 text-black bg-white focus:ring-2 focus:ring-emerald-500"
+                                    value={formData.lastPromotionDate}
+                                    onChange={handleChange}
+                                />
+                                <span className="text-[10px] text-gray-500 block mt-1">Defaults to first appointment date if blank.</span>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700">
+                                    Cadre & Appraisal Rule
+                                </label>
+                                <select
+                                    name="cadreAppraisalRule"
+                                    className="mt-1 w-full border border-emerald-300 rounded-lg p-2 bg-white focus:ring-2 focus:ring-emerald-500 text-sm font-medium"
+                                    value={formData.cadreAppraisalRule}
+                                    onChange={handleChange}
+                                >
+                                    <option value="ACADEMIC_3">Academic — 3 Year Cycle (Oct 1)</option>
+                                    <option value="SENIOR_ADMIN_3">Senior Admin — 3 Year Cycle (Jan 1)</option>
+                                    <option value="SENIOR_ADMIN_4">Senior Admin (CONTISS 12+) — 4 Year Cycle (Jan 1)</option>
+                                    <option value="JUNIOR_2">Junior Staff — 2 Year Fast-Track (Jan 1)</option>
+                                    <option value="JUNIOR_3">Junior Staff — 3 Year Cycle (Jan 1)</option>
+                                    <option value="CUSTOM">Custom Institutional Schedule</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Real-time Dynamic Calculation Preview */}
+                        <div className="bg-white p-3.5 rounded-lg border border-emerald-200 text-xs text-emerald-900 space-y-2">
+                            <div className="flex items-center gap-1.5 font-semibold">
+                                <Info size={14} className="text-emerald-600" />
+                                <span>Statutory Rule Applied:</span>
+                            </div>
+                            <p className="text-emerald-800 text-[11px] font-medium bg-emerald-50 p-2 rounded border border-emerald-150">
+                                {computedPromotionSchedule.ruleDescription}
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-gray-700">Calculated Next Promotion Year</label>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <input
+                                            type="number"
+                                            name="nextPromotionDueYear"
+                                            value={formData.nextPromotionDueYear}
+                                            onChange={handleNextYearChange}
+                                            className="w-full border rounded-lg p-2 font-mono font-bold text-sm bg-white"
+                                            placeholder={String(computedPromotionSchedule.calculatedYear)}
+                                        />
+                                        {formData.isYearOverridden && (
+                                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded whitespace-nowrap">
+                                                Overridden
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-gray-700">Target Effective Date</label>
+                                    <input
+                                        type="date"
+                                        name="nextPromotionDueDate"
+                                        value={formData.nextPromotionDueDate}
+                                        onChange={handleChange}
+                                        className="w-full border rounded-lg p-2 font-mono text-sm bg-white mt-1"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Override Justification Note */}
+                            {formData.isYearOverridden && (
+                                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-1 animate-in fade-in duration-200">
+                                    <label className="block text-[11px] font-bold text-amber-900">
+                                        Override Justification (Mandatory) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="overrideReason"
+                                        required={formData.isYearOverridden}
+                                        placeholder="State official reason for non-standard promotion year (e.g. Approved Accelerated Promotion)"
+                                        value={formData.overrideReason}
+                                        onChange={handleChange}
+                                        className="w-full border border-amber-300 rounded p-2 text-xs bg-white"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Immediate Review Docket Inclusion Checkbox */}
+                            <div className="pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        name="isDueImmediately"
+                                        checked={formData.isDueImmediately}
+                                        onChange={handleChange}
+                                        className="rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500 h-4 w-4"
+                                    />
+                                    <span className="text-xs font-semibold text-gray-800">
+                                        Flag as Due Immediately for 2026 Appraisal Docket (Fast-track legacy backlog)
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 4: Academic Specifics */}
                     {formData.cadre === 'ACADEMIC' && (
                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                             <h4 className="font-semibold text-blue-800 mb-2 border-b border-blue-200 pb-1">Academic & Facilitation Records</h4>
@@ -498,17 +761,27 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                         </div>
                     )}
 
-                    <div className="pt-4 sticky bottom-0 bg-white border-t -mx-6 -mb-6 p-6 flex-shrink-0">
-                        <button
-                            type="submit"
+                    <div className="pt-4 sticky bottom-0 bg-white border-t -mx-6 -mb-6 p-6 flex-shrink-0 flex justify-end gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
                             disabled={loading}
-                            className="w-full rounded-xl bg-blue-900 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50 transition-colors shadow-md shadow-blue-900/10 hover:shadow-lg"
                         >
-                            {loading ? 'Creating...' : 'Create Staff Member'}
-                        </button>
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="emerald"
+                            isLoading={loading}
+                            loadingText="Creating Staff Member..."
+                        >
+                            Create Staff Member
+                        </Button>
                     </div>
                 </form>
             </div>
         </div>
     );
 }
+

@@ -11,16 +11,21 @@ export interface UpdateScheduleParams {
     cadreType?: CadreType | string | null;
     currentGradeLevel?: string | null;
     nextDueYear?: number | null;
+    nextPromotionDueYear?: number | null;
     nextDueDate?: Date | string | null;
+    nextPromotionDueDate?: Date | string | null;
     eligibilityStatus?: PromotionEligibilityStatus | string | null;
+    promotionEligibilityStatus?: PromotionEligibilityStatus | string | null;
     registryOverride?: boolean;
     overrideReason?: string | null;
+    isDueImmediately?: boolean;
 }
 
 export interface PromotionFilterParams {
     year?: number;
     cadre?: string;
     status?: string;
+    tab?: 'DUE_THIS_CYCLE' | 'MATURED_OVERDUE' | 'UPCOMING' | 'ALL' | string;
     search?: string;
     page?: number;
     limit?: number;
@@ -38,10 +43,14 @@ export class PromotionService {
             cadreType,
             currentGradeLevel,
             nextDueYear,
+            nextPromotionDueYear,
             nextDueDate,
+            nextPromotionDueDate,
             eligibilityStatus,
+            promotionEligibilityStatus,
             registryOverride,
-            overrideReason
+            overrideReason,
+            isDueImmediately
         } = params;
 
         const profile = await prisma.staffProfile.findUnique({
@@ -56,7 +65,8 @@ export class PromotionService {
             throw new Error('Staff profile not found');
         }
 
-        const isManualOverride = registryOverride === true || (nextDueYear !== undefined && nextDueYear !== null && nextDueYear !== profile.nextDueYear);
+        const effectiveDueYearInput = nextPromotionDueYear !== undefined && nextPromotionDueYear !== null ? nextPromotionDueYear : nextDueYear;
+        const isManualOverride = registryOverride === true || (effectiveDueYearInput !== undefined && effectiveDueYearInput !== null && effectiveDueYearInput !== profile.nextPromotionDueYear && effectiveDueYearInput !== profile.nextDueYear);
 
         if (isManualOverride) {
             if (!overrideReason || overrideReason.trim().length < 5) {
@@ -75,12 +85,27 @@ export class PromotionService {
         // Calculate auto-computed defaults if not explicitly overridden
         const computed = calculatePromotionMaturity(effectiveLastPromo, effectiveCadre, effectiveLevel);
 
-        const computedDueYear = nextDueYear !== undefined && nextDueYear !== null ? Number(nextDueYear) : (profile.nextDueYear || computed.nextDueYear);
-        const computedDueDate = nextDueDate !== undefined && nextDueDate !== null ? new Date(nextDueDate) : (profile.nextDueDate || computed.nextDueDate);
-        const effectiveStatus = (eligibilityStatus as PromotionEligibilityStatus) || profile.eligibilityStatus || PromotionEligibilityStatus.PENDING_MATURITY;
+        const computedDueYear = effectiveDueYearInput !== undefined && effectiveDueYearInput !== null
+            ? Number(effectiveDueYearInput)
+            : (profile.nextPromotionDueYear || profile.nextDueYear || computed.nextDueYear);
 
-        const prevDueYear = profile.nextDueYear;
-        const prevStatus = profile.eligibilityStatus;
+        const effectiveDueDateInput = nextPromotionDueDate !== undefined && nextPromotionDueDate !== null ? nextPromotionDueDate : nextDueDate;
+        const computedDueDate = effectiveDueDateInput !== undefined && effectiveDueDateInput !== null
+            ? new Date(effectiveDueDateInput)
+            : (profile.nextPromotionDueDate || profile.nextDueDate || computed.nextDueDate);
+
+        let effectiveStatus = (promotionEligibilityStatus as PromotionEligibilityStatus)
+            || (eligibilityStatus as PromotionEligibilityStatus)
+            || profile.promotionEligibilityStatus
+            || profile.eligibilityStatus
+            || PromotionEligibilityStatus.PENDING_MATURITY;
+
+        if (isDueImmediately) {
+            effectiveStatus = PromotionEligibilityStatus.DUE_FOR_REVIEW;
+        }
+
+        const prevDueYear = profile.nextPromotionDueYear || profile.nextDueYear;
+        const prevStatus = profile.promotionEligibilityStatus || profile.eligibilityStatus;
 
         // Execute transaction: update profile + append audit log
         const [updatedProfile, auditLog] = await prisma.$transaction(async (tx) => {
@@ -92,11 +117,15 @@ export class PromotionService {
                     cadreType: effectiveCadre,
                     currentGradeLevel: effectiveLevel,
                     nextDueYear: computedDueYear,
+                    nextPromotionDueYear: computedDueYear,
                     nextDueDate: computedDueDate,
+                    nextPromotionDueDate: computedDueDate,
                     eligibilityStatus: effectiveStatus,
+                    promotionEligibilityStatus: effectiveStatus,
+                    legacyDataBackfilled: true,
                     registryOverride: isManualOverride,
                     overrideReason: isManualOverride ? overrideReason?.trim() : profile.overrideReason,
-                    isDueForPromotion: effectiveStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || effectiveStatus === PromotionEligibilityStatus.UNDER_EVALUATION
+                    isDueForPromotion: isDueImmediately || effectiveStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || effectiveStatus === PromotionEligibilityStatus.UNDER_EVALUATION
                 },
                 include: {
                     user: { select: { id: true, email: true, name: true, role: true } },
@@ -141,13 +170,14 @@ export class PromotionService {
             year,
             cadre,
             status,
+            tab,
             search = '',
             page = 1,
             limit = 15
         } = params;
 
         const targetYear = year ? Number(year) : new Date().getFullYear();
-        const take = Math.min(Math.max(Number(limit) || 15, 1), 50);
+        const take = Math.min(Math.max(Number(limit) || 15, 1), 100);
         const skip = (Math.max(Number(page) || 1, 1) - 1) * take;
 
         const where: any = {
@@ -155,13 +185,39 @@ export class PromotionService {
             status: 'ACTIVE'
         };
 
-        // Year filter: match nextDueYear OR legacy flagged staff for this year
-        if (year) {
+        // Tab & Year filtering logic
+        if (tab === 'DUE_THIS_CYCLE') {
             where.OR = [
+                { nextPromotionDueYear: targetYear },
                 { nextDueYear: targetYear },
                 {
                     AND: [
-                        { nextDueYear: null },
+                        { isDueForPromotion: true },
+                        { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] }
+                    ]
+                }
+            ];
+        } else if (tab === 'MATURED_OVERDUE') {
+            where.OR = [
+                { nextPromotionDueYear: { lt: targetYear } },
+                { nextDueYear: { lt: targetYear } },
+                { isDueForPromotion: true }
+            ];
+            where.eligibilityStatus = { in: [PromotionEligibilityStatus.DUE_FOR_REVIEW, PromotionEligibilityStatus.UNDER_EVALUATION, PromotionEligibilityStatus.PENDING_MATURITY] };
+        } else if (tab === 'UPCOMING') {
+            where.OR = [
+                { nextPromotionDueYear: { gt: targetYear } },
+                { nextDueYear: { gt: targetYear } }
+            ];
+        } else if (tab === 'ALL') {
+            // No year constraint on 'ALL' tab
+        } else if (year) {
+            where.OR = [
+                { nextPromotionDueYear: targetYear },
+                { nextDueYear: targetYear },
+                {
+                    AND: [
+                        { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] },
                         { isDueForPromotion: true }
                     ]
                 }
@@ -211,6 +267,7 @@ export class PromotionService {
                 skip,
                 take,
                 orderBy: [
+                    { nextPromotionDueYear: 'asc' },
                     { nextDueYear: 'asc' },
                     { surname: 'asc' }
                 ],
@@ -231,7 +288,12 @@ export class PromotionService {
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
-                    ...(year ? { nextDueYear: targetYear } : {})
+                    ...(year && tab !== 'ALL' ? {
+                        OR: [
+                            { nextPromotionDueYear: targetYear },
+                            { nextDueYear: targetYear }
+                        ]
+                    } : {})
                 },
                 _count: { id: true }
             })
@@ -252,8 +314,27 @@ export class PromotionService {
             }
         });
 
+        // Format and enrich profiles
+        const enrichedData = profiles.map(p => {
+            const fullName = `${p.title ? p.title + ' ' : ''}${p.surname || ''} ${p.otherNames || ''}`.trim() || p.user?.name || 'Staff Member';
+            const effectiveDueYear = p.nextPromotionDueYear || p.nextDueYear;
+            const effectiveDueDate = p.nextPromotionDueDate || p.nextDueDate;
+            const effectiveStatus = p.promotionEligibilityStatus || p.eligibilityStatus;
+
+            return {
+                ...p,
+                fullName,
+                nextPromotionDueYear: effectiveDueYear,
+                nextDueYear: effectiveDueYear,
+                nextPromotionDueDate: effectiveDueDate,
+                nextDueDate: effectiveDueDate,
+                promotionEligibilityStatus: effectiveStatus,
+                eligibilityStatus: effectiveStatus
+            };
+        });
+
         return {
-            data: profiles,
+            data: enrichedData,
             total,
             page: Number(page),
             pages: Math.ceil(total / take) || 1,
@@ -261,6 +342,40 @@ export class PromotionService {
             cycleYear: targetYear
         };
     }
+
+    /**
+     * Runs an on-demand docket synchronization to stage candidates whose maturity year <= currentYear into DUE_FOR_REVIEW.
+     */
+    static async syncCandidates(cycleYear: number = new Date().getFullYear(), actorId?: string) {
+        // 1. Evaluate annual cycle engine
+        const evalResult = await this.evaluateMaturityCycle(cycleYear, actorId, 'MANUAL');
+
+        // 2. Fast-track update any pending staff with nextPromotionDueYear <= cycleYear into DUE_FOR_REVIEW
+        const updateResult = await prisma.staffProfile.updateMany({
+            where: {
+                isDeleted: false,
+                status: 'ACTIVE',
+                OR: [
+                    { nextPromotionDueYear: { lte: cycleYear } },
+                    { nextDueYear: { lte: cycleYear } },
+                    { isDueForPromotion: true }
+                ],
+                eligibilityStatus: PromotionEligibilityStatus.PENDING_MATURITY
+            },
+            data: {
+                promotionEligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                eligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                isDueForPromotion: true
+            }
+        });
+
+        return {
+            cycleYear,
+            evalResult,
+            stagedCount: updateResult.count
+        };
+    }
+
 
     /**
      * Executes the Automated Annual Maturity Evaluation Engine (Step A - Step D).

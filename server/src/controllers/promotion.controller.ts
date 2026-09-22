@@ -19,11 +19,15 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
             cadreType,
             currentGradeLevel,
             nextDueYear,
+            nextPromotionDueYear,
             nextDueDate,
+            nextPromotionDueDate,
             eligibilityStatus,
+            promotionEligibilityStatus,
             registryOverride,
             reason,
-            overrideReason
+            overrideReason,
+            isDueImmediately
         } = req.body;
 
         // Resolve staffProfileId (support UUID id or institutional staffId)
@@ -52,10 +56,14 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
             cadreType,
             currentGradeLevel,
             nextDueYear,
+            nextPromotionDueYear,
             nextDueDate,
+            nextPromotionDueDate,
             eligibilityStatus,
-            registryOverride: registryOverride === true || (nextDueYear !== undefined && nextDueYear !== null),
-            overrideReason: effectiveReason
+            promotionEligibilityStatus,
+            registryOverride: registryOverride === true || (nextDueYear !== undefined && nextDueYear !== null) || (nextPromotionDueYear !== undefined && nextPromotionDueYear !== null),
+            overrideReason: effectiveReason,
+            isDueImmediately
         });
 
         res.json({
@@ -70,7 +78,7 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/v1/registry/promotions/due-list
+ * GET /api/v1/registry/promotions/due-list & GET /api/v1/registry/promotions/candidates
  * Filtered, paginated promotion due list with summary metrics and CSV export.
  */
 export const getPromotionDueList = async (req: Request, res: Response) => {
@@ -79,6 +87,7 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
             year,
             cadre,
             status,
+            tab,
             search,
             page,
             limit,
@@ -89,6 +98,7 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
             year: year ? parseInt(String(year), 10) : undefined,
             cadre: cadre ? String(cadre) : undefined,
             status: status ? String(status) : undefined,
+            tab: tab ? String(tab) : undefined,
             search: search ? String(search) : undefined,
             page: page ? parseInt(String(page), 10) : 1,
             limit: exportFormat === 'csv' ? 1000 : (limit ? parseInt(String(limit), 10) : 15)
@@ -232,6 +242,35 @@ export const getPromotionAuditLogs = async (req: Request, res: Response) => {
 };
 
 /**
+ * POST /api/v1/registry/promotions/sync-candidates
+ * Manual trigger endpoint allowing Registry admins to run an on-demand sync that moves any staff with nextPromotionDueYear <= currentYear into DUE_FOR_REVIEW status.
+ */
+export const syncPromotionCandidates = async (req: Request, res: Response) => {
+    try {
+        const { cycleYear } = req.body;
+        // @ts-ignore
+        const actorId = req.user?.id as string;
+        const targetYear = cycleYear ? parseInt(String(cycleYear), 10) : new Date().getFullYear();
+
+        const result = await PromotionService.syncCandidates(targetYear, actorId);
+
+        res.json({
+            message: `On-demand promotion candidate synchronization complete for ${targetYear}.`,
+            result
+        });
+    } catch (error: any) {
+        console.error('syncPromotionCandidates error:', error);
+        res.status(500).json({ message: error.message || 'Failed to synchronize promotion candidates' });
+    }
+};
+
+/**
+ * GET /api/v1/registry/promotions/candidates
+ * Alias for getPromotionDueList
+ */
+export const getPromotionCandidates = getPromotionDueList;
+
+/**
  * GET /api/v1/registry/promotions/calculate
  * Helper endpoint that calculates cadre maturity given input parameters without persisting.
  */
@@ -250,3 +289,4 @@ export const calculateMaturityPreview = async (req: Request, res: Response) => {
         res.status(400).json({ message: error.message || 'Failed to calculate maturity preview' });
     }
 };
+

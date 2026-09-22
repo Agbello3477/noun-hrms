@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
+import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
 
 // Helper to generate next Staff ID
 const generateStaffId = async (): Promise<string> => {
@@ -37,7 +38,12 @@ export const createStaffFile = async (req: Request, res: Response) => {
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
-            dateOfBirth, dateOfFirstAppointment
+            dateOfBirth, dateOfFirstAppointment,
+            lastPromotionDate,
+            nextPromotionDueYear,
+            nextPromotionDueDate,
+            isDueImmediately,
+            overrideReason
         } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -83,6 +89,19 @@ export const createStaffFile = async (req: Request, res: Response) => {
 
         const dob = parseDate(dateOfBirth);
         const apptDate = parseDate(dateOfFirstAppointment);
+        const lastPromoDate = parseDate(lastPromotionDate);
+
+        // Calculate statutory next promotion maturity
+        const maturity = calculateNextPromotionMaturity({
+            cadre: resolvedCadre,
+            level,
+            dateOfFirstAppointment: apptDate,
+            lastPromotionDate: lastPromoDate,
+            overrideDueYear: nextPromotionDueYear ? parseInt(String(nextPromotionDueYear), 10) : undefined,
+            overrideDueDate: nextPromotionDueDate ? new Date(nextPromotionDueDate) : undefined,
+            overrideReason: overrideReason || undefined,
+            isDueImmediately: Boolean(isDueImmediately)
+        });
 
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
@@ -100,6 +119,14 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
+                            lastPromotionDate: maturity.lastPromotionDate,
+                            nextPromotionDueYear: maturity.nextDueYear,
+                            nextDueYear: maturity.nextDueYear,
+                            nextPromotionDueDate: maturity.nextDueDate,
+                            nextDueDate: maturity.nextDueDate,
+                            promotionEligibilityStatus: maturity.eligibilityStatus,
+                            eligibilityStatus: maturity.eligibilityStatus,
+                            legacyDataBackfilled: true,
                             centerId: centerId || undefined,
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,
@@ -143,7 +170,12 @@ export const addExistingFile = async (req: Request, res: Response) => {
             centerId, unitId,
             programmeId, facilitatorInfo,
             manualStaffId,
-            dateOfBirth, dateOfFirstAppointment
+            dateOfBirth, dateOfFirstAppointment,
+            lastPromotionDate,
+            nextPromotionDueYear,
+            nextPromotionDueDate,
+            isDueImmediately,
+            overrideReason
         } = req.body;
 
         if (!email) return res.status(400).json({ message: 'Email is required' });
@@ -198,6 +230,19 @@ export const addExistingFile = async (req: Request, res: Response) => {
 
         const dob = parseDate(dateOfBirth);
         const apptDate = parseDate(dateOfFirstAppointment);
+        const lastPromoDate = parseDate(lastPromotionDate);
+
+        // Calculate statutory next promotion maturity
+        const maturity = calculateNextPromotionMaturity({
+            cadre: resolvedCadre,
+            level,
+            dateOfFirstAppointment: apptDate,
+            lastPromotionDate: lastPromoDate,
+            overrideDueYear: nextPromotionDueYear ? parseInt(String(nextPromotionDueYear), 10) : undefined,
+            overrideDueDate: nextPromotionDueDate ? new Date(nextPromotionDueDate) : undefined,
+            overrideReason: overrideReason || undefined,
+            isDueImmediately: Boolean(isDueImmediately)
+        });
 
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
@@ -215,6 +260,14 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
+                            lastPromotionDate: maturity.lastPromotionDate,
+                            nextPromotionDueYear: maturity.nextDueYear,
+                            nextDueYear: maturity.nextDueYear,
+                            nextPromotionDueDate: maturity.nextDueDate,
+                            nextDueDate: maturity.nextDueDate,
+                            promotionEligibilityStatus: maturity.eligibilityStatus,
+                            eligibilityStatus: maturity.eligibilityStatus,
+                            legacyDataBackfilled: true,
                             centerId: centerId || undefined,
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,

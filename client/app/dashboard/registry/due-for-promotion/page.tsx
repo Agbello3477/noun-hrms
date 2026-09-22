@@ -87,6 +87,8 @@ export default function DueForPromotionPage() {
     const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
     const [cadreFilter, setCadreFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [filterTab, setFilterTab] = useState<'DUE_THIS_CYCLE' | 'MATURED_OVERDUE' | 'UPCOMING' | 'ALL'>('DUE_THIS_CYCLE');
+    const [syncingDocket, setSyncingDocket] = useState(false);
     const [summaryCounts, setSummaryCounts] = useState<Record<string, number>>({
         PENDING_MATURITY: 0,
         DUE_FOR_REVIEW: 0,
@@ -157,6 +159,7 @@ export default function DueForPromotionPage() {
                     year: yearFilter,
                     cadre: cadreFilter !== 'ALL' ? cadreFilter : undefined,
                     status: statusFilter !== 'ALL' ? statusFilter : undefined,
+                    tab: filterTab,
                     search: search.trim() || undefined,
                     page,
                     limit
@@ -173,7 +176,23 @@ export default function DueForPromotionPage() {
         } finally {
             setLoading(false);
         }
-    }, [yearFilter, cadreFilter, statusFilter, search, page, limit]);
+    }, [yearFilter, cadreFilter, statusFilter, filterTab, search, page, limit]);
+
+    // Initial Promotion Docket Sync Handler
+    const handleSyncCandidates = async () => {
+        setSyncingDocket(true);
+        try {
+            const res = await api.post('/api/v1/registry/promotions/sync-candidates', {
+                cycleYear: yearFilter
+            });
+            showToast(res.data.message || `Successfully synced ${res.data.count || 0} candidates into appraisal docket.`, 'success');
+            fetchDueList();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to sync promotion candidates.', 'error');
+        } finally {
+            setSyncingDocket(false);
+        }
+    };
 
     useEffect(() => {
         if (user && ALLOWED_ROLES.includes(user.role)) {
@@ -414,14 +433,25 @@ export default function DueForPromotionPage() {
 
                     <div className="flex items-center gap-2.5 flex-wrap">
                         {canManage && (
-                            <Button
-                                onClick={() => { setEngineModalOpen(true); setEngineResult(null); }}
-                                variant="amber"
-                                size="sm"
-                                icon={<PlayCircle size={15} />}
-                            >
-                                Evaluate Maturity Cycle
-                            </Button>
+                            <>
+                                <Button
+                                    onClick={handleSyncCandidates}
+                                    isLoading={syncingDocket}
+                                    variant="emerald"
+                                    size="sm"
+                                    icon={<Sparkles size={14} />}
+                                >
+                                    Run Initial Promotion Docket Sync
+                                </Button>
+                                <Button
+                                    onClick={() => { setEngineModalOpen(true); setEngineResult(null); }}
+                                    variant="amber"
+                                    size="sm"
+                                    icon={<PlayCircle size={15} />}
+                                >
+                                    Evaluate Maturity Cycle
+                                </Button>
+                            </>
                         )}
                         <Button
                             onClick={handleExportCsv}
@@ -490,6 +520,29 @@ export default function DueForPromotionPage() {
                 {/* DOCKET / RECORDS TAB */}
                 {activeTab === 'docket' && (
                     <div className="space-y-4">
+                        {/* Staging Scope Filter Tabs */}
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            {[
+                                { id: 'DUE_THIS_CYCLE', label: `Due This Cycle (${yearFilter})`, icon: Star },
+                                { id: 'MATURED_OVERDUE', label: 'Matured (Backlogged/Overdue)', icon: AlertTriangle },
+                                { id: 'UPCOMING', label: `Upcoming (${yearFilter + 1}+)`, icon: Clock },
+                                { id: 'ALL', label: 'All Configured Staff', icon: Layers }
+                            ].map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => { setFilterTab(id as any); setPage(1); }}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap shadow-sm
+                                        ${filterTab === id
+                                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-emerald-200/50'
+                                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <Icon size={14} className={filterTab === id ? 'text-white' : 'text-emerald-700'} />
+                                    <span>{label}</span>
+                                </button>
+                            ))}
+                        </div>
+
                         {/* Filter Bar */}
                         <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm space-y-3">
                             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -548,9 +601,9 @@ export default function DueForPromotionPage() {
 
                             {/* Status Filter Pills */}
                             <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
-                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Filter:</span>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Status:</span>
                                 {[
-                                    { id: 'ALL', label: 'All Candidates' },
+                                    { id: 'ALL', label: 'All Statuses' },
                                     { id: 'DUE_FOR_REVIEW', label: 'Due for Review' },
                                     { id: 'UNDER_EVALUATION', label: 'Under Evaluation' },
                                     { id: 'APPROVED', label: 'Approved' },
@@ -620,10 +673,24 @@ export default function DueForPromotionPage() {
                                     </div>
                                 </div>
                             ) : candidates.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
-                                    <Award size={42} className="opacity-30" />
-                                    <p className="text-sm font-semibold text-slate-600">No candidates found for the selected criteria ({yearFilter})</p>
-                                    <p className="text-xs text-slate-400 max-w-sm text-center">Use the &quot;Evaluate Maturity Cycle&quot; button to scan active staff profiles, or adjust your search and filters.</p>
+                                <div className="flex flex-col items-center justify-center py-16 px-4 text-slate-400 gap-3">
+                                    <Award size={46} className="opacity-30 text-emerald-600" />
+                                    <p className="text-base font-bold text-slate-700">No candidates found for the selected view</p>
+                                    <p className="text-xs text-slate-500 max-w-md text-center">
+                                        No staff records are currently staged under &quot;{filterTab.replace(/_/g, ' ')}&quot; for cycle {yearFilter}. You can execute the initial synchronization to index legacy and newly added staff records immediately.
+                                    </p>
+                                    {canManage && (
+                                        <Button
+                                            onClick={handleSyncCandidates}
+                                            isLoading={syncingDocket}
+                                            variant="emerald"
+                                            size="sm"
+                                            icon={<Sparkles size={14} />}
+                                            className="mt-2"
+                                        >
+                                            Run Initial Promotion Docket Sync
+                                        </Button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">

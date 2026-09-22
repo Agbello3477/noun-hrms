@@ -8,6 +8,7 @@
     "db:rls": "ts-node --transpile-only scripts/enable_rls.ts",
     "start": "node scripts/start-server.js",
     "seed": "ts-node --transpile-only prisma/seed.ts",
+    "seed:promotions": "ts-node --transpile-only scripts/seed-initial-promotions.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "ts-node --transpile-only -r dotenv/config src/tests/payroll.test.ts && ts-node --transpile-only -r dotenv/config src/tests/retirement.test.ts && ts-node --transpile-only -r dotenv/config src/tests/promotion.test.ts && ts-node --transpile-only -r dotenv/config src/tests/fcm.test.ts && ts-node --transpile-only -r dotenv/config src/tests/bursary.test.ts && ts-node --transpile-only -r dotenv/config src/tests/inventory.test.ts && ts-node --transpile-only -r dotenv/config src/tests/compliance.test.ts && ts-node --transpile-only -r dotenv/config src/tests/export.test.ts && ts-node --transpile-only -r dotenv/config src/tests/aper.test.ts && ts-node --transpile-only -r dotenv/config src/tests/leaveResumption.test.ts && ts-node --transpile-only -r dotenv/config src/tests/voip.test.ts"
   },

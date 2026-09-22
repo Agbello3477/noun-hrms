@@ -125,6 +125,8 @@ app.use('/api/auth', authRateLimit, authRoutes);
 app.use('/api', apiRateLimit);
 
 app.use('/api/staff', staffRoutes);
+app.use('/api/hr/staff', staffRoutes);
+app.use('/api/v1/hr/staff', staffRoutes);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/payroll', payrollRouter);
 app.use('/api/registry', registryRoutes);

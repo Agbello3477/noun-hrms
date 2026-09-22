@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { 
     ArrowLeft, 
     User, 
@@ -13,7 +13,9 @@ import {
     GraduationCap, 
     ChevronRight,
     Loader2,
-    Calendar
+    Calendar,
+    TrendingUp,
+    Info
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
@@ -46,6 +48,11 @@ interface StaffDetail {
         status?: string;
         dateOfBirth?: string;
         dateOfFirstAppointment?: string;
+        lastPromotionDate?: string | null;
+        nextPromotionDueYear?: number | null;
+        nextPromotionDueDate?: string | null;
+        promotionEligibilityStatus?: string | null;
+        cadreCriteria?: string | null;
         unit?: { name: string; type: string };
         studyCenter?: { name: string; code: string };
     };
@@ -93,6 +100,15 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     const [editStatus, setEditStatus] = useState('ACTIVE');
     const [editTitle, setEditTitle] = useState('');
 
+    // Promotion Maturity form state
+    const [editLastPromotionDate, setEditLastPromotionDate] = useState('');
+    const [editCadreAppraisalRule, setEditCadreAppraisalRule] = useState('SENIOR_ADMIN_3');
+    const [editNextPromotionDueYear, setEditNextPromotionDueYear] = useState('');
+    const [editNextPromotionDueDate, setEditNextPromotionDueDate] = useState('');
+    const [isYearOverridden, setIsYearOverridden] = useState(false);
+    const [overrideReason, setOverrideReason] = useState('');
+    const [isDueImmediately, setIsDueImmediately] = useState(false);
+
     const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER'].includes(currentUser?.role || '');
 
     const isManager = 
@@ -106,6 +122,62 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         );
 
     const canManage = isHrAdmin || isManager;
+
+    // Statutory Cadre Maturity Rule Computation
+    const computedPromotionSchedule = useMemo(() => {
+        let baseDateStr = editLastPromotionDate || editDateOfFirstAppointment;
+        let baseYear = new Date().getFullYear();
+
+        if (baseDateStr) {
+            const parsed = new Date(baseDateStr);
+            if (!isNaN(parsed.getTime())) {
+                baseYear = parsed.getFullYear();
+            }
+        }
+
+        let interval = 3;
+        let monthDay = '01-01';
+        let ruleDescription = 'Standard 3-Year Administrative Cycle (Effective Jan 1)';
+
+        const rule = editCadreAppraisalRule;
+        const cadre = editCadre;
+
+        if (rule === 'ACADEMIC_3' || cadre === 'ACADEMIC') {
+            interval = 3;
+            monthDay = '10-01';
+            ruleDescription = 'Academic Cadre: Statutory 3-Year Waiting Period (Effective Oct 1)';
+        } else if (rule === 'SENIOR_ADMIN_4') {
+            interval = 4;
+            monthDay = '01-01';
+            ruleDescription = 'Senior Administrative (CONTISS 12–15): Statutory 4-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'JUNIOR_2') {
+            interval = 2;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff: Fast-Track 2-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'JUNIOR_3' || cadre === 'JUNIOR') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff: 3-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'CUSTOM') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Custom Institutional Review Schedule';
+        } else {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Senior Administrative / Non-Academic: 3-Year Waiting Period (Effective Jan 1)';
+        }
+
+        const calculatedYear = baseYear + interval;
+        const calculatedDate = `${calculatedYear}-${monthDay}`;
+
+        return {
+            calculatedYear,
+            calculatedDate,
+            interval,
+            ruleDescription
+        };
+    }, [editLastPromotionDate, editDateOfFirstAppointment, editCadreAppraisalRule, editCadre]);
 
     const getCalculatedRetirementDate = () => {
         if (!editDateOfBirth) return null;
@@ -213,6 +285,24 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditDateOfBirth(staffData.staffProfile?.dateOfBirth ? staffData.staffProfile.dateOfBirth.substring(0, 10) : '');
                 setEditDateOfFirstAppointment(staffData.staffProfile?.dateOfFirstAppointment ? staffData.staffProfile.dateOfFirstAppointment.substring(0, 10) : '');
                 setEditStatus(staffData.staffProfile?.status || 'ACTIVE');
+
+                // Initialize promotion state variables
+                if (staffData.staffProfile?.lastPromotionDate) {
+                    setEditLastPromotionDate(staffData.staffProfile.lastPromotionDate.substring(0, 10));
+                } else {
+                    setEditLastPromotionDate('');
+                }
+                if (staffData.staffProfile?.nextPromotionDueYear) {
+                    setEditNextPromotionDueYear(String(staffData.staffProfile.nextPromotionDueYear));
+                }
+                if (staffData.staffProfile?.nextPromotionDueDate) {
+                    setEditNextPromotionDueDate(staffData.staffProfile.nextPromotionDueDate.substring(0, 10));
+                }
+                if (staffData.staffProfile?.cadreCriteria) {
+                    if (staffData.staffProfile.cadreCriteria === 'ACADEMIC') setEditCadreAppraisalRule('ACADEMIC_3');
+                    else if (staffData.staffProfile.cadreCriteria === 'JUNIOR') setEditCadreAppraisalRule('JUNIOR_3');
+                    else setEditCadreAppraisalRule('SENIOR_ADMIN_3');
+                }
             }
         } catch (err: any) {
             console.error('Failed to load staff details:', err);
@@ -232,6 +322,12 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         e.preventDefault();
         setSaving(true);
         try {
+            if (isYearOverridden && (!overrideReason || overrideReason.trim().length < 5)) {
+                alert('A valid administrative override justification (minimum 5 characters) is required when modifying the calculated promotion year.');
+                setSaving(false);
+                return;
+            }
+
             let dbRole = editRole;
             let dbRank = isHrAdmin ? (staff?.staffProfile?.rank || 'Staff') : editRank;
 
@@ -301,11 +397,18 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 centerId: isHrAdmin ? (editLocation === 'CENTER' ? editCenterId : 'null') : staff?.staffProfile?.centerId,
                 dateOfBirth: editDateOfBirth,
                 dateOfFirstAppointment: editDateOfFirstAppointment,
-                status: editStatus
+                status: editStatus,
+                lastPromotionDate: editLastPromotionDate || undefined,
+                cadreAppraisalRule: editCadreAppraisalRule,
+                nextPromotionDueYear: editNextPromotionDueYear ? parseInt(editNextPromotionDueYear, 10) : undefined,
+                nextPromotionDueDate: editNextPromotionDueDate || undefined,
+                overrideReason: overrideReason || undefined,
+                isDueImmediately: Boolean(isDueImmediately)
             };
 
             await api.put(`/api/staff/${staff?.id}`, payload);
             alert('Staff profile updated successfully.');
+            fetchStaffData(); // Reload profile details
             fetchStaffData(); // Reload profile details
         } catch (error: any) {
             console.error(error);
@@ -754,6 +857,148 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                                 <option key={c.id} value={c.id}>{c.name}</option>
                                             ))}
                                         </select>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Section 3: Promotion Maturity & Scheduling */}
+                        <div className="space-y-4 pt-4 border-t border-gray-100 bg-emerald-50/40 p-5 rounded-2xl border border-emerald-200">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <TrendingUp className="text-emerald-700" size={18} />
+                                    <h3 className="text-sm font-extrabold text-emerald-900 uppercase tracking-wider">
+                                        3. Promotion Maturity & Scheduling
+                                    </h3>
+                                </div>
+                                {!isHrAdmin && (
+                                    <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded border border-amber-200">
+                                        Read-Only for Managers
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-emerald-700">
+                                Establish statutory promotion maturity dates and legacy service records for automated tracking and annual appraisal staging.
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Last Promotion / Substantive Appointment Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editLastPromotionDate}
+                                        onChange={e => setEditLastPromotionDate(e.target.value)}
+                                        disabled={!isHrAdmin}
+                                        className="w-full border border-emerald-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 font-medium"
+                                    />
+                                    <span className="text-[10px] text-gray-500 block">Defaults to date of first appointment if blank.</span>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Cadre & Appraisal Rule
+                                    </label>
+                                    <select
+                                        value={editCadreAppraisalRule}
+                                        onChange={e => setEditCadreAppraisalRule(e.target.value)}
+                                        disabled={!isHrAdmin}
+                                        className="w-full border border-emerald-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 font-medium"
+                                    >
+                                        <option value="ACADEMIC_3">Academic — 3 Year Cycle (Oct 1)</option>
+                                        <option value="SENIOR_ADMIN_3">Senior Admin — 3 Year Cycle (Jan 1)</option>
+                                        <option value="SENIOR_ADMIN_4">Senior Admin (CONTISS 12+) — 4 Year Cycle (Jan 1)</option>
+                                        <option value="JUNIOR_2">Junior Staff — 2 Year Fast-Track (Jan 1)</option>
+                                        <option value="JUNIOR_3">Junior Staff — 3 Year Cycle (Jan 1)</option>
+                                        <option value="CUSTOM">Custom Institutional Schedule</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-3">
+                                <div className="flex items-center gap-1.5 font-semibold text-xs">
+                                    <Info size={14} className="text-emerald-600" />
+                                    <span>Statutory Rule Applied:</span>
+                                </div>
+                                <p className="text-emerald-800 text-xs font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                                    {computedPromotionSchedule.ruleDescription}
+                                </p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Next Promotion Due Year</label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={editNextPromotionDueYear || computedPromotionSchedule.calculatedYear}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setEditNextPromotionDueYear(val);
+                                                    setIsYearOverridden(Number(val) !== computedPromotionSchedule.calculatedYear);
+                                                }}
+                                                disabled={!isHrAdmin}
+                                                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-mono font-bold bg-white disabled:bg-gray-50 disabled:text-gray-500"
+                                                placeholder={String(computedPromotionSchedule.calculatedYear)}
+                                            />
+                                            {isYearOverridden && (
+                                                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded whitespace-nowrap">
+                                                    Overridden
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Target Effective Date</label>
+                                        <input
+                                            type="date"
+                                            value={editNextPromotionDueDate || computedPromotionSchedule.calculatedDate}
+                                            onChange={e => setEditNextPromotionDueDate(e.target.value)}
+                                            disabled={!isHrAdmin}
+                                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-mono bg-white disabled:bg-gray-50 disabled:text-gray-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                {isYearOverridden && (
+                                    <div className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-1">
+                                        <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider">
+                                            Override Justification (Mandatory) *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={overrideReason}
+                                            onChange={e => setOverrideReason(e.target.value)}
+                                            disabled={!isHrAdmin}
+                                            placeholder="State reason for non-standard promotion maturity year (e.g. Accelerated Board Approval)"
+                                            className="w-full border border-amber-300 rounded-lg p-2 text-xs bg-white"
+                                        />
+                                    </div>
+                                )}
+
+                                {isHrAdmin && (
+                                    <div className="pt-2">
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={isDueImmediately}
+                                                onChange={e => setIsDueImmediately(e.target.checked)}
+                                                className="rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500 h-4 w-4"
+                                            />
+                                            <span className="text-xs font-semibold text-gray-800">
+                                                Flag as Due Immediately for 2026 Appraisal Docket (Fast-track legacy backlog)
+                                            </span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                {staff.staffProfile?.promotionEligibilityStatus && (
+                                    <div className="text-[11px] text-gray-500 pt-1 flex items-center gap-2">
+                                        <span>Current Staging Status:</span>
+                                        <span className="font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                            {staff.staffProfile.promotionEligibilityStatus}
+                                        </span>
                                     </div>
                                 )}
                             </div>

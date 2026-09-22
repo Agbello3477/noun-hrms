@@ -74,7 +74,10 @@ router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);
 router.post('/', requireRole(manageRoles), createStaff);
 
 import { upload } from '../middleware/upload.middleware';
-import { updateStaff, uploadSignature } from '../controllers/staff.controller';
+import { updateStaff, uploadSignature, updateServiceRecord } from '../controllers/staff.controller';
+
+// Update Service Record (Admin/HR)
+router.put('/:id/service-record', requireRole(manageRoles), updateServiceRecord);
 
 // Update Profile (Self or Admin)
 // Use upload.single('passport')

@@ -262,7 +262,11 @@ model StaffProfile {
   currentGradeLevel     String?   // e.g. CONUASS 04, CONTISS 11
   nextDueYear           Int?      // Indexed for fast annual eligibility queries
   nextDueDate           DateTime? // Exact maturity milestone date
+  nextPromotionDueYear  Int?      // Explicit promotion milestone due year
+  nextPromotionDueDate  DateTime? // Exact target promotion effective milestone date
   eligibilityStatus     PromotionEligibilityStatus @default(PENDING_MATURITY)
+  promotionEligibilityStatus PromotionEligibilityStatus? @default(PENDING_MATURITY)
+  legacyDataBackfilled  Boolean   @default(false) // Tracks if legacy records have been validated & backfilled
   registryOverride      Boolean   @default(false)
   overrideReason        String?   @db.Text
   evaluatedForYear      Int?
@@ -306,7 +310,9 @@ model StaffProfile {
   @@index([isDueForPromotion])
   @@index([isDeleted, status])
   @@index([nextDueYear])
+  @@index([nextPromotionDueYear])
   @@index([eligibilityStatus])
+  @@index([promotionEligibilityStatus])
   @@index([cadreType])
 }
 

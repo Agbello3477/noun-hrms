@@ -1,7 +1,8 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../../lib/api';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
+import { TrendingUp, Info } from 'lucide-react';
 
 interface OrganizationData {
     centers: { id: string; name: string; code: string }[];
@@ -40,6 +41,15 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         step: '',
         dateOfFirstAppointment: '',
 
+        // Promotion Maturity & Scheduling
+        lastPromotionDate: '',
+        cadreAppraisalRule: 'SENIOR_ADMIN_3',
+        nextPromotionDueYear: '',
+        nextPromotionDueDate: '',
+        isYearOverridden: false,
+        overrideReason: '',
+        isDueImmediately: false,
+
         // Organization
         centerId: '',
         unitId: '',
@@ -55,6 +65,73 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [isHQ, setIsHQ] = useState(false);
+
+    // Statutory Cadre Maturity Rule Computation
+    const computedPromotionSchedule = useMemo(() => {
+        let baseDateStr = formData.lastPromotionDate || formData.dateOfFirstAppointment;
+        let baseYear = new Date().getFullYear();
+
+        if (baseDateStr) {
+            const parsed = new Date(baseDateStr);
+            if (!isNaN(parsed.getTime())) {
+                baseYear = parsed.getFullYear();
+            }
+        }
+
+        let interval = 3;
+        let monthDay = '01-01';
+        let ruleDescription = 'Standard 3-Year Administrative Cycle (Effective Jan 1)';
+
+        const rule = formData.cadreAppraisalRule;
+        const cadre = formData.cadre;
+
+        if (rule === 'ACADEMIC_3' || cadre === 'ACADEMIC') {
+            interval = 3;
+            monthDay = '10-01';
+            ruleDescription = 'Academic Cadre: Statutory 3-Year Waiting Period (Effective Oct 1)';
+        } else if (rule === 'SENIOR_ADMIN_4') {
+            interval = 4;
+            monthDay = '01-01';
+            ruleDescription = 'Senior Administrative (CONTISS 12–15): Statutory 4-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'JUNIOR_2') {
+            interval = 2;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff: Fast-Track 2-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'JUNIOR_3' || cadre === 'JUNIOR') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Junior Staff: 3-Year Waiting Period (Effective Jan 1)';
+        } else if (rule === 'CUSTOM') {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Custom Institutional Review Schedule';
+        } else {
+            interval = 3;
+            monthDay = '01-01';
+            ruleDescription = 'Senior Administrative / Non-Academic: 3-Year Waiting Period (Effective Jan 1)';
+        }
+
+        const calculatedYear = baseYear + interval;
+        const calculatedDate = `${calculatedYear}-${monthDay}`;
+
+        return {
+            calculatedYear,
+            calculatedDate,
+            interval,
+            ruleDescription
+        };
+    }, [formData.lastPromotionDate, formData.dateOfFirstAppointment, formData.cadreAppraisalRule, formData.cadre]);
+
+    // Synchronize auto-calculated promotion year & target date when inputs change unless manually overridden
+    useEffect(() => {
+        if (!formData.isYearOverridden) {
+            setFormData(prev => ({
+                ...prev,
+                nextPromotionDueYear: String(computedPromotionSchedule.calculatedYear),
+                nextPromotionDueDate: computedPromotionSchedule.calculatedDate
+            }));
+        }
+    }, [computedPromotionSchedule, formData.isYearOverridden]);
 
     useEffect(() => {
         const fetchOrgData = async () => {
@@ -74,12 +151,28 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
     }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
 
-        if (name === 'stateOfOrigin') {
-            setFormData(prev => ({ ...prev, stateOfOrigin: value, lga: '' }));
-        }
+        setFormData(prev => {
+            const next = { ...prev, [name]: val };
+
+            if (name === 'stateOfOrigin') {
+                next.lga = '';
+            }
+
+            if (name === 'cadre') {
+                if (value === 'ACADEMIC') {
+                    next.cadreAppraisalRule = 'ACADEMIC_3';
+                } else if (value === 'JUNIOR') {
+                    next.cadreAppraisalRule = 'JUNIOR_3';
+                } else {
+                    next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                }
+            }
+
+            return next;
+        });
 
         if (name === 'centerId') {
             const selectedCenter = orgData.centers.find(c => c.id === value);
@@ -89,6 +182,16 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                 setFormData(prev => ({ ...prev, unitId: '' }));
             }
         }
+    };
+
+    const handleNextYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        const isOverridden = Number(val) !== computedPromotionSchedule.calculatedYear;
+        setFormData(prev => ({
+            ...prev,
+            nextPromotionDueYear: val,
+            isYearOverridden: isOverridden
+        }));
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,8 +205,14 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+
+        if (formData.isYearOverridden && (!formData.overrideReason || formData.overrideReason.trim().length < 5)) {
+            setError('A valid administrative override justification (minimum 5 characters) is required when modifying the calculated promotion year.');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             let submittedPhone = formData.phone;
@@ -359,6 +468,126 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             </select>
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* 4. Promotion Maturity & Scheduling */}
+            <div className="bg-emerald-50/50 p-4 rounded border border-emerald-200 space-y-3">
+                <div className="flex items-center gap-2">
+                    <TrendingUp className="text-emerald-700" size={16} />
+                    <h4 className="font-semibold text-emerald-900 text-sm">Promotion Maturity & Scheduling</h4>
+                </div>
+                <p className="text-xs text-emerald-700">
+                    Establish statutory maturity dates and legacy promotion milestones for automated tracking and appraisal staging.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700">
+                            Last Promotion / Substantive Appointment Date
+                        </label>
+                        <input
+                            type="date"
+                            name="lastPromotionDate"
+                            className="w-full border border-emerald-300 rounded p-1.5 text-black bg-white mt-0.5 text-xs"
+                            value={formData.lastPromotionDate}
+                            onChange={handleChange}
+                        />
+                        <span className="text-[10px] text-gray-500 block mt-0.5">Defaults to first appointment date if left blank.</span>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700">
+                            Cadre & Appraisal Rule
+                        </label>
+                        <select
+                            name="cadreAppraisalRule"
+                            className="w-full border border-emerald-300 rounded p-1.5 bg-white text-xs mt-0.5"
+                            value={formData.cadreAppraisalRule}
+                            onChange={handleChange}
+                        >
+                            <option value="ACADEMIC_3">Academic — 3 Year Cycle (Oct 1)</option>
+                            <option value="SENIOR_ADMIN_3">Senior Admin — 3 Year Cycle (Jan 1)</option>
+                            <option value="SENIOR_ADMIN_4">Senior Admin (CONTISS 12+) — 4 Year Cycle (Jan 1)</option>
+                            <option value="JUNIOR_2">Junior Staff — 2 Year Fast-Track (Jan 1)</option>
+                            <option value="JUNIOR_3">Junior Staff — 3 Year Cycle (Jan 1)</option>
+                            <option value="CUSTOM">Custom Institutional Schedule</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-emerald-200 text-xs text-emerald-900 space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                        <Info size={13} className="text-emerald-600" />
+                        <span>Statutory Rule Applied:</span>
+                    </div>
+                    <p className="text-emerald-800 text-[11px] font-medium bg-emerald-50 p-1.5 rounded border border-emerald-100">
+                        {computedPromotionSchedule.ruleDescription}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-700">Calculated Next Promotion Year</label>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <input
+                                    type="number"
+                                    name="nextPromotionDueYear"
+                                    value={formData.nextPromotionDueYear}
+                                    onChange={handleNextYearChange}
+                                    className="w-full border rounded p-1.5 font-mono font-bold text-xs bg-white"
+                                    placeholder={String(computedPromotionSchedule.calculatedYear)}
+                                />
+                                {formData.isYearOverridden && (
+                                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
+                                        Overridden
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-700">Target Effective Date</label>
+                            <input
+                                type="date"
+                                name="nextPromotionDueDate"
+                                value={formData.nextPromotionDueDate}
+                                onChange={handleChange}
+                                className="w-full border rounded p-1.5 font-mono text-xs bg-white mt-0.5"
+                            />
+                        </div>
+                    </div>
+
+                    {formData.isYearOverridden && (
+                        <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200 space-y-1">
+                            <label className="block text-[11px] font-bold text-amber-900">
+                                Override Justification (Mandatory) *
+                            </label>
+                            <input
+                                type="text"
+                                name="overrideReason"
+                                required={formData.isYearOverridden}
+                                placeholder="State reason for non-standard promotion year"
+                                value={formData.overrideReason}
+                                onChange={handleChange}
+                                className="w-full border border-amber-300 rounded p-1.5 text-xs bg-white"
+                            />
+                        </div>
+                    )}
+
+                    <div className="pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                name="isDueImmediately"
+                                checked={formData.isDueImmediately}
+                                onChange={handleChange}
+                                className="rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500 h-3.5 w-3.5"
+                            />
+                            <span className="text-xs font-semibold text-gray-800">
+                                Flag as Due Immediately for 2026 Appraisal Docket (Fast-track legacy backlog)
+                            </span>
+                        </label>
+                    </div>
                 </div>
             </div>
 

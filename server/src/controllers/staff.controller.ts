@@ -1,6 +1,6 @@
 
 import { Request, Response } from 'express';
-import { Role, Cadre } from '@prisma/client';
+import { Role, Cadre, CadreType, PromotionEligibilityStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
@@ -8,6 +8,8 @@ import { StorageService } from '../services/storage.service';
 import prisma from '../prisma';
 import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
+import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
+import { PromotionService } from '../services/promotion.service';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
@@ -364,11 +366,17 @@ export const createStaff = async (req: Request, res: Response) => {
         */
         const {
             surname, otherNames, email, role,
-            staffId, level, step, cadre,
+            staffId, level, step, cadre, cadreType, currentGradeLevel,
             phone, stateOfOrigin, lga, address,
             unitId, centerId,
             // Phase 9
-            programmeId, facilitatorInfo
+            programmeId, facilitatorInfo,
+            // Promotion Milestone & Service Record Scheduling
+            lastPromotionDate, dateOfLastPromotion, dateOfFirstAppointment,
+            nextPromotionDueYear, nextDueYear,
+            nextPromotionDueDate, nextDueDate,
+            promotionEligibilityStatus, eligibilityStatus,
+            isDueImmediately, registryOverride, overrideReason
         } = req.body;
 
         if (!email) {
@@ -431,6 +439,35 @@ export const createStaff = async (req: Request, res: Response) => {
             }
         }
 
+        let resolvedCadreType: CadreType = CadreType.SENIOR_ADMIN;
+        if (cadreType && Object.values(CadreType).includes(cadreType as any)) {
+            resolvedCadreType = cadreType as CadreType;
+        } else if (resolvedCadre) {
+            const c = String(resolvedCadre).toUpperCase();
+            if (c === 'ACADEMIC') resolvedCadreType = CadreType.ACADEMIC;
+            else if (c === 'JUNIOR') resolvedCadreType = CadreType.JUNIOR_STAFF;
+            else if (c === 'TECHNICAL') resolvedCadreType = CadreType.TECHNICAL;
+            else if (c === 'MEDICAL') resolvedCadreType = CadreType.MEDICAL;
+            else if (c === 'SECURITY') resolvedCadreType = CadreType.SECURITY;
+            else resolvedCadreType = CadreType.SENIOR_ADMIN;
+        }
+
+        const effectiveGradeLevel = currentGradeLevel || level || (resolvedCadreType === CadreType.ACADEMIC ? 'CONUASS 04' : 'CONTISS 08');
+        const parsedFirstAppt = dateOfFirstAppointment ? new Date(dateOfFirstAppointment) : null;
+        const parsedLastPromo = lastPromotionDate ? new Date(lastPromotionDate) : (dateOfLastPromotion ? new Date(dateOfLastPromotion) : parsedFirstAppt);
+
+        // Calculate statutory maturity
+        const computedMaturity = calculateNextPromotionMaturity(parsedLastPromo, resolvedCadreType, effectiveGradeLevel);
+
+        const targetDueYear = nextPromotionDueYear ? Number(nextPromotionDueYear) : (nextDueYear ? Number(nextDueYear) : computedMaturity.dueYear);
+        const targetDueDate = nextPromotionDueDate ? new Date(nextPromotionDueDate) : (nextDueDate ? new Date(nextDueDate) : computedMaturity.dueDate);
+
+        let targetPromoStatus: PromotionEligibilityStatus = isDueImmediately
+            ? PromotionEligibilityStatus.DUE_FOR_REVIEW
+            : (promotionEligibilityStatus || eligibilityStatus || (targetDueYear <= new Date().getFullYear() ? PromotionEligibilityStatus.DUE_FOR_REVIEW : PromotionEligibilityStatus.PENDING_MATURITY));
+
+        const isOverridden = registryOverride === true || (overrideReason && overrideReason.trim().length > 0) || (targetDueYear !== computedMaturity.dueYear);
+
         const creatorId = (req as any).user?.id;
         const creatorRole = (req as any).user?.role;
         const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(creatorRole as any);
@@ -450,7 +487,7 @@ export const createStaff = async (req: Request, res: Response) => {
             finalCenterId = headProfile.centerId || undefined;
         }
 
-        console.log('Creating staff Phase 3:', { email: normalizedEmail, staffId, resolvedRole, finalUnitId, finalCenterId });
+        console.log('Creating staff Phase 3 with promotion milestones:', { email: normalizedEmail, staffId, resolvedRole, targetDueYear, targetPromoStatus });
 
         const user = await prisma.user.create({
             data: {
@@ -467,10 +504,25 @@ export const createStaff = async (req: Request, res: Response) => {
                         level,
                         step,
                         cadre: resolvedCadre,
+                        cadreType: resolvedCadreType,
+                        currentGradeLevel: effectiveGradeLevel,
                         phone,
                         stateOfOrigin,
                         lga,
                         address,
+                        dateOfFirstAppointment: parsedFirstAppt,
+                        lastPromotionDate: parsedLastPromo,
+                        dateOfLastPromotion: parsedLastPromo,
+                        nextDueYear: targetDueYear,
+                        nextPromotionDueYear: targetDueYear,
+                        nextDueDate: targetDueDate,
+                        nextPromotionDueDate: targetDueDate,
+                        eligibilityStatus: targetPromoStatus,
+                        promotionEligibilityStatus: targetPromoStatus,
+                        isDueForPromotion: isDueImmediately || targetPromoStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                        legacyDataBackfilled: !!parsedLastPromo,
+                        registryOverride: isOverridden,
+                        overrideReason: isOverridden ? overrideReason?.trim() || 'Custom promotion schedule configured upon creation' : null,
                         // Link either Unit OR Center (or both if applicable, but usually mutually exclusive)
                         unitId: finalUnitId || undefined,
                         centerId: finalCenterId || undefined,
@@ -666,9 +718,15 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
 
         const {
             surname, otherNames, title, phone, stateOfOrigin, lga, address,
-            level, step, cadre, gender,
+            level, step, cadre, cadreType, currentGradeLevel, gender,
             role, unitId, centerId, rank,
-            dateOfBirth, dateOfFirstAppointment, status
+            dateOfBirth, dateOfFirstAppointment, status,
+            // Promotion Milestone Fields
+            lastPromotionDate, dateOfLastPromotion,
+            nextPromotionDueYear, nextDueYear,
+            nextPromotionDueDate, nextDueDate,
+            promotionEligibilityStatus, eligibilityStatus,
+            isDueImmediately, registryOverride, overrideReason
         } = req.body;
 
         let resolvedCadre: Cadre | undefined = undefined;
@@ -678,6 +736,19 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             } else if (Object.values(Cadre).includes(cadre as any)) {
                 resolvedCadre = cadre as Cadre;
             }
+        }
+
+        let resolvedCadreType: CadreType | undefined = undefined;
+        if (cadreType && Object.values(CadreType).includes(cadreType as any)) {
+            resolvedCadreType = cadreType as CadreType;
+        } else if (resolvedCadre) {
+            const c = String(resolvedCadre).toUpperCase();
+            if (c === 'ACADEMIC') resolvedCadreType = CadreType.ACADEMIC;
+            else if (c === 'JUNIOR') resolvedCadreType = CadreType.JUNIOR_STAFF;
+            else if (c === 'TECHNICAL') resolvedCadreType = CadreType.TECHNICAL;
+            else if (c === 'MEDICAL') resolvedCadreType = CadreType.MEDICAL;
+            else if (c === 'SECURITY') resolvedCadreType = CadreType.SECURITY;
+            else resolvedCadreType = CadreType.SENIOR_ADMIN;
         }
 
         let passportUrl = undefined;
@@ -701,6 +772,9 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
 
         const dob = parseDate(dateOfBirth);
         const apptDate = parseDate(dateOfFirstAppointment);
+        const parsedLastPromo = parseDate(lastPromotionDate || dateOfLastPromotion);
+        const parsedNextDueDate = parseDate(nextPromotionDueDate || nextDueDate);
+        const parsedNextDueYear = nextPromotionDueYear ? parseInt(String(nextPromotionDueYear), 10) : (nextDueYear ? parseInt(String(nextDueYear), 10) : undefined);
 
         // Status update logic with archiving cascade
         let finalStatus = user.staffProfile?.status;
@@ -738,17 +812,47 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        const effectiveGradeLevel = currentGradeLevel || level || user.staffProfile?.currentGradeLevel || user.staffProfile?.level;
+        const effectiveCadreType = resolvedCadreType || user.staffProfile?.cadreType;
+
+        // Auto-calculate maturity if lastPromotionDate provided but nextDueYear not provided
+        let autoDueYear = parsedNextDueYear;
+        let autoDueDate = parsedNextDueDate;
+        if (parsedLastPromo && !autoDueYear) {
+            const computed = calculateNextPromotionMaturity(parsedLastPromo, effectiveCadreType, effectiveGradeLevel);
+            autoDueYear = computed.dueYear;
+            autoDueDate = autoDueDate || computed.dueDate;
+        }
+
+        const resolvedPromoStatus = isDueImmediately
+            ? PromotionEligibilityStatus.DUE_FOR_REVIEW
+            : ((promotionEligibilityStatus || eligibilityStatus) as PromotionEligibilityStatus || (autoDueYear && autoDueYear <= new Date().getFullYear() ? PromotionEligibilityStatus.DUE_FOR_REVIEW : undefined));
+
         // Upsert staff profile
         await prisma.staffProfile.upsert({
             where: { userId: user.id },
             create: {
                 userId: user.id,
                 surname, otherNames, title, phone, stateOfOrigin, lga, address,
-                level, step, cadre: resolvedCadre, gender,
+                level, step, cadre: resolvedCadre, cadreType: effectiveCadreType,
+                currentGradeLevel: effectiveGradeLevel,
+                gender,
                 passportUrl,
                 rank: rank || undefined,
                 dateOfBirth: dob,
                 dateOfFirstAppointment: apptDate,
+                lastPromotionDate: parsedLastPromo,
+                dateOfLastPromotion: parsedLastPromo,
+                nextDueYear: autoDueYear,
+                nextPromotionDueYear: autoDueYear,
+                nextDueDate: autoDueDate,
+                nextPromotionDueDate: autoDueDate,
+                eligibilityStatus: resolvedPromoStatus || PromotionEligibilityStatus.PENDING_MATURITY,
+                promotionEligibilityStatus: resolvedPromoStatus || PromotionEligibilityStatus.PENDING_MATURITY,
+                isDueForPromotion: isDueImmediately || resolvedPromoStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                legacyDataBackfilled: !!parsedLastPromo,
+                registryOverride: registryOverride === true || (overrideReason && overrideReason.trim().length > 0),
+                overrideReason: overrideReason?.trim() || null,
                 status: finalStatus,
                 isDeleted: finalIsDeleted,
                 deletedAt: finalDeletedAt,
@@ -757,10 +861,38 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             },
             update: {
                 surname, otherNames, title: title !== undefined ? title : undefined, phone, stateOfOrigin, lga, address,
-                level, step, cadre: resolvedCadre, gender,
+                level, step,
+                cadre: resolvedCadre !== undefined ? resolvedCadre : undefined,
+                cadreType: effectiveCadreType !== undefined ? effectiveCadreType : undefined,
+                currentGradeLevel: effectiveGradeLevel !== undefined ? effectiveGradeLevel : undefined,
+                gender,
                 rank: rank !== undefined ? rank : undefined,
                 dateOfBirth: dob !== undefined ? dob : undefined,
                 dateOfFirstAppointment: apptDate !== undefined ? apptDate : undefined,
+                ...(parsedLastPromo !== undefined ? {
+                    lastPromotionDate: parsedLastPromo,
+                    dateOfLastPromotion: parsedLastPromo,
+                    legacyDataBackfilled: true
+                } : {}),
+                ...(autoDueYear !== undefined ? {
+                    nextDueYear: autoDueYear,
+                    nextPromotionDueYear: autoDueYear
+                } : {}),
+                ...(autoDueDate !== undefined ? {
+                    nextDueDate: autoDueDate,
+                    nextPromotionDueDate: autoDueDate
+                } : {}),
+                ...(resolvedPromoStatus !== undefined ? {
+                    eligibilityStatus: resolvedPromoStatus,
+                    promotionEligibilityStatus: resolvedPromoStatus,
+                    isDueForPromotion: isDueImmediately || resolvedPromoStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW
+                } : (isDueImmediately ? {
+                    eligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                    promotionEligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                    isDueForPromotion: true
+                } : {})),
+                ...(registryOverride !== undefined ? { registryOverride } : {}),
+                ...(overrideReason !== undefined ? { overrideReason: overrideReason?.trim() || null } : {}),
                 status: finalStatus,
                 isDeleted: finalIsDeleted,
                 deletedAt: finalDeletedAt,
@@ -1315,4 +1447,110 @@ export const deleteStaffNoId = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Failed to delete staff with no ID', error: err.message });
     }
 };
+
+/**
+ * PUT /api/v1/hr/staff/:id/service-record and PUT /api/staff/:id/service-record
+ * Dedicated endpoint for updating a staff member's service record & career promotion milestones.
+ */
+export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const actorId = req.user?.id || 'SYSTEM';
+        const updaterRole = req.user?.role;
+        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(updaterRole as any);
+
+        if (!isAdmin) {
+            return res.status(403).json({ message: 'Only HR Administrators and Registry officers can update official service records.' });
+        }
+
+        let user = await prisma.user.findUnique({
+            where: { id },
+            include: { staffProfile: true }
+        });
+
+        if (!user) {
+            // Also try resolving by staffProfile.id
+            const prof = await prisma.staffProfile.findUnique({
+                where: { id },
+                include: { user: true }
+            });
+            if (prof) {
+                user = { ...prof.user, staffProfile: prof } as any;
+            }
+        }
+
+        if (!user || !user.staffProfile) {
+            return res.status(404).json({ message: 'Staff profile not found' });
+        }
+
+        const {
+            surname, otherNames, title, rank, level, step, cadre, cadreType, currentGradeLevel,
+            unitId, centerId, dateOfBirth, dateOfFirstAppointment, status,
+            lastPromotionDate, dateOfLastPromotion,
+            nextPromotionDueYear, nextDueYear,
+            nextPromotionDueDate, nextDueDate,
+            promotionEligibilityStatus, eligibilityStatus,
+            isDueImmediately, registryOverride, overrideReason
+        } = req.body;
+
+        const result = await PromotionService.updateStaffPromotionSchedule({
+            staffProfileId: user.staffProfile.id,
+            actorId,
+            lastPromotionDate: lastPromotionDate || dateOfLastPromotion,
+            cadreType: cadreType || (cadre as any),
+            currentGradeLevel: currentGradeLevel || level,
+            nextDueYear,
+            nextPromotionDueYear,
+            nextDueDate,
+            nextPromotionDueDate,
+            eligibilityStatus,
+            promotionEligibilityStatus,
+            registryOverride,
+            overrideReason,
+            isDueImmediately
+        });
+
+        // Also update standard service fields if provided
+        const parseDate = (val: any) => {
+            if (!val || val === 'null' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const dob = parseDate(dateOfBirth);
+        const apptDate = parseDate(dateOfFirstAppointment);
+
+        await prisma.staffProfile.update({
+            where: { id: user.staffProfile.id },
+            data: {
+                ...(surname ? { surname } : {}),
+                ...(otherNames ? { otherNames } : {}),
+                ...(title !== undefined ? { title } : {}),
+                ...(rank !== undefined ? { rank } : {}),
+                ...(level !== undefined ? { level } : {}),
+                ...(step !== undefined ? { step } : {}),
+                ...(dob !== undefined ? { dateOfBirth: dob } : {}),
+                ...(apptDate !== undefined ? { dateOfFirstAppointment: apptDate } : {}),
+                ...(unitId !== undefined ? { unitId: unitId === '' || unitId === 'null' ? null : unitId } : {}),
+                ...(centerId !== undefined ? { centerId: centerId === '' || centerId === 'null' ? null : centerId } : {})
+            }
+        });
+
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*'),
+            redisService.clearPattern('hr:analytics:*')
+        ]);
+
+        res.json({
+            message: 'Service record & promotion schedule updated successfully',
+            profile: result.profile,
+            auditLog: result.auditLog
+        });
+    } catch (error: any) {
+        console.error('updateServiceRecord error:', error);
+        res.status(400).json({ message: error.message || 'Failed to update service record' });
+    }
+};
+
 
