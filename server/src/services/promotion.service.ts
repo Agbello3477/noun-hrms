@@ -297,6 +297,8 @@ export class PromotionService {
                 },
                 _count: { id: true }
             })
+        ]);
+
         const [dueThisCycleCount, maturedOverdueCount, upcomingCount, allConfiguredCount] = await Promise.all([
             prisma.staffProfile.count({
                 where: {
