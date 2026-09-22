@@ -15,12 +15,15 @@ import {
     Loader2,
     Calendar,
     TrendingUp,
-    Info
+    Info,
+    CreditCard,
+    CheckCircle2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
 import api from '../../../../lib/api';
 import { STANDARD_QUALIFICATIONS } from '../../../../lib/qualifications';
+import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../../../lib/banks';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
 import QueryHistoryTab from '../../../../components/hr/dossier/QueryHistoryTab';
 
@@ -35,6 +38,9 @@ interface StaffDetail {
         surname: string | null;
         otherNames: string | null;
         highestQualification?: string | null;
+        bankName?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
         department: string | null;
         rank: string | null;
         level: string | null;
@@ -92,6 +98,10 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     const [editOtherNames, setEditOtherNames] = useState('');
     const [editHighestQualification, setEditHighestQualification] = useState('');
     const [editCustomQualification, setEditCustomQualification] = useState('');
+    const [editBankName, setEditBankName] = useState('');
+    const [editCustomBankName, setEditCustomBankName] = useState('');
+    const [editAccountNumber, setEditAccountNumber] = useState('');
+    const [editAccountName, setEditAccountName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [editAddress, setEditAddress] = useState('');
     const [editCadre, setEditCadre] = useState('ADMINISTRATIVE');
@@ -287,6 +297,16 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                     setEditHighestQualification(qual);
                     setEditCustomQualification('');
                 }
+                const bName = staffData.staffProfile?.bankName || '';
+                if (bName && !NIGERIAN_BANKS.some(b => b.name === bName)) {
+                    setEditBankName('OTHER');
+                    setEditCustomBankName(bName);
+                } else {
+                    setEditBankName(bName);
+                    setEditCustomBankName('');
+                }
+                setEditAccountNumber(staffData.staffProfile?.accountNumber || '');
+                setEditAccountName(staffData.staffProfile?.accountName || '');
                 setEditPhone(staffData.staffProfile?.phone || '');
                 setEditAddress(staffData.staffProfile?.address || '');
                 setEditCadre(staffData.staffProfile?.cadre || 'ADMINISTRATIVE');
@@ -397,11 +417,18 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 ? editCustomQualification.trim()
                 : editHighestQualification;
 
+            const effectiveBankName = editBankName === 'OTHER'
+                ? editCustomBankName.trim()
+                : editBankName;
+
             const payload = {
                 title: editTitle,
                 surname: editSurname,
                 otherNames: editOtherNames,
                 highestQualification: effectiveQualification || undefined,
+                bankName: effectiveBankName || undefined,
+                accountNumber: editAccountNumber.trim() || undefined,
+                accountName: editAccountName.trim() || undefined,
                 phone: editPhone,
                 address: editAddress,
                 level: editLevel,
@@ -830,6 +857,85 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                             className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mt-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
                                         />
                                     )}
+                                </div>
+                                {/* Bursary & Banking Details */}
+                                <div className="md:col-span-2 bg-blue-50/70 p-4 rounded-xl border border-blue-200 space-y-3">
+                                    <label className="block text-xs font-bold text-blue-950 uppercase tracking-wider flex items-center gap-1.5">
+                                        <CreditCard size={16} className="text-blue-700" />
+                                        Bursary &amp; Banking Details (Disbursements &amp; Payroll)
+                                    </label>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-900 mb-1">Bank Name</label>
+                                            <select
+                                                value={editBankName}
+                                                onChange={e => setEditBankName(e.target.value)}
+                                                className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                            >
+                                                <option value="">Select Bank</option>
+                                                <optgroup label="Commercial Banks">
+                                                    {NIGERIAN_BANKS.filter(b => b.category === 'Commercial').map(b => (
+                                                        <option key={b.code} value={b.name}>{b.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                                <optgroup label="Non-Interest / Islamic Banks">
+                                                    {NIGERIAN_BANKS.filter(b => b.category === 'Non-Interest').map(b => (
+                                                        <option key={b.code} value={b.name}>{b.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                                <optgroup label="Fintech & Digital Banks">
+                                                    {NIGERIAN_BANKS.filter(b => b.category === 'Fintech').map(b => (
+                                                        <option key={b.code} value={b.name}>{b.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                                <optgroup label="Merchant & Other Banks">
+                                                    {NIGERIAN_BANKS.filter(b => b.category === 'Merchant' || b.category === 'Microfinance').map(b => (
+                                                        <option key={b.code} value={b.name}>{b.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                                <option value="OTHER">Other / Specific MFB</option>
+                                            </select>
+                                            {editBankName === 'OTHER' && (
+                                                <input
+                                                    type="text"
+                                                    value={editCustomBankName}
+                                                    onChange={e => setEditCustomBankName(e.target.value)}
+                                                    placeholder="Specify institution name"
+                                                    className="w-full border border-blue-300 rounded-lg p-2 mt-1.5 bg-white text-xs text-gray-900"
+                                                />
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                                                <span>Account Number (NUBAN)</span>
+                                                {editAccountNumber.length === 10 && (
+                                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded inline-flex items-center gap-0.5">
+                                                        <CheckCircle2 size={10} /> 10 Digits
+                                                    </span>
+                                                )}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                maxLength={10}
+                                                value={editAccountNumber}
+                                                onChange={e => setEditAccountNumber(sanitizeAccountNumber(e.target.value))}
+                                                placeholder="10 Digits"
+                                                className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-mono font-bold tracking-wider focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-900 mb-1">Account Name</label>
+                                            <input
+                                                type="text"
+                                                value={editAccountName}
+                                                onChange={e => setEditAccountName(e.target.value)}
+                                                placeholder="Full Beneficiary Name"
+                                                className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-medium uppercase focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                                 {/* Date of Birth */}
                                 <div className="space-y-1">

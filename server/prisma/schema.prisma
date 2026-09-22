@@ -301,6 +301,7 @@ model StaffProfile {
 
   bankName      String?
   accountNumber String?
+  accountName   String?
 
   @@map("staff_profiles")
   @@index([unitId])

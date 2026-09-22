@@ -6,7 +6,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import ActiveSessions from '../../../components/profile/ActiveSessions';
 import {
     User, Mail, Briefcase, MapPin, Phone, Building, Edit2,
-    PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2, TrendingUp
+    PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2, TrendingUp, CreditCard
 } from 'lucide-react';
 import api, { getImageUrl } from '../../../lib/api';
 
@@ -271,6 +271,41 @@ export default function ProfilePage() {
                                         ? new Date((user.staffProfile as any).dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
                                         : 'Not Specified'}
                                 </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bursary & Banking Details */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-blue-200/90 p-6 overflow-hidden relative">
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600"></div>
+                        <div className="flex items-center gap-2.5 mb-4">
+                            <div className="h-9 w-9 bg-blue-50 rounded-xl flex items-center justify-center text-blue-700 border border-blue-100">
+                                <CreditCard size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-gray-900">Bursary &amp; Banking Details (Disbursements)</h3>
+                                <p className="text-xs text-gray-500">Designated bank account for salary payment and official disbursements.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                            <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
+                                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Bank Name</span>
+                                <span className="text-sm font-extrabold text-blue-950">
+                                    {(user.staffProfile as any)?.bankName || 'Not Provided'}
+                                </span>
+                            </div>
+                            <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
+                                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Account Number</span>
+                                <span className="text-sm font-extrabold text-blue-950 font-mono tracking-wider">
+                                    {(user.staffProfile as any)?.accountNumber || 'Not Provided'}
+                                </span>
+                            </div>
+                            <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
+                                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Beneficiary Account Name</span>
+                                <span className="text-sm font-bold text-blue-950 uppercase">
+                                    {(user.staffProfile as any)?.accountName || user.name || 'Not Provided'}
+                                </span>
                             </div>
                         </div>
                     </div>

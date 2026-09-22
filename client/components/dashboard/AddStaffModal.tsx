@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Calendar, TrendingUp, AlertCircle, Info, Shield, GraduationCap } from 'lucide-react';
+import { X, Calendar, TrendingUp, AlertCircle, Info, Shield, GraduationCap, CreditCard, Building2, CheckCircle2 } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 import { STANDARD_QUALIFICATIONS } from '../../lib/qualifications';
+import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
 import Button from '../ui/Button';
 
 interface AddStaffModalProps {
@@ -28,6 +29,12 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         email: '',
         phone: '',
         gender: 'Male', // Default
+
+        // Bursary & Banking Details
+        bankName: '',
+        customBankName: '',
+        accountNumber: '',
+        accountName: '',
 
         // Location
         address: '',
@@ -238,6 +245,11 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         setFormData(prev => ({ ...prev, phone: limitedDigits }));
     };
 
+    const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const sanitized = sanitizeAccountNumber(e.target.value);
+        setFormData(prev => ({ ...prev, accountNumber: sanitized }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -292,9 +304,16 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 ? formData.customQualification.trim()
                 : formData.highestQualification;
 
+            const effectiveBankName = formData.bankName === 'OTHER'
+                ? formData.customBankName.trim()
+                : formData.bankName;
+
             const payload = {
                 ...formData,
                 highestQualification: effectiveQualification || undefined,
+                bankName: effectiveBankName || undefined,
+                accountNumber: formData.accountNumber.trim() || undefined,
+                accountName: formData.accountName.trim() || undefined,
                 phone: submittedPhone,
                 role: dbRole,
                 rank: assignedRank,
@@ -621,7 +640,107 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
 
                     <hr />
 
-                    {/* Section 3: Promotion Maturity & Scheduling Subsection */}
+                    {/* Section 3: Bursary & Banking Details */}
+                    <div className="space-y-4 bg-blue-50/70 p-5 rounded-xl border border-blue-200">
+                        <div className="flex items-center gap-2">
+                            <CreditCard className="text-blue-700" size={18} />
+                            <div>
+                                <h4 className="text-sm font-bold text-blue-950 uppercase tracking-wider">
+                                    Bursary &amp; Banking Details (Payment &amp; Payroll)
+                                </h4>
+                                <p className="text-xs text-blue-700">
+                                    Official banking details required by Bursary for salary disbursements, statutory claims, and IPPIS schedules.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-blue-900 mb-1">
+                                    Bank Name
+                                </label>
+                                <select
+                                    name="bankName"
+                                    className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-medium focus:ring-2 focus:ring-blue-500"
+                                    value={formData.bankName}
+                                    onChange={handleChange}
+                                >
+                                    <option value="">-- Select Bank --</option>
+                                    <optgroup label="Commercial Banks">
+                                        {NIGERIAN_BANKS.filter(b => b.category === 'Commercial').map(b => (
+                                            <option key={b.code} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="Non-Interest / Islamic Banks">
+                                        {NIGERIAN_BANKS.filter(b => b.category === 'Non-Interest').map(b => (
+                                            <option key={b.code} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="Fintech & Digital Banks">
+                                        {NIGERIAN_BANKS.filter(b => b.category === 'Fintech').map(b => (
+                                            <option key={b.code} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="Merchant & Other Banks">
+                                        {NIGERIAN_BANKS.filter(b => b.category === 'Merchant' || b.category === 'Microfinance').map(b => (
+                                            <option key={b.code} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </optgroup>
+                                    <option value="OTHER">Other / Specific Microfinance Bank</option>
+                                </select>
+                                {formData.bankName === 'OTHER' && (
+                                    <input
+                                        type="text"
+                                        name="customBankName"
+                                        placeholder="Enter full institution / MFB name"
+                                        className="w-full border border-blue-300 rounded-lg p-2 mt-2 bg-white text-xs text-gray-900 font-medium focus:ring-2 focus:ring-blue-500"
+                                        value={formData.customBankName}
+                                        onChange={handleChange}
+                                    />
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-blue-900 mb-1 flex items-center justify-between">
+                                    <span>Account Number (NUBAN)</span>
+                                    {formData.accountNumber.length === 10 && (
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
+                                            <CheckCircle2 size={10} /> 10 Digits
+                                        </span>
+                                    )}
+                                </label>
+                                <input
+                                    type="text"
+                                    name="accountNumber"
+                                    maxLength={10}
+                                    placeholder="e.g. 0123456789"
+                                    className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-mono font-bold tracking-wider focus:ring-2 focus:ring-blue-500"
+                                    value={formData.accountNumber}
+                                    onChange={handleAccountNumberChange}
+                                />
+                                <span className="text-[10px] text-blue-600 block mt-0.5">10-digit Nigerian NUBAN format</span>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-blue-900 mb-1">
+                                    Account Name (Beneficiary)
+                                </label>
+                                <input
+                                    type="text"
+                                    name="accountName"
+                                    placeholder="e.g. BELLO ABDULGAFFAR O."
+                                    className="w-full border border-blue-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-medium uppercase focus:ring-2 focus:ring-blue-500"
+                                    value={formData.accountName}
+                                    onChange={handleChange}
+                                />
+                                <span className="text-[10px] text-blue-600 block mt-0.5">Full name registered with the bank</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    {/* Section 4: Promotion Maturity & Scheduling Subsection */}
                     <div className="space-y-4 bg-emerald-50/50 p-5 rounded-xl border border-emerald-200">
                         <div className="flex items-center gap-2">
                             <TrendingUp className="text-emerald-700" size={18} />

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Camera, Save, Loader2, GraduationCap } from 'lucide-react';
+import { X, Camera, Save, Loader2, GraduationCap, CreditCard, CheckCircle2 } from 'lucide-react';
 import api from '../../lib/api';
+import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
 
 const STANDARD_QUALIFICATIONS = [
     'Ph.D. / Doctorate',
@@ -28,6 +29,8 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
     const [isLoading, setIsLoading] = useState(false);
     const initialQual = user.staffProfile?.highestQualification || '';
     const isStandard = STANDARD_QUALIFICATIONS.includes(initialQual);
+    const initialBank = user.staffProfile?.bankName || '';
+    const isStandardBank = NIGERIAN_BANKS.some(b => b.name === initialBank);
     
     const [formData, setFormData] = useState({
         surname: user.staffProfile?.surname || user.name?.split(' ')[0] || '',
@@ -37,13 +40,22 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
         stateOfOrigin: user.staffProfile?.stateOfOrigin || '',
         lga: user.staffProfile?.lga || '',
         highestQualification: isStandard ? initialQual : (initialQual ? 'CUSTOM' : ''),
-        customQualification: isStandard ? '' : initialQual
+        customQualification: isStandard ? '' : initialQual,
+        bankName: isStandardBank ? initialBank : (initialBank ? 'OTHER' : ''),
+        customBankName: isStandardBank ? '' : initialBank,
+        accountNumber: user.staffProfile?.accountNumber || '',
+        accountName: user.staffProfile?.accountName || user.name || ''
     });
     const [passport, setPassport] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(user.staffProfile?.passportUrl ? `${process.env.NEXT_PUBLIC_API_URL}${user.staffProfile.passportUrl}` : null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const sanitized = sanitizeAccountNumber(e.target.value);
+        setFormData({ ...formData, accountNumber: sanitized });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,6 +75,10 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
                 ? formData.customQualification.trim()
                 : formData.highestQualification;
 
+            const effectiveBank = formData.bankName === 'OTHER'
+                ? formData.customBankName.trim()
+                : formData.bankName;
+
             const data = new FormData();
             data.append('surname', formData.surname);
             data.append('otherNames', formData.otherNames);
@@ -72,6 +88,15 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
             data.append('lga', formData.lga);
             if (effectiveQual) {
                 data.append('highestQualification', effectiveQual);
+            }
+            if (effectiveBank) {
+                data.append('bankName', effectiveBank);
+            }
+            if (formData.accountNumber) {
+                data.append('accountNumber', formData.accountNumber.trim());
+            }
+            if (formData.accountName) {
+                data.append('accountName', formData.accountName.trim());
             }
 
             if (passport) {
@@ -173,6 +198,91 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
                                     className="mt-2 block w-full rounded-lg border border-emerald-300 bg-white p-2.5 text-sm text-gray-900 placeholder:text-gray-400"
                                 />
                             )}
+                        </div>
+
+                        {/* Bursary & Banking Details Field */}
+                        <div className="col-span-2 bg-blue-50/80 p-4 rounded-xl border border-blue-200 space-y-3">
+                            <label className="block text-xs font-bold text-blue-950 uppercase tracking-wider flex items-center gap-1.5">
+                                <CreditCard size={16} className="text-blue-700" />
+                                Bursary &amp; Banking Details (Salary Disbursement)
+                            </label>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-900 mb-1">Bank Name</label>
+                                    <select
+                                        name="bankName"
+                                        value={formData.bankName}
+                                        onChange={handleChange}
+                                        className="block w-full rounded-lg border border-blue-300 bg-white p-2 text-xs text-gray-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    >
+                                        <option value="">Select Bank</option>
+                                        <optgroup label="Commercial Banks">
+                                            {NIGERIAN_BANKS.filter(b => b.category === 'Commercial').map(b => (
+                                                <option key={b.code} value={b.name}>{b.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="Non-Interest / Islamic Banks">
+                                            {NIGERIAN_BANKS.filter(b => b.category === 'Non-Interest').map(b => (
+                                                <option key={b.code} value={b.name}>{b.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="Fintech & Digital Banks">
+                                            {NIGERIAN_BANKS.filter(b => b.category === 'Fintech').map(b => (
+                                                <option key={b.code} value={b.name}>{b.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <optgroup label="Merchant & Other Banks">
+                                            {NIGERIAN_BANKS.filter(b => b.category === 'Merchant' || b.category === 'Microfinance').map(b => (
+                                                <option key={b.code} value={b.name}>{b.name}</option>
+                                            ))}
+                                        </optgroup>
+                                        <option value="OTHER">Other / Specific MFB</option>
+                                    </select>
+                                    {formData.bankName === 'OTHER' && (
+                                        <input
+                                            type="text"
+                                            name="customBankName"
+                                            placeholder="Specify institution name"
+                                            value={formData.customBankName}
+                                            onChange={handleChange}
+                                            className="mt-1.5 block w-full rounded-lg border border-blue-300 bg-white p-2 text-xs text-gray-900"
+                                        />
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                                        <span>Account Number (NUBAN)</span>
+                                        {formData.accountNumber.length === 10 && (
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded inline-flex items-center gap-0.5">
+                                                <CheckCircle2 size={10} /> 10 Digits
+                                            </span>
+                                        )}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="accountNumber"
+                                        maxLength={10}
+                                        placeholder="10 Digits"
+                                        value={formData.accountNumber}
+                                        onChange={handleAccountNumberChange}
+                                        className="block w-full rounded-lg border border-blue-300 bg-white p-2 text-xs text-gray-900 font-mono font-bold tracking-wider focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-900 mb-1">Account Name</label>
+                                    <input
+                                        type="text"
+                                        name="accountName"
+                                        placeholder="Full Beneficiary Name"
+                                        value={formData.accountName}
+                                        onChange={handleChange}
+                                        className="block w-full rounded-lg border border-blue-300 bg-white p-2 text-xs text-gray-900 font-medium uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div>

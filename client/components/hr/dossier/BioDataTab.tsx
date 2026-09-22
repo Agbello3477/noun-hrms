@@ -1,6 +1,6 @@
 'use client';
 
-import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard } from 'lucide-react';
 
 export default function BioDataTab({ staff }: { staff: any }) {
     if (!staff) return null;
@@ -113,6 +113,41 @@ export default function BioDataTab({ staff }: { staff: any }) {
                     </div>
                 </div>
 
+            </div>
+
+            {/* Bursary & Banking Details Section */}
+            <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 overflow-hidden relative">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+                <div className="flex items-center gap-2 mb-4">
+                    <CreditCard className="text-blue-700" size={20} />
+                    <h3 className="text-lg font-bold text-gray-900">Bursary &amp; Banking Details (Disbursements &amp; Payroll)</h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-6">
+                    Statutory banking information used by the Bursary department for salary payment, allowances, and IPPIS reconciliation.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Bank Name</span>
+                        <span className="text-sm font-extrabold text-blue-950">
+                            {profile.bankName || staff.bankName || 'Not Provided'}
+                        </span>
+                    </div>
+
+                    <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Account Number (NUBAN)</span>
+                        <span className="text-base font-black text-blue-950 font-mono tracking-wider">
+                            {profile.accountNumber || staff.accountNumber || 'Not Provided'}
+                        </span>
+                    </div>
+
+                    <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Account Name (Beneficiary)</span>
+                        <span className="text-sm font-bold text-blue-950 uppercase">
+                            {profile.accountName || staff.accountName || staff.name || 'Not Provided'}
+                        </span>
+                    </div>
+                </div>
             </div>
 
             {/* Promotion Maturity & Scheduling Section */}

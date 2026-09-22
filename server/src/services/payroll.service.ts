@@ -239,7 +239,7 @@ export class PayrollService {
             'Grade Level', 'Step',
             'Basic Salary', 'Total Allowances', 'Gross Pay',
             'Tax', 'Pension', 'Total Deductions', 'Net Pay',
-            'Bank Name', 'Account Number'
+            'Bank Name', 'Account Number', 'Account Name'
         ].join(',');
 
         // CSV Rows
@@ -259,8 +259,9 @@ export class PayrollService {
                 record.pension,
                 record.totalDeductions,
                 record.netPay,
-                profile?.bankName || 'Access Bank',
-                profile?.accountNumber || '0000000000'
+                profile?.bankName || 'N/A',
+                profile?.accountNumber || 'N/A',
+                `"${profile?.accountName || record.user.name}"`
             ].join(',');
         });
 
@@ -284,7 +285,7 @@ export class PayrollService {
         }
 
         const header = [
-            'Serial Number', 'Employee ID', 'Employee Name',
+            'Serial Number', 'Employee ID', 'Employee Name', 'Account Name',
             'Bank Name', 'Account Number', 'Net Pay', 'Narration'
         ].join(',');
 
@@ -294,8 +295,9 @@ export class PayrollService {
                 index + 1,
                 record.user.id,
                 `"${record.user.name}"`,
-                profile?.bankName || 'Access Bank',
-                profile?.accountNumber || '0000000000',
+                `"${profile?.accountName || record.user.name}"`,
+                profile?.bankName || 'N/A',
+                profile?.accountNumber || 'N/A',
                 record.netPay,
                 `"Salary disbursement for ${month} ${year}"`
             ].join(',');
