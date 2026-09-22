@@ -1,8 +1,34 @@
 import prisma from '../prisma';
-import { CadreType, PromotionEligibilityStatus, Role } from '@prisma/client';
+import { Cadre, CadreType, PromotionEligibilityStatus, Role } from '@prisma/client';
 import { calculatePromotionMaturity } from '../utils/promotionCalculator';
 import { sendPromotionNotificationEmail } from './email.service';
 import { sendPushNotification } from './fcm.service';
+
+export function normalizeToCadreType(cadre?: string | null): CadreType | null {
+    if (!cadre) return null;
+    const c = cadre.toUpperCase().trim();
+    if (c === 'ACADEMIC') return CadreType.ACADEMIC;
+    if (c === 'SENIOR_ADMIN' || c === 'ADMINISTRATIVE' || c === 'SENIOR' || c === 'NON_ACADEMIC') return CadreType.SENIOR_ADMIN;
+    if (c === 'JUNIOR_STAFF' || c === 'JUNIOR') return CadreType.JUNIOR_STAFF;
+    if (c === 'TECHNICAL') return CadreType.TECHNICAL;
+    if (c === 'MEDICAL') return CadreType.MEDICAL;
+    if (c === 'SECURITY') return CadreType.SECURITY;
+    if (Object.values(CadreType).includes(c as CadreType)) return c as CadreType;
+    return null;
+}
+
+export function normalizeToCadre(cadre?: string | null): Cadre | null {
+    if (!cadre) return null;
+    const c = cadre.toUpperCase().trim();
+    if (c === 'ACADEMIC') return Cadre.ACADEMIC;
+    if (c === 'SENIOR_ADMIN' || c === 'ADMINISTRATIVE' || c === 'SENIOR' || c === 'NON_ACADEMIC') return Cadre.ADMINISTRATIVE;
+    if (c === 'JUNIOR_STAFF' || c === 'JUNIOR') return Cadre.JUNIOR;
+    if (c === 'TECHNICAL') return Cadre.TECHNICAL;
+    if (c === 'MEDICAL') return Cadre.MEDICAL;
+    if (c === 'SECURITY') return Cadre.SECURITY;
+    if (Object.values(Cadre).includes(c as Cadre)) return c as Cadre;
+    return null;
+}
 
 export interface UpdateScheduleParams {
     staffProfileId: string;
@@ -79,11 +105,12 @@ export class PromotionService {
             ? (lastPromotionDate ? new Date(lastPromotionDate) : null)
             : (profile.lastPromotionDate || profile.dateOfLastPromotion || null);
 
-        const effectiveCadre = (cadreType as CadreType) || profile.cadreType || (profile.cadre as unknown as CadreType) || null;
+        const effectiveCadreType = normalizeToCadreType(cadreType) || normalizeToCadreType(profile.cadreType) || normalizeToCadreType(profile.cadre) || null;
+        const effectiveCadre = normalizeToCadre(cadreType) || normalizeToCadre(profile.cadreType) || normalizeToCadre(profile.cadre) || null;
         const effectiveLevel = currentGradeLevel !== undefined ? currentGradeLevel : (profile.currentGradeLevel || profile.level);
 
         // Calculate auto-computed defaults if not explicitly overridden
-        const computed = calculatePromotionMaturity(effectiveLastPromo, effectiveCadre, effectiveLevel);
+        const computed = calculatePromotionMaturity(effectiveLastPromo, effectiveCadreType, effectiveLevel);
 
         const computedDueYear = effectiveDueYearInput !== undefined && effectiveDueYearInput !== null
             ? Number(effectiveDueYearInput)
@@ -114,7 +141,8 @@ export class PromotionService {
                 data: {
                     lastPromotionDate: effectiveLastPromo,
                     dateOfLastPromotion: effectiveLastPromo, // sync legacy field
-                    cadreType: effectiveCadre,
+                    cadreType: effectiveCadreType,
+                    cadre: effectiveCadre, // sync legacy cadre field
                     currentGradeLevel: effectiveLevel,
                     nextDueYear: computedDueYear,
                     nextPromotionDueYear: computedDueYear,
@@ -226,13 +254,21 @@ export class PromotionService {
 
         // Cadre filter
         if (cadre && cadre !== 'ALL') {
-            where.AND = where.AND || [];
-            where.AND.push({
-                OR: [
-                    { cadreType: cadre as CadreType },
-                    { cadre: cadre as any }
-                ]
-            });
+            const targetCadreType = normalizeToCadreType(cadre);
+            const targetCadre = normalizeToCadre(cadre);
+
+            const orConditions: any[] = [];
+            if (targetCadreType) {
+                orConditions.push({ cadreType: targetCadreType });
+            }
+            if (targetCadre) {
+                orConditions.push({ cadre: targetCadre });
+            }
+
+            if (orConditions.length > 0) {
+                where.AND = where.AND || [];
+                where.AND.push(orConditions.length === 1 ? orConditions[0] : { OR: orConditions });
+            }
         }
 
         // Status filter
