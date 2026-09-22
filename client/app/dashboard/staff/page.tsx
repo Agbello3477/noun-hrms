@@ -16,7 +16,9 @@ import {
     Mail, 
     Building, 
     GraduationCap,
-    Loader2
+    Loader2,
+    TrendingUp,
+    Calendar
 } from 'lucide-react';
 import api from '../../../lib/api';
 import AddStaffModal from '../../../components/dashboard/AddStaffModal';
@@ -40,6 +42,12 @@ interface Staff {
         unitId?: string;
         centerId?: string;
         status?: string;
+        highestQualification?: string | null;
+        lastPromotionDate?: string | null;
+        nextPromotionDueYear?: number | null;
+        nextPromotionDueDate?: string | null;
+        promotionEligibilityStatus?: string | null;
+        dateOfFirstAppointment?: string | null;
         unit?: { name: string; type: string };
         studyCenter?: { name: string; code: string };
     };
@@ -515,8 +523,36 @@ export default function StaffPage() {
                                         </div>
                                     </div>
 
+                                    {/* Promotion Milestone Block */}
+                                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                            <TrendingUp size={12} className="text-emerald-700" /> Promotion Due:
+                                        </span>
+                                        {staff.staffProfile?.promotionEligibilityStatus === 'DUE_THIS_CYCLE' ? (
+                                            <span className="font-bold text-amber-900 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                Due This Cycle ({staff.staffProfile?.nextPromotionDueYear || '2026'})
+                                            </span>
+                                        ) : staff.staffProfile?.promotionEligibilityStatus === 'MATURED_OVERDUE' ? (
+                                            <span className="font-bold text-red-900 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                Overdue ({staff.staffProfile?.nextPromotionDueYear || 'Matured'})
+                                            </span>
+                                        ) : staff.staffProfile?.promotionEligibilityStatus === 'PROMOTED' ? (
+                                            <span className="font-bold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                Promoted
+                                            </span>
+                                        ) : staff.staffProfile?.nextPromotionDueYear ? (
+                                            <span className="font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                Due {staff.staffProfile.nextPromotionDueYear}
+                                            </span>
+                                        ) : (
+                                            <span className="font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full text-[10px]">
+                                                Pending Schedule
+                                            </span>
+                                        )}
+                                    </div>
+
                                     {/* Contact Details */}
-                                    <div className="space-y-1.5 pt-2 text-xs text-slate-500">
+                                    <div className="space-y-1.5 pt-2 text-xs text-slate-500 border-t border-slate-50">
                                         <div className="flex items-center gap-2">
                                             <Mail size={12} className="text-slate-400" />
                                             <span className="truncate font-medium">{staff.email}</span>
@@ -552,6 +588,7 @@ export default function StaffPage() {
                                     <th className="px-6 py-3.5">Role/Title</th>
                                     <th className="px-6 py-3.5">Location / Department</th>
                                     <th className="px-6 py-3.5">Rank / Level</th>
+                                    <th className="px-6 py-3.5">Promotion Due</th>
                                     <th className="px-6 py-3.5">Contact</th>
                                     <th className="px-6 py-3.5 text-right">Actions</th>
                                 </tr>
@@ -597,6 +634,29 @@ export default function StaffPage() {
                                             <td className="px-6 py-3.5 text-xs text-slate-600">
                                                 <div className="font-bold text-slate-800">{staff.staffProfile?.rank || 'Staff'}</div>
                                                 <div className="text-[10px] text-slate-400 font-medium">Level {staff.staffProfile?.level || 'N/A'} • Step {staff.staffProfile?.step || 'N/A'}</div>
+                                            </td>
+
+                                            {/* Promotion Due Cell */}
+                                            <td className="px-6 py-3.5 text-xs">
+                                                {staff.staffProfile?.promotionEligibilityStatus === 'DUE_THIS_CYCLE' ? (
+                                                    <span className="font-bold text-amber-900 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-1">
+                                                        Due {staff.staffProfile?.nextPromotionDueYear || '2026'}
+                                                    </span>
+                                                ) : staff.staffProfile?.promotionEligibilityStatus === 'MATURED_OVERDUE' ? (
+                                                    <span className="font-bold text-red-900 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-1">
+                                                        Overdue ({staff.staffProfile?.nextPromotionDueYear || 'Matured'})
+                                                    </span>
+                                                ) : staff.staffProfile?.promotionEligibilityStatus === 'PROMOTED' ? (
+                                                    <span className="font-bold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px]">
+                                                        Promoted
+                                                    </span>
+                                                ) : staff.staffProfile?.nextPromotionDueYear ? (
+                                                    <span className="font-semibold text-emerald-950 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                                                        {staff.staffProfile.nextPromotionDueYear}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-400">Pending</span>
+                                                )}
                                             </td>
 
                                             {/* Contact Cell */}

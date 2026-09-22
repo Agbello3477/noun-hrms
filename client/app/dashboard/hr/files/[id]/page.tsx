@@ -134,12 +134,12 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
 
             {/* Tabs Navigation */}
             <div className="flex overflow-x-auto border-b border-gray-200 mb-6 scrollbar-hide">
-                {['Overview', 'Documents', 'Leaves', 'Transfers', 'APER', 'Queries'].map(tab => (
+                {['Overview', 'Promotion & Career', 'Documents', 'Leaves', 'Transfers', 'APER', 'Queries'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`whitespace-nowrap py-3 px-6 text-sm font-medium border-b-2 transition-colors ${activeTab === tab
-                                ? 'border-nounGreen text-nounGreen'
+                                ? 'border-nounGreen text-nounGreen font-bold'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             }`}
                     >
@@ -151,6 +151,136 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
             {/* Tab Content */}
             <div className="min-h-[400px]">
                 {activeTab === 'Overview' && <BioDataTab staff={staff} />}
+                
+                {activeTab === 'Promotion & Career' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {/* Primary Promotion Milestone Banner */}
+                        <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm p-6 overflow-hidden relative">
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-600"></div>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                        <span className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
+                                            📈
+                                        </span>
+                                        Promotion Maturity &amp; Career Milestones
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Comprehensive statutory waiting cycles, eligibility status, and career progression track for {staff.name}.
+                                    </p>
+                                </div>
+                                <div>
+                                    {staff.promotionEligibilityStatus === 'DUE_THIS_CYCLE' ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                            ⚠️ Due This Cycle (2026)
+                                        </span>
+                                    ) : staff.promotionEligibilityStatus === 'MATURED_OVERDUE' ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-900 border border-red-200">
+                                            🔴 Matured / Overdue
+                                        </span>
+                                    ) : staff.promotionEligibilityStatus === 'PROMOTED' ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                            ✅ Promoted
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                            ⏳ Pending Maturity
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Last Substantive Promotion</span>
+                                    <span className="text-sm font-extrabold text-slate-900">
+                                        {staff.lastPromotionDate 
+                                            ? new Date(staff.lastPromotionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                            : (staff.dateOfFirstAppointment ? new Date(staff.dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'First Appointment')}
+                                    </span>
+                                </div>
+
+                                <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100">
+                                    <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Next Due Year</span>
+                                    <span className="text-xl font-black text-emerald-950 font-mono">
+                                        {staff.nextPromotionDueYear || 'Pending Computation'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100">
+                                    <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Target Effective Date</span>
+                                    <span className="text-sm font-extrabold text-emerald-950">
+                                        {staff.nextPromotionDueDate 
+                                            ? new Date(staff.nextPromotionDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                            : (staff.nextPromotionDueYear ? `${staff.cadre === 'ACADEMIC' ? '01 Oct' : '01 Jan'} ${staff.nextPromotionDueYear}` : 'Statutory Cycle')}
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Cadre Criteria Applied</span>
+                                    <span className="text-xs font-bold text-slate-800">
+                                        {staff.cadre === 'ACADEMIC' ? 'Academic (3 Years • Oct 1)' : 'Admin/Junior (3–4 Years • Jan 1)'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Detailed Career History & Statutory Guidelines */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 border-b pb-2">
+                                    Career Foundation Details
+                                </h3>
+                                <div className="space-y-3 text-sm">
+                                    <div className="flex justify-between py-2 border-b border-gray-50">
+                                        <span className="text-gray-500">Date of First Appointment:</span>
+                                        <span className="font-semibold text-gray-900">
+                                            {staff.dateOfFirstAppointment 
+                                                ? new Date(staff.dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
+                                                : 'Not Recorded'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b border-gray-50">
+                                        <span className="text-gray-500">Highest Academic Qualification:</span>
+                                        <span className="font-semibold text-gray-900">
+                                            {staff.highestQualification || 'Not Specified'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b border-gray-50">
+                                        <span className="text-gray-500">Cadre &amp; Placement:</span>
+                                        <span className="font-semibold text-gray-900">
+                                            {staff.cadre || 'N/A'} (Level {staff.level || 'N/A'}, Step {staff.step || 'N/A'})
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between py-2">
+                                        <span className="text-gray-500">Substantive Rank:</span>
+                                        <span className="font-semibold text-gray-900">{staff.rank || staff.role}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-50 rounded-xl border border-slate-200/80 p-6">
+                                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">
+                                    Institutional Promotion Guidelines
+                                </h3>
+                                <div className="space-y-2.5 text-xs text-slate-600">
+                                    <p className="flex items-start gap-2">
+                                        <span className="text-emerald-700 font-bold">•</span>
+                                        <span><strong>Academic Staff:</strong> Must meet minimum 3 years in current rank with research/publications criteria. Effective promotion date is 1st October.</span>
+                                    </p>
+                                    <p className="flex items-start gap-2">
+                                        <span className="text-emerald-700 font-bold">•</span>
+                                        <span><strong>Senior Administrative Staff:</strong> CONTISS 12 and above require 4 years waiting period; CONTISS 06–11 require 3 years. Effective date is 1st January.</span>
+                                    </p>
+                                    <p className="flex items-start gap-2">
+                                        <span className="text-emerald-700 font-bold">•</span>
+                                        <span><strong>Junior Staff:</strong> Minimum 3 years in substantive position (or 2 years for fast-track conversions). Effective date is 1st January.</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 
                 {activeTab === 'Documents' && (
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

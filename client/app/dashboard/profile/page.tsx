@@ -6,7 +6,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import ActiveSessions from '../../../components/profile/ActiveSessions';
 import {
     User, Mail, Briefcase, MapPin, Phone, Building, Edit2,
-    PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2
+    PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2, TrendingUp
 } from 'lucide-react';
 import api, { getImageUrl } from '../../../lib/api';
 
@@ -257,6 +257,89 @@ export default function ProfilePage() {
                                 <p className="text-gray-900 font-medium mt-1">
                                     {user.staffProfile?.cadre || 'N/A'}
                                 </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 uppercase">Highest Qualification</label>
+                                <p className="text-gray-900 font-medium mt-1">
+                                    {(user.staffProfile as any)?.highestQualification || 'Not Specified'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 uppercase">Date of First Appointment</label>
+                                <p className="text-gray-900 font-medium mt-1">
+                                    {(user.staffProfile as any)?.dateOfFirstAppointment 
+                                        ? new Date((user.staffProfile as any).dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
+                                        : 'Not Specified'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Promotion Maturity & Career Milestone */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-emerald-200/90 p-6 overflow-hidden relative">
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-600"></div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-9 w-9 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-700 border border-emerald-100">
+                                    <TrendingUp size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-gray-900">Promotion Maturity &amp; Career Milestone</h3>
+                                    <p className="text-xs text-gray-500">Statutory appraisal schedule and institutional advancement timeline.</p>
+                                </div>
+                            </div>
+                            <div>
+                                {(user.staffProfile as any)?.promotionEligibilityStatus === 'DUE_THIS_CYCLE' ? (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                        <AlertCircle size={13} className="text-amber-700" /> Due This Cycle
+                                    </span>
+                                ) : (user.staffProfile as any)?.promotionEligibilityStatus === 'MATURED_OVERDUE' ? (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-900 border border-red-200">
+                                        <AlertCircle size={13} className="text-red-700" /> Matured / Overdue
+                                    </span>
+                                ) : (user.staffProfile as any)?.promotionEligibilityStatus === 'PROMOTED' ? (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                        <CheckCircle size={13} className="text-emerald-700" /> Promoted
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                        <TrendingUp size={13} className="text-emerald-700" /> Pending Maturity
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 mt-4">
+                            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Last Promotion</span>
+                                <span className="text-xs font-extrabold text-slate-900">
+                                    {(user.staffProfile as any)?.lastPromotionDate 
+                                        ? new Date((user.staffProfile as any).lastPromotionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                        : ((user.staffProfile as any)?.dateOfFirstAppointment ? new Date((user.staffProfile as any).dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'First Appointment')}
+                                </span>
+                            </div>
+
+                            <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-100">
+                                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Next Due Year</span>
+                                <span className="text-base font-black text-emerald-950 font-mono">
+                                    {(user.staffProfile as any)?.nextPromotionDueYear || 'Pending'}
+                                </span>
+                            </div>
+
+                            <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-100">
+                                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Target Effective Date</span>
+                                <span className="text-xs font-extrabold text-emerald-950">
+                                    {(user.staffProfile as any)?.nextPromotionDueDate 
+                                        ? new Date((user.staffProfile as any).nextPromotionDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                        : ((user.staffProfile as any)?.nextPromotionDueYear ? `${(user.staffProfile as any)?.cadre === 'ACADEMIC' ? '01 Oct' : '01 Jan'} ${(user.staffProfile as any)?.nextPromotionDueYear}` : 'Statutory Cycle')}
+                                </span>
+                            </div>
+
+                            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Cadre Waiting Rule</span>
+                                <span className="text-xs font-bold text-slate-800">
+                                    {(user.staffProfile as any)?.cadre === 'ACADEMIC' ? 'Academic (3 Yrs • Oct 1)' : 'Admin/Junior (3–4 Yrs • Jan 1)'}
+                                </span>
                             </div>
                         </div>
                     </div>
