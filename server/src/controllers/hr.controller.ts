@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { Role, User, Cadre, Department } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
+import { StorageService } from '../services/storage.service';
 import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
 import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
@@ -37,6 +38,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
             stateOfOrigin, lga, address,
             highestQualification,
             bankName, accountNumber, accountName,
+            nin, passportUrl,
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
@@ -105,6 +107,11 @@ export const createStaffFile = async (req: Request, res: Response) => {
             isDueImmediately: Boolean(isDueImmediately)
         });
 
+        let effectivePassportUrl = passportUrl ? String(passportUrl).trim() : undefined;
+        if (req.file) {
+            effectivePassportUrl = await StorageService.uploadFile(req.file);
+        }
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
@@ -121,6 +128,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
                             accountName: accountName ? String(accountName).trim() : undefined,
+                            nin: nin ? String(nin).trim() : undefined,
+                            passportUrl: effectivePassportUrl,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
@@ -174,6 +183,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
             stateOfOrigin, lga, address,
             highestQualification,
             bankName, accountNumber, accountName,
+            nin, passportUrl,
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
@@ -252,6 +262,11 @@ export const addExistingFile = async (req: Request, res: Response) => {
             isDueImmediately: Boolean(isDueImmediately)
         });
 
+        let effectivePassportUrl = passportUrl ? String(passportUrl).trim() : undefined;
+        if (req.file) {
+            effectivePassportUrl = await StorageService.uploadFile(req.file);
+        }
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
@@ -268,6 +283,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
                             accountName: accountName ? String(accountName).trim() : undefined,
+                            nin: nin ? String(nin).trim() : undefined,
+                            passportUrl: effectivePassportUrl,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,

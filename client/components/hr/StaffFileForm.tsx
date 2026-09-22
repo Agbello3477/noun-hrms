@@ -4,7 +4,7 @@ import api from '../../lib/api';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 import { STANDARD_QUALIFICATIONS } from '../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
-import { TrendingUp, Info, GraduationCap, CreditCard, Building2, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Info, GraduationCap, CreditCard, Building2, CheckCircle2, Camera, Upload, X, Shield } from 'lucide-react';
 
 interface OrganizationData {
     centers: { id: string; name: string; code: string }[];
@@ -27,6 +27,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         email: '',
         phone: '',
         gender: 'Male',
+        nin: '', // 11-digit National Identification Number
         highestQualification: '',
         customQualification: '',
 
@@ -71,6 +72,9 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
 
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
     const [programmes, setProgrammes] = useState<any[]>([]);
+
+    const [passportFile, setPassportFile] = useState<File | null>(null);
+    const [passportPreview, setPassportPreview] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -213,9 +217,28 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         setFormData(prev => ({ ...prev, phone: limitedDigits }));
     };
 
+    const handleNinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+        setFormData(prev => ({ ...prev, nin: digits }));
+    };
+
     const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const sanitized = sanitizeAccountNumber(e.target.value);
-        setFormData(prev => ({ ...prev, accountNumber: sanitized }));
+        const digits = sanitizeAccountNumber(e.target.value);
+        setFormData(prev => ({ ...prev, accountNumber: digits }));
+    };
+
+    const handlePassportChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setPassportFile(file);
+            const preview = URL.createObjectURL(file);
+            setPassportPreview(preview);
+        }
+    };
+
+    const handleRemovePassport = () => {
+        setPassportFile(null);
+        setPassportPreview(null);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -245,23 +268,48 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                 ? formData.customBankName.trim()
                 : formData.bankName;
 
-            const payload = {
-                ...formData,
-                highestQualification: effectiveQualification || undefined,
-                bankName: effectiveBankName || undefined,
-                accountNumber: formData.accountNumber.trim() || undefined,
-                accountName: formData.accountName.trim() || undefined,
-                phone: submittedPhone || undefined,
-                name: `${formData.surname} ${formData.otherNames}`,
-                unitId: formData.unitId || undefined,
-            };
-
             const endpoint = mode === 'CREATE'
                 ? '/api/registry/files/create'
                 : '/api/registry/files/existing';
 
-            const { data } = await api.post(endpoint, payload);
-            onSuccess(data);
+            let responseData: any;
+
+            if (passportFile) {
+                const data = new FormData();
+                Object.entries(formData).forEach(([key, val]) => {
+                    if (val !== undefined && val !== null && val !== '') {
+                        data.append(key, String(val));
+                    }
+                });
+                if (effectiveQualification) data.set('highestQualification', effectiveQualification);
+                if (effectiveBankName) data.set('bankName', effectiveBankName);
+                if (submittedPhone) data.set('phone', submittedPhone);
+                data.set('name', `${formData.surname} ${formData.otherNames}`.trim());
+                if (formData.nin) data.set('nin', formData.nin.trim());
+                data.append('passport', passportFile);
+
+                const res = await api.post(endpoint, data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                responseData = res.data;
+            } else {
+                const payload = {
+                    ...formData,
+                    highestQualification: effectiveQualification || undefined,
+                    bankName: effectiveBankName || undefined,
+                    accountNumber: formData.accountNumber.trim() || undefined,
+                    accountName: formData.accountName.trim() || undefined,
+                    nin: formData.nin.trim() || undefined,
+                    phone: submittedPhone || undefined,
+                    name: `${formData.surname} ${formData.otherNames}`,
+                    unitId: formData.unitId || undefined,
+                };
+
+                const res = await api.post(endpoint, payload);
+                responseData = res.data;
+            }
+
+            onSuccess(responseData);
         } catch (err: any) {
             console.error('Submission Error:', err);
             setError(err.response?.data?.message || 'Failed to submit staff file');
@@ -273,6 +321,73 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
     return (
         <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
             {error && <div className="bg-red-50 text-red-600 p-3 rounded text-sm">{error}</div>}
+
+            {/* Passport Photograph Placeholder & Upload */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-center gap-5">
+                    {/* Passport Photo Frame */}
+                    <div className="relative h-28 w-28 rounded-2xl overflow-hidden border-2 border-dashed border-emerald-400 bg-slate-50 flex-shrink-0 shadow-inner group flex items-center justify-center">
+                        {passportPreview ? (
+                            <img
+                                src={passportPreview}
+                                alt="Staff Passport Photograph"
+                                className="h-full w-full object-cover"
+                            />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                                <Camera size={28} className="text-[#006533] mb-1" />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Passport Photo</span>
+                            </div>
+                        )}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePassportChange}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            title="Click to upload staff passport photo"
+                        />
+                        <div className="absolute inset-0 bg-emerald-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold pointer-events-none">
+                            <span>{passportPreview ? 'Change Photo' : 'Upload Photo'}</span>
+                        </div>
+                    </div>
+
+                    {/* Passport Upload Controls & Instructions */}
+                    <div className="space-y-1.5 flex-1 text-center sm:text-left">
+                        <div className="flex items-center justify-center sm:justify-start gap-2">
+                            <h4 className="font-bold text-sm text-slate-800">Staff Passport Photograph</h4>
+                            {passportPreview && (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <CheckCircle2 size={11} /> Ready to Upload
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                            Upload a standard official passport photograph with a plain background (JPG, PNG, or WebP).
+                        </p>
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200 transition-colors">
+                                <Upload size={13} />
+                                <span>{passportPreview ? 'Choose Another Image' : 'Select Passport File'}</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handlePassportChange}
+                                    className="hidden"
+                                />
+                            </label>
+                            {passportPreview && (
+                                <button
+                                    type="button"
+                                    onClick={handleRemovePassport}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-600 hover:bg-red-50 text-xs font-semibold rounded-lg border border-red-200 transition-colors"
+                                >
+                                    <X size={12} /> Remove
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* 1. Identity */}
             <div className="bg-gray-50 p-4 rounded border">
@@ -312,18 +427,36 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">Email (Official/Personal)</label>
                         <input type="email" name="email" required className="w-full border p-1.5 rounded" value={formData.email} onChange={handleChange} />
                     </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-500">Date of Birth</label>
+
+                    {/* National Identification Number (NIN) */}
+                    <div className="col-span-2 sm:col-span-1">
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                                <Shield size={13} className="text-[#006533]" />
+                                National Identification Number (NIN)
+                            </label>
+                            {formData.nin && formData.nin.length === 11 ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                    <CheckCircle2 size={10} /> 11-Digit Valid
+                                </span>
+                            ) : formData.nin ? (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                                    {formData.nin.length}/11 Digits
+                                </span>
+                            ) : null}
+                        </div>
                         <input
-                            type="date"
-                            name="dateOfBirth"
-                            required
-                            className="w-full border p-1.5 rounded mt-0.5 text-black"
-                            value={formData.dateOfBirth}
-                            onChange={handleChange}
+                            name="nin"
+                            type="text"
+                            maxLength={11}
+                            placeholder="e.g. 12345678901 (11 digits)"
+                            className="w-full border p-1.5 rounded font-mono text-sm tracking-wider focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none"
+                            value={formData.nin}
+                            onChange={handleNinChange}
                         />
                     </div>
-                    <div>
+
+                    <div className="col-span-2 sm:col-span-1">
                         <label className="block text-xs font-medium text-gray-500">Phone</label>
                         <div className="flex rounded border mt-0.5 overflow-hidden">
                             <span className="bg-gray-100 text-gray-500 text-sm px-3 flex items-center border-r select-none">+234</span>
@@ -337,6 +470,18 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                                 onChange={handlePhoneChange}
                             />
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500">Date of Birth</label>
+                        <input
+                            type="date"
+                            name="dateOfBirth"
+                            required
+                            className="w-full border p-1.5 rounded mt-0.5 text-black"
+                            value={formData.dateOfBirth}
+                            onChange={handleChange}
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">State of Origin</label>

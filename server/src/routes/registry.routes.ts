@@ -34,8 +34,8 @@ router.get('/transfers', requireRole(transferRoles), getTransferHistory);
 // Phase 12: Staff File Management (HR Accounts)
 const fileRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN];
 
-router.post('/files/create', requireRole(fileRoles), createStaffFile);
-router.post('/files/existing', requireRole(fileRoles), addExistingFile);
+router.post('/files/create', requireRole(fileRoles), upload.single('passport'), createStaffFile);
+router.post('/files/existing', requireRole(fileRoles), upload.single('passport'), addExistingFile);
 router.get('/files/archive', requireRole([Role.HR_ADMIN, Role.SUPER_USER]), getArchivedFiles);
 router.post('/files/archive/:id/restore', requireRole([Role.HR_ADMIN, Role.SUPER_USER]), restoreStaffFile);
 router.get('/files/:id', requireRole(fileRoles), getStaffFile);

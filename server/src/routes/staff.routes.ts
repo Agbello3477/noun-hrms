@@ -77,17 +77,18 @@ router.post('/promotions/run-cron', requireRole([Role.SUPER_USER]), manualRunPro
 router.post('/retirement/run-cron', requireRole([Role.SUPER_USER, Role.HR_ADMIN]), manualRunRetirementCron);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Individual staff can view their own profile, usually handled by checking ID vs requested ID in controller or separate /me endpoint.
-// But for generic getById:
-router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);
-
-router.post('/', requireRole(manageRoles), createStaff);
-
 import { upload } from '../middleware/upload.middleware';
 import { updateStaff, uploadSignature, updateServiceRecord } from '../controllers/staff.controller';
 
+// Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin
+router.post('/', requireRole(manageRoles), upload.single('passport'), createStaff);
+
 // Update Service Record (Admin/HR)
 router.put('/:id/service-record', requireRole(manageRoles), updateServiceRecord);
+
+// Individual staff can view their own profile, usually handled by checking ID vs requested ID in controller or separate /me endpoint.
+// But for generic getById:
+router.get('/:id', requireRole([...viewRoles, Role.STAFF]), getStaffById);
 
 // Update Profile (Self or Admin)
 // Use upload.single('passport')

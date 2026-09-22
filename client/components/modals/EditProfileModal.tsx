@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Camera, Save, Loader2, GraduationCap, CreditCard, CheckCircle2 } from 'lucide-react';
+import { X, Camera, Save, Loader2, GraduationCap, CreditCard, CheckCircle2, Shield } from 'lucide-react';
 import api from '../../lib/api';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
 
@@ -36,6 +36,7 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
         surname: user.staffProfile?.surname || user.name?.split(' ')[0] || '',
         otherNames: user.staffProfile?.otherNames || user.name?.split(' ').slice(1).join(' ') || '',
         phone: user.staffProfile?.phone || '',
+        nin: user.staffProfile?.nin || '',
         address: user.staffProfile?.address || '',
         stateOfOrigin: user.staffProfile?.stateOfOrigin || '',
         lga: user.staffProfile?.lga || '',
@@ -51,6 +52,11 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleNinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+        setFormData({ ...formData, nin: digits });
     };
 
     const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,6 +89,9 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
             data.append('surname', formData.surname);
             data.append('otherNames', formData.otherNames);
             data.append('phone', formData.phone);
+            if (formData.nin) {
+                data.append('nin', formData.nin.trim());
+            }
             data.append('address', formData.address);
             data.append('stateOfOrigin', formData.stateOfOrigin);
             data.append('lga', formData.lga);
@@ -291,6 +300,31 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
                                 type="tel" name="phone"
                                 value={formData.phone} onChange={handleChange}
                                 className="mt-1 block w-full rounded-md border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-gray-700 flex items-center gap-1">
+                                    <Shield size={14} className="text-[#006533]" /> NIN
+                                </label>
+                                {formData.nin && formData.nin.length === 11 ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full inline-flex items-center gap-0.5">
+                                        <CheckCircle2 size={10} /> 11 Digits
+                                    </span>
+                                ) : formData.nin ? (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1 py-0.2 rounded">
+                                        {formData.nin.length}/11 Digits
+                                    </span>
+                                ) : null}
+                            </div>
+                            <input
+                                type="text"
+                                name="nin"
+                                maxLength={11}
+                                placeholder="11 Digits NIN"
+                                value={formData.nin}
+                                onChange={handleNinChange}
+                                className="mt-1 block w-full rounded-md border border-gray-300 p-2 font-mono text-sm tracking-wider focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
                         <div>

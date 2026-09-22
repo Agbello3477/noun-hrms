@@ -8,6 +8,7 @@ import {
     MapPin, 
     Briefcase, 
     ShieldAlert, 
+    Shield,
     Save, 
     Building, 
     GraduationCap, 
@@ -37,6 +38,8 @@ interface StaffDetail {
         staffId: string | null;
         surname: string | null;
         otherNames: string | null;
+        passportUrl?: string | null;
+        nin?: string | null;
         highestQualification?: string | null;
         bankName?: string | null;
         accountNumber?: string | null;
@@ -96,6 +99,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     // Bio & Career form state
     const [editSurname, setEditSurname] = useState('');
     const [editOtherNames, setEditOtherNames] = useState('');
+    const [editNin, setEditNin] = useState('');
     const [editHighestQualification, setEditHighestQualification] = useState('');
     const [editCustomQualification, setEditCustomQualification] = useState('');
     const [editBankName, setEditBankName] = useState('');
@@ -289,6 +293,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditTitle(staffData.staffProfile?.title || '');
                 setEditSurname(staffData.staffProfile?.surname || '');
                 setEditOtherNames(staffData.staffProfile?.otherNames || '');
+                setEditNin(staffData.staffProfile?.nin || '');
                 const qual = staffData.staffProfile?.highestQualification || '';
                 if (qual && !STANDARD_QUALIFICATIONS.includes(qual)) {
                     setEditHighestQualification('CUSTOM');
@@ -425,6 +430,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 title: editTitle,
                 surname: editSurname,
                 otherNames: editOtherNames,
+                nin: editNin.trim() || undefined,
                 highestQualification: effectiveQualification || undefined,
                 bankName: effectiveBankName || undefined,
                 accountNumber: editAccountNumber.trim() || undefined,
@@ -521,11 +527,19 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                     <div className="absolute inset-0 bg-black/10"></div>
                 </div>
                 <div className="px-8 pb-8 relative">
-                    {/* Avatar Initials overlay */}
-                    <div className="absolute -top-16 left-8 h-28 w-28 bg-white rounded-3xl p-1.5 shadow-lg border border-gray-100">
-                        <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner">
-                            {staff.name.charAt(0)}
-                        </div>
+                    {/* Avatar Initials or Passport overlay */}
+                    <div className="absolute -top-16 left-8 h-28 w-28 bg-white rounded-3xl p-1.5 shadow-lg border border-gray-100 overflow-hidden">
+                        {staff.staffProfile?.passportUrl ? (
+                            <img
+                                src={staff.staffProfile.passportUrl}
+                                alt={staff.name}
+                                className="h-full w-full object-cover rounded-2xl"
+                            />
+                        ) : (
+                            <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner">
+                                {staff.name.charAt(0)}
+                            </div>
+                        )}
                     </div>
 
                     {/* Name / Email / Role row — pl-36 reserves space for the 7rem (112px) avatar + gap */}
@@ -577,15 +591,27 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                         </div>
                     </div>
 
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-gray-50">
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-6 pt-6 border-t border-gray-50">
                         <div className="flex items-center gap-3 text-gray-700">
                             <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
                                 <GraduationCap size={20} className="text-nounGreen" />
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Highest Qualification</p>
-                                <p className="font-bold text-gray-850 text-sm truncate max-w-[200px]" title={staff.staffProfile?.highestQualification || 'Not Specified'}>
+                                <p className="font-bold text-gray-850 text-sm truncate max-w-[180px]" title={staff.staffProfile?.highestQualification || 'Not Specified'}>
                                     {staff.staffProfile?.highestQualification || 'Not Specified'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-gray-700">
+                            <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                                <Shield size={20} className="text-nounGreen" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">National ID (NIN)</p>
+                                <p className="font-bold text-gray-850 text-sm font-mono tracking-wider">
+                                    {staff.staffProfile?.nin || 'Not Provided'}
                                 </p>
                             </div>
                         </div>
@@ -606,7 +632,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Address</p>
-                                <p className="font-bold text-gray-850 text-sm">{staff.staffProfile?.address || 'N/A'}</p>
+                                <p className="font-bold text-gray-850 text-sm truncate max-w-[180px]">{staff.staffProfile?.address || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
@@ -770,6 +796,27 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         onChange={e => setEditPhone(e.target.value)}
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
                                         placeholder="Phone Number"
+                                    />
+                                </div>
+                                {/* National ID (NIN) */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center justify-between">
+                                        <span className="flex items-center gap-1"><Shield size={13} className="text-nounGreen" /> National ID (NIN)</span>
+                                        {editNin.length === 11 ? (
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
+                                                <CheckCircle2 size={10} /> 11-Digit Valid
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] text-slate-500 font-semibold">{editNin.length}/11 Digits</span>
+                                        )}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        maxLength={11}
+                                        value={editNin}
+                                        onChange={e => setEditNin(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-mono tracking-wider font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white"
+                                        placeholder="11-digit NIN"
                                     />
                                 </div>
                                 {/* Address */}

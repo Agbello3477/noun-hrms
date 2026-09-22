@@ -519,6 +519,8 @@ export const lookupStaffForPatientFile = async (req: AuthRequest, res: Response)
                 unit: staff.unit?.name || '',
                 phone: staff.phone || '',
                 email: staff.user?.email || staff.emailPersonal || '',
+                nin: staff.nin || '',
+                passportUrl: staff.passportUrl || '',
                 existingPatientFile: existingFile || null
             });
         }

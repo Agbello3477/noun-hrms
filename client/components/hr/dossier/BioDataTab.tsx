@@ -1,6 +1,6 @@
 'use client';
 
-import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard, Shield } from 'lucide-react';
 
 export default function BioDataTab({ staff }: { staff: any }) {
     if (!staff) return null;
@@ -40,6 +40,14 @@ export default function BioDataTab({ staff }: { staff: any }) {
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Full Name</span>
                             <span className="col-span-2 font-medium text-gray-900">{staff.name}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b pb-3">
+                            <span className="text-gray-500 text-sm flex items-center gap-1">
+                                <Shield size={14} className="text-nounGreen" /> National ID (NIN)
+                            </span>
+                            <span className="col-span-2 font-bold text-gray-900 font-mono tracking-wider">
+                                {profile.nin || staff.nin || 'Not Provided'}
+                            </span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Email</span>

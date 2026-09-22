@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Calendar, TrendingUp, AlertCircle, Info, Shield, GraduationCap, CreditCard, Building2, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, TrendingUp, AlertCircle, Info, Shield, GraduationCap, CreditCard, Building2, CheckCircle2, Camera, Upload } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
@@ -29,6 +29,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         email: '',
         phone: '',
         gender: 'Male', // Default
+        nin: '', // 11-digit National Identification Number
 
         // Bursary & Banking Details
         bankName: '',
@@ -71,6 +72,9 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         courseTitle: '',
         creditUnit: '1'
     });
+
+    const [passportFile, setPassportFile] = useState<File | null>(null);
+    const [passportPreview, setPassportPreview] = useState<string | null>(null);
 
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
     const [programmes, setProgrammes] = useState<any[]>([]);
@@ -245,9 +249,28 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         setFormData(prev => ({ ...prev, phone: limitedDigits }));
     };
 
+    const handleNinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+        setFormData(prev => ({ ...prev, nin: digits }));
+    };
+
     const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const sanitized = sanitizeAccountNumber(e.target.value);
-        setFormData(prev => ({ ...prev, accountNumber: sanitized }));
+        const digits = sanitizeAccountNumber(e.target.value);
+        setFormData(prev => ({ ...prev, accountNumber: digits }));
+    };
+
+    const handlePassportChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setPassportFile(file);
+            const preview = URL.createObjectURL(file);
+            setPassportPreview(preview);
+        }
+    };
+
+    const handleRemovePassport = () => {
+        setPassportFile(null);
+        setPassportPreview(null);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -308,12 +331,13 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 ? formData.customBankName.trim()
                 : formData.bankName;
 
-            const payload = {
+            const payload: any = {
                 ...formData,
                 highestQualification: effectiveQualification || undefined,
                 bankName: effectiveBankName || undefined,
                 accountNumber: formData.accountNumber.trim() || undefined,
                 accountName: formData.accountName.trim() || undefined,
+                nin: formData.nin.trim() || undefined,
                 phone: submittedPhone,
                 role: dbRole,
                 rank: assignedRank,
@@ -341,7 +365,25 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 } : undefined
             };
 
-            await api.post('/api/staff', payload);
+            if (passportFile) {
+                const data = new FormData();
+                Object.entries(payload).forEach(([key, val]) => {
+                    if (val !== undefined && val !== null && val !== '') {
+                        if (typeof val === 'object') {
+                            data.append(key, JSON.stringify(val));
+                        } else {
+                            data.append(key, String(val));
+                        }
+                    }
+                });
+                data.append('passport', passportFile);
+                await api.post('/api/staff', data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+            } else {
+                await api.post('/api/staff', payload);
+            }
+
             onSuccess();
             onClose();
 
@@ -374,6 +416,73 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 )}
 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                    {/* Passport Photograph Placeholder & Upload Card */}
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-center gap-5">
+                            {/* Passport Photo Frame */}
+                            <div className="relative h-28 w-28 rounded-2xl overflow-hidden border-2 border-dashed border-emerald-400 bg-white flex-shrink-0 shadow-inner group flex items-center justify-center">
+                                {passportPreview ? (
+                                    <img
+                                        src={passportPreview}
+                                        alt="Staff Passport Photograph"
+                                        className="h-full w-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                                        <Camera size={28} className="text-[#006533] mb-1" />
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Passport Photo</span>
+                                    </div>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handlePassportChange}
+                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                    title="Click to upload staff passport photo"
+                                />
+                                <div className="absolute inset-0 bg-emerald-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold pointer-events-none">
+                                    <span>{passportPreview ? 'Change Photo' : 'Upload Photo'}</span>
+                                </div>
+                            </div>
+
+                            {/* Passport Upload Controls & Instructions */}
+                            <div className="space-y-1.5 flex-1 text-center sm:text-left">
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                    <h4 className="font-bold text-sm text-slate-800">Staff Passport Photograph</h4>
+                                    {passportPreview && (
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                            <CheckCircle2 size={11} /> Ready to Upload
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    Upload a standard official passport photograph with a plain background (JPG, PNG, or WebP).
+                                </p>
+                                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200 transition-colors">
+                                        <Upload size={13} />
+                                        <span>{passportPreview ? 'Choose Another Image' : 'Select Passport File'}</span>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handlePassportChange}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                    {passportPreview && (
+                                        <button
+                                            type="button"
+                                            onClick={handleRemovePassport}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-600 hover:bg-red-50 text-xs font-semibold rounded-lg border border-red-200 transition-colors"
+                                        >
+                                            <X size={12} /> Remove
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* Section 1: Identity */}
                     <div className="space-y-4">
@@ -418,6 +527,35 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     />
                                 </div>
                             </div>
+                        </div>
+
+                        {/* NIN Field */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5 uppercase tracking-wider">
+                                    <Shield size={14} className="text-[#006533]" />
+                                    National Identification Number (NIN)
+                                </label>
+                                {formData.nin && formData.nin.length === 11 ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                        <CheckCircle2 size={10} /> 11-Digit Valid
+                                    </span>
+                                ) : formData.nin ? (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                                        {formData.nin.length}/11 Digits
+                                    </span>
+                                ) : null}
+                            </div>
+                            <input
+                                name="nin"
+                                type="text"
+                                maxLength={11}
+                                placeholder="e.g. 12345678901 (11 digits)"
+                                className="w-full border border-gray-300 rounded-lg p-2 font-mono text-sm tracking-wider focus:ring-2 focus:ring-emerald-500 focus:border-emerald-600 outline-none bg-white font-bold"
+                                value={formData.nin}
+                                onChange={handleNinChange}
+                            />
+                            <span className="text-[10px] text-gray-500 block mt-1">11-digit official Nigerian identity number for statutory verification</span>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

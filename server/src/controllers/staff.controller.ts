@@ -220,6 +220,7 @@ export const getAllStaff = async (req: Request, res: Response) => {
                             bankName: true,
                             accountNumber: true,
                             accountName: true,
+                            nin: true,
                             status: true,
                             gender: true,
                             stateOfOrigin: true,
@@ -384,6 +385,7 @@ export const createStaff = async (req: Request, res: Response) => {
             staffId, level, step, cadre, cadreType, currentGradeLevel,
             highestQualification,
             bankName, accountNumber, accountName,
+            nin,
             phone, stateOfOrigin, lga, address,
             unitId, centerId,
             // Phase 9
@@ -395,6 +397,13 @@ export const createStaff = async (req: Request, res: Response) => {
             promotionEligibilityStatus, eligibilityStatus,
             isDueImmediately, registryOverride, overrideReason
         } = req.body;
+
+        let passportUrl: string | undefined = undefined;
+        if (req.file) {
+            passportUrl = await StorageService.uploadFile(req.file);
+        } else if (req.body.passportUrl) {
+            passportUrl = req.body.passportUrl;
+        }
 
         if (!email) {
             return res.status(400).json({ message: 'Email is required.' });
@@ -527,6 +536,8 @@ export const createStaff = async (req: Request, res: Response) => {
                         bankName: bankName ? String(bankName).trim() : undefined,
                         accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
                         accountName: accountName ? String(accountName).trim() : undefined,
+                        nin: nin ? String(nin).trim() : undefined,
+                        passportUrl,
                         phone,
                         stateOfOrigin,
                         lga,
@@ -742,6 +753,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             level, step, cadre, cadreType, currentGradeLevel, gender,
             highestQualification,
             bankName, accountNumber, accountName,
+            nin,
             role, unitId, centerId, rank,
             dateOfBirth, dateOfFirstAppointment, status,
             // Promotion Milestone Fields
@@ -863,6 +875,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 bankName: bankName ? String(bankName).trim() : undefined,
                 accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
                 accountName: accountName ? String(accountName).trim() : undefined,
+                nin: nin ? String(nin).trim() : undefined,
                 gender,
                 passportUrl,
                 rank: rank || undefined,
@@ -896,6 +909,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 bankName: bankName !== undefined ? (bankName ? String(bankName).trim() : null) : undefined,
                 accountNumber: accountNumber !== undefined ? (accountNumber ? String(accountNumber).trim() : null) : undefined,
                 accountName: accountName !== undefined ? (accountName ? String(accountName).trim() : null) : undefined,
+                nin: nin !== undefined ? (nin ? String(nin).trim() : null) : undefined,
                 gender,
                 rank: rank !== undefined ? rank : undefined,
                 dateOfBirth: dob !== undefined ? dob : undefined,
@@ -1518,6 +1532,7 @@ export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
             surname, otherNames, title, rank, level, step, cadre, cadreType, currentGradeLevel,
             highestQualification,
             bankName, accountNumber, accountName,
+            nin,
             unitId, centerId, dateOfBirth, dateOfFirstAppointment, status,
             lastPromotionDate, dateOfLastPromotion,
             nextPromotionDueYear, nextDueYear,
@@ -1566,6 +1581,7 @@ export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
                 ...(bankName !== undefined ? { bankName: bankName ? String(bankName).trim() : null } : {}),
                 ...(accountNumber !== undefined ? { accountNumber: accountNumber ? String(accountNumber).trim() : null } : {}),
                 ...(accountName !== undefined ? { accountName: accountName ? String(accountName).trim() : null } : {}),
+                ...(nin !== undefined ? { nin: nin ? String(nin).trim() : null } : {}),
                 ...(dob !== undefined ? { dateOfBirth: dob } : {}),
                 ...(apptDate !== undefined ? { dateOfFirstAppointment: apptDate } : {}),
                 ...(unitId !== undefined ? { unitId: unitId === '' || unitId === 'null' ? null : unitId } : {}),
