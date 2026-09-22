@@ -87,7 +87,18 @@ export default function DueForPromotionPage() {
     const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
     const [cadreFilter, setCadreFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
-    const [filterTab, setFilterTab] = useState<'DUE_THIS_CYCLE' | 'MATURED_OVERDUE' | 'UPCOMING' | 'ALL'>('DUE_THIS_CYCLE');
+    const [filterTab, setFilterTab] = useState<'DUE_THIS_CYCLE' | 'MATURED_OVERDUE' | 'UPCOMING' | 'ALL'>('ALL');
+    const [tabCounts, setTabCounts] = useState<{
+        dueThisCycle: number;
+        maturedOverdue: number;
+        upcoming: number;
+        all: number;
+    }>({
+        dueThisCycle: 0,
+        maturedOverdue: 0,
+        upcoming: 0,
+        all: 0
+    });
     const [syncingDocket, setSyncingDocket] = useState(false);
     const [summaryCounts, setSummaryCounts] = useState<Record<string, number>>({
         PENDING_MATURITY: 0,
@@ -170,6 +181,9 @@ export default function DueForPromotionPage() {
             setPages(res.data.pages);
             if (res.data.counts) {
                 setSummaryCounts(res.data.counts);
+            }
+            if (res.data.tabCounts) {
+                setTabCounts(res.data.tabCounts);
             }
         } catch (err: any) {
             showToast(err.response?.data?.message || 'Failed to load promotion candidates list.', 'error');
@@ -424,10 +438,10 @@ export default function DueForPromotionPage() {
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Staff Promotion & Annual Maturity Tracking</h1>
+                                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Promotion Maturity &amp; Scheduling Console</h1>
                                 <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Registry Module</span>
                             </div>
-                            <p className="text-xs text-slate-500">Statutory Cadre Interval Engine & Annual Promotion Docket Management</p>
+                            <p className="text-xs text-slate-500">Statutory Cadre Interval Engine, Annual Promotion Docket &amp; Maturity Tracking</p>
                         </div>
                     </div>
 
@@ -523,11 +537,11 @@ export default function DueForPromotionPage() {
                         {/* Staging Scope Filter Tabs */}
                         <div className="flex items-center gap-2 overflow-x-auto pb-1">
                             {[
-                                { id: 'DUE_THIS_CYCLE', label: `Due This Cycle (${yearFilter})`, icon: Star },
-                                { id: 'MATURED_OVERDUE', label: 'Matured (Backlogged/Overdue)', icon: AlertTriangle },
-                                { id: 'UPCOMING', label: `Upcoming (${yearFilter + 1}+)`, icon: Clock },
-                                { id: 'ALL', label: 'All Configured Staff', icon: Layers }
-                            ].map(({ id, label, icon: Icon }) => (
+                                { id: 'ALL', label: 'All Configured Staff', icon: Layers, count: tabCounts.all },
+                                { id: 'DUE_THIS_CYCLE', label: `Due This Cycle (${yearFilter})`, icon: Star, count: tabCounts.dueThisCycle },
+                                { id: 'MATURED_OVERDUE', label: 'Matured (Backlogged/Overdue)', icon: AlertTriangle, count: tabCounts.maturedOverdue },
+                                { id: 'UPCOMING', label: `Upcoming (${yearFilter + 1}+)`, icon: Clock, count: tabCounts.upcoming }
+                            ].map(({ id, label, icon: Icon, count }) => (
                                 <button
                                     key={id}
                                     onClick={() => { setFilterTab(id as any); setPage(1); }}
@@ -539,6 +553,9 @@ export default function DueForPromotionPage() {
                                 >
                                     <Icon size={14} className={filterTab === id ? 'text-white' : 'text-emerald-700'} />
                                     <span>{label}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${filterTab === id ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                                        {count}
+                                    </span>
                                 </button>
                             ))}
                         </div>
@@ -675,22 +692,45 @@ export default function DueForPromotionPage() {
                             ) : candidates.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-16 px-4 text-slate-400 gap-3">
                                     <Award size={46} className="opacity-30 text-emerald-600" />
-                                    <p className="text-base font-bold text-slate-700">No candidates found for the selected view</p>
+                                    <p className="text-base font-bold text-slate-700">No candidates found under &quot;{filterTab.replace(/_/g, ' ')}&quot; for cycle {yearFilter}</p>
                                     <p className="text-xs text-slate-500 max-w-md text-center">
-                                        No staff records are currently staged under &quot;{filterTab.replace(/_/g, ' ')}&quot; for cycle {yearFilter}. You can execute the initial synchronization to index legacy and newly added staff records immediately.
+                                        {tabCounts.all > 0 
+                                            ? `There are ${tabCounts.all} staff members configured with institutional promotion milestones. You can view all records or upcoming cycles directly.`
+                                            : 'No staff profiles have been configured with promotion milestones yet. You can initialize them or run docket sync.'}
                                     </p>
-                                    {canManage && (
-                                        <Button
-                                            onClick={handleSyncCandidates}
-                                            isLoading={syncingDocket}
-                                            variant="emerald"
-                                            size="sm"
-                                            icon={<Sparkles size={14} />}
-                                            className="mt-2"
-                                        >
-                                            Run Initial Promotion Docket Sync
-                                        </Button>
-                                    )}
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap justify-center">
+                                        {filterTab !== 'ALL' && (
+                                            <Button
+                                                onClick={() => { setFilterTab('ALL'); setPage(1); }}
+                                                variant="outline"
+                                                size="sm"
+                                                icon={<Layers size={14} />}
+                                            >
+                                                View All Configured Staff ({tabCounts.all})
+                                            </Button>
+                                        )}
+                                        {filterTab !== 'UPCOMING' && tabCounts.upcoming > 0 && (
+                                            <Button
+                                                onClick={() => { setFilterTab('UPCOMING'); setPage(1); }}
+                                                variant="outline"
+                                                size="sm"
+                                                icon={<Clock size={14} />}
+                                            >
+                                                View Upcoming Cycles ({tabCounts.upcoming})
+                                            </Button>
+                                        )}
+                                        {canManage && (
+                                            <Button
+                                                onClick={handleSyncCandidates}
+                                                isLoading={syncingDocket}
+                                                variant="emerald"
+                                                size="sm"
+                                                icon={<Sparkles size={14} />}
+                                            >
+                                                Run Initial Promotion Docket Sync
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">

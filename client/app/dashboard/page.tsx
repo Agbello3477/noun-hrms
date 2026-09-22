@@ -761,12 +761,19 @@ export default function DashboardHome() {
                 {/* Manager Quick Actions Grid */}
                 <div className="bg-white rounded-2xl border border-gray-150 p-6 shadow-sm">
                     <h2 className="text-sm font-extrabold text-gray-800 uppercase tracking-wider mb-4">Management Command Center</h2>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                         <Link href="/dashboard/unit/staff" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group">
                             <span className="p-2.5 bg-blue-50 text-blue-700 rounded-lg group-hover:scale-110 transition-transform"><FileText size={20} /></span>
                             <div>
                                 <h4 className="text-sm font-bold text-gray-850">Unit Staff</h4>
                                 <p className="text-[11px] text-gray-500">Manage bio-data & files</p>
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/registry/due-for-promotion" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/20 transition-all group">
+                            <span className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg group-hover:scale-110 transition-transform"><TrendingUp size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-850">Promotion Maturity</h4>
+                                <p className="text-[11px] text-gray-500">Maturity & tracking</p>
                             </div>
                         </Link>
                         <Link href="/dashboard/unit/leaves" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50/20 transition-all group">
@@ -1164,8 +1171,38 @@ export default function DashboardHome() {
                 </div>
             </div>
 
+            {/* ====== PROMOTION MATURITY & SCHEDULING EXECUTIVE SUMMARY ====== */}
+            <div className="mt-8 rounded-2xl bg-gradient-to-br from-slate-900 via-[#004d26] to-[#006533] text-white shadow-lg border border-emerald-800/40 p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+                <div className="absolute right-0 top-0 w-80 h-80 bg-[#FFCD00]/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="relative z-10 flex items-center gap-4">
+                    <div className="w-14 h-14 bg-white/10 backdrop-blur-md text-[#FFCD00] rounded-2xl flex items-center justify-center border border-white/20 shadow-sm flex-shrink-0">
+                        <TrendingUp size={28} />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="bg-[#FFCD00]/20 text-[#FFCD00] border border-[#FFCD00]/30 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                Statutory Career Engine
+                            </span>
+                        </div>
+                        <h2 className="font-black text-lg text-white mt-1">Promotion Maturity &amp; Scheduling Console</h2>
+                        <p className="text-xs text-emerald-100/90 max-w-xl mt-0.5">
+                            Track statutory cadre waiting intervals (Academic: 3 yrs, Senior Admin: 3/4 yrs, Junior: 2/3 yrs), automated annual appraisal staging, and manage schedule overrides across the university.
+                        </p>
+                    </div>
+                </div>
+
+                <Link
+                    href="/dashboard/registry/due-for-promotion"
+                    className="relative z-10 flex items-center gap-2 px-6 py-3.5 bg-[#FFCD00] hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-md hover:shadow-lg transition flex-shrink-0 uppercase tracking-wider active:scale-95"
+                >
+                    <TrendingUp size={15} className="stroke-[2.5]" />
+                    <span>Open Promotion Console</span>
+                    <ArrowRight size={15} className="stroke-[2.5]" />
+                </Link>
+            </div>
+
             {/* ====== ACTIVE LEAVES EXECUTIVE SUMMARY ====== */}
-            <div className="mt-8 rounded-2xl bg-white border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="mt-6 rounded-2xl bg-white border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-emerald-50 text-emerald-800 rounded-2xl flex items-center justify-center border border-emerald-200 shadow-sm">
                         <Calendar size={28} />

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
-import { Search, Plus, FileInput, X, Archive } from 'lucide-react';
+import { Search, Plus, FileInput, X, Archive, TrendingUp } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 
 interface FileUser {
@@ -133,7 +133,14 @@ export default function FileRegistryPage() {
                     <h2 className="text-2xl font-bold text-gray-800">File Registry</h2>
                     <p className="text-gray-500 text-sm">Manage official digitized staff profiles and records</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2.5 items-center">
+                    <button
+                        onClick={() => router.push('/dashboard/registry/due-for-promotion')}
+                        className="flex items-center gap-2 px-4 py-2 border border-emerald-300 text-emerald-800 bg-emerald-50/90 rounded-lg hover:bg-emerald-100 shadow-sm text-sm font-semibold transition"
+                    >
+                        <TrendingUp size={16} className="text-emerald-700" />
+                        Promotion Maturity &amp; Scheduling
+                    </button>
                     {['HR_ADMIN', 'SUPER_USER'].includes(user?.role || '') && (
                         <button
                             onClick={() => router.push('/dashboard/hr/archive')}

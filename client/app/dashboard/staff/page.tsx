@@ -246,13 +246,22 @@ export default function StaffPage() {
                         Monitor university staff service records, assign structural hierarchy roles, and manage center files.
                     </p>
                 </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="relative z-10 flex items-center gap-2 bg-[#FFCD00] hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition active:scale-95 duration-150 self-stretch sm:self-auto text-center justify-center text-xs uppercase tracking-wider"
-                >
-                    <Plus size={16} className="stroke-[3]" />
-                    <span>Add New Staff</span>
-                </button>
+                <div className="relative z-10 flex flex-wrap items-center gap-3 self-stretch sm:self-auto">
+                    <Link
+                        href="/dashboard/registry/due-for-promotion"
+                        className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/30 font-bold px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition active:scale-95 duration-150 text-center justify-center text-xs uppercase tracking-wider backdrop-blur-sm"
+                    >
+                        <TrendingUp size={15} className="text-[#FFCD00]" />
+                        <span>Promotion Maturity</span>
+                    </Link>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="flex items-center gap-2 bg-[#FFCD00] hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition active:scale-95 duration-150 text-center justify-center text-xs uppercase tracking-wider"
+                    >
+                        <Plus size={16} className="stroke-[3]" />
+                        <span>Add New Staff</span>
+                    </button>
+                </div>
             </div>
 
             {/* Statistics Row */}

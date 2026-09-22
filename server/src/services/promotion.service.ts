@@ -297,6 +297,44 @@ export class PromotionService {
                 },
                 _count: { id: true }
             })
+        const [dueThisCycleCount, maturedOverdueCount, upcomingCount, allConfiguredCount] = await Promise.all([
+            prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    status: 'ACTIVE',
+                    OR: [
+                        { nextPromotionDueYear: targetYear },
+                        { nextDueYear: targetYear },
+                        { isDueForPromotion: true }
+                    ]
+                }
+            }),
+            prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    status: 'ACTIVE',
+                    OR: [
+                        { nextPromotionDueYear: { lt: targetYear } },
+                        { nextDueYear: { lt: targetYear } }
+                    ]
+                }
+            }),
+            prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    status: 'ACTIVE',
+                    OR: [
+                        { nextPromotionDueYear: { gt: targetYear } },
+                        { nextDueYear: { gt: targetYear } }
+                    ]
+                }
+            }),
+            prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    status: 'ACTIVE'
+                }
+            })
         ]);
 
         const counts: Record<string, number> = {
@@ -339,6 +377,12 @@ export class PromotionService {
             page: Number(page),
             pages: Math.ceil(total / take) || 1,
             counts,
+            tabCounts: {
+                dueThisCycle: dueThisCycleCount,
+                maturedOverdue: maturedOverdueCount,
+                upcoming: upcomingCount,
+                all: allConfiguredCount
+            },
             cycleYear: targetYear
         };
     }
