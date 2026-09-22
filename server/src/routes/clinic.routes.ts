@@ -3,6 +3,7 @@ import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import {
     createPatientFile,
     searchPatientFile,
+    lookupStaffForPatientFile,
     createEncounter,
     submitTriage,
     submitConsultation,
@@ -21,7 +22,9 @@ router.use(verifyToken);
 // CLINIC_HEAD has full visibility across all clinic routes
 const CLINIC_ALL_ROLES = [Role.CLINIC_HEAD, Role.CLINIC_NURSE, Role.CLINIC_DOCTOR, Role.CLINIC_LAB_SCIENTIST, Role.CLINIC_PHARMACIST, Role.SUPER_USER, Role.ADMIN];
 
-// Patient File management
+// Patient File management & HR Staff Lookup
+router.get('/staff-lookup', requireRole(CLINIC_ALL_ROLES), lookupStaffForPatientFile);
+router.get('/staff-lookup/:staffId', requireRole(CLINIC_ALL_ROLES), lookupStaffForPatientFile);
 router.post('/patients', requireRole([Role.CLINIC_HEAD, Role.CLINIC_NURSE, Role.CLINIC_DOCTOR, Role.SUPER_USER, Role.ADMIN]), createPatientFile);
 router.get('/patients', requireRole(CLINIC_ALL_ROLES), searchPatientFile);
 

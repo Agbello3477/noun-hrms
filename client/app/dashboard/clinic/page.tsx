@@ -7,7 +7,8 @@ import { useSocket } from '@/context/SocketContext';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import { 
   Heart, Activity, Search, PlusCircle, Clipboard, FileText, 
-  Beaker, Pill, Save, CheckCircle, RefreshCw, AlertCircle, Video 
+  Beaker, Pill, Save, CheckCircle, RefreshCw, AlertCircle, Video,
+  UserCheck, Sparkles, Loader2, ArrowRight
 } from 'lucide-react';
 
 interface PatientFile {
@@ -108,6 +109,25 @@ export default function ClinicDashboard() {
   // Form states
   const [newPatient, setNewPatient] = useState({
     patientId: '', name: '', gender: 'MALE', dob: '', bloodGroup: 'O+', genotype: 'AA', allergies: '', medicalHistory: ''
+  });
+  // Staff Auto-fill & Lookup State for New Patient File
+  const [isLookingUpStaff, setIsLookingUpStaff] = useState(false);
+  const [staffMatchInfo, setStaffMatchInfo] = useState<{
+    found: boolean;
+    staffId?: string;
+    name?: string;
+    gender?: string;
+    dob?: string;
+    rank?: string;
+    unit?: string;
+    existingPatientFile?: { id: string; patientId: string; name: string } | null;
+    suggestions?: Array<{ id: string; staffId: string; name: string; gender: string; dob: string; rank: string; unit: string }>;
+  } | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [autoFilledFields, setAutoFilledFields] = useState<{ name: boolean; dob: boolean; gender: boolean }>({
+    name: false,
+    dob: false,
+    gender: false
   });
   const [triageVitals, setTriageVitals] = useState({ encounterId: '', bp: '', temperature: '', weight: '', symptoms: '' });
   const [consultNotes, setConsultNotes] = useState({ encounterId: '', clinicalNotes: '', diagnoses: '', labTests: '', prescriptions: '' });
@@ -278,12 +298,98 @@ export default function ClinicDashboard() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Staff HR Auto-Fill Lookup
+  const lookupStaffRecord = useCallback(async (queryVal: string, autoFill = true) => {
+    const trimmed = (queryVal || '').trim();
+    if (!trimmed || trimmed.length < 2) {
+      setStaffMatchInfo(null);
+      setAutoFilledFields({ name: false, dob: false, gender: false });
+      return;
+    }
+
+    setIsLookingUpStaff(true);
+    try {
+      const res = await api.get(`/api/clinic/staff-lookup?identifier=${encodeURIComponent(trimmed)}`);
+      if (res.data?.found) {
+        setStaffMatchInfo(res.data);
+        setShowSuggestions(false);
+        if (autoFill) {
+          setNewPatient(prev => ({
+            ...prev,
+            patientId: res.data.staffId || prev.patientId,
+            name: res.data.name || prev.name,
+            gender: res.data.gender || prev.gender,
+            dob: res.data.dob || prev.dob,
+          }));
+          setAutoFilledFields({
+            name: !!res.data.name,
+            dob: !!res.data.dob,
+            gender: !!res.data.gender
+          });
+        }
+      } else if (res.data?.suggestions && res.data.suggestions.length > 0) {
+        setStaffMatchInfo(res.data);
+        setShowSuggestions(true);
+      } else {
+        setStaffMatchInfo({ found: false });
+        setShowSuggestions(false);
+      }
+    } catch (err) {
+      setStaffMatchInfo(null);
+    } finally {
+      setIsLookingUpStaff(false);
+    }
+  }, []);
+
+  // Debounced staff auto-lookup as user types staff ID
+  useEffect(() => {
+    const trimmed = (newPatient.patientId || '').trim();
+    if (!trimmed || trimmed.length < 3) {
+      setStaffMatchInfo(null);
+      setAutoFilledFields({ name: false, dob: false, gender: false });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      lookupStaffRecord(trimmed, true);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [newPatient.patientId, lookupStaffRecord]);
+
+  const handleSelectStaffSuggestion = (s: { staffId: string; name: string; gender: string; dob: string; rank: string; unit: string }) => {
+    setNewPatient(prev => ({
+      ...prev,
+      patientId: s.staffId,
+      name: s.name,
+      gender: s.gender,
+      dob: s.dob,
+    }));
+    setAutoFilledFields({
+      name: !!s.name,
+      dob: !!s.dob,
+      gender: !!s.gender
+    });
+    setStaffMatchInfo({
+      found: true,
+      staffId: s.staffId,
+      name: s.name,
+      gender: s.gender,
+      dob: s.dob,
+      rank: s.rank,
+      unit: s.unit,
+    });
+    setShowSuggestions(false);
+  };
+
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await api.post('/api/clinic/patients', newPatient);
-      setMsg({ type: 'success', text: 'Patient record created successfully!' });
+      setMsg({ type: 'success', text: 'Patient record created and encrypted successfully!' });
       setNewPatient({ patientId: '', name: '', gender: 'MALE', dob: '', bloodGroup: 'O+', genotype: 'AA', allergies: '', medicalHistory: '' });
+      setStaffMatchInfo(null);
+      setAutoFilledFields({ name: false, dob: false, gender: false });
       fetchPatientFiles();
     } catch (err: any) {
       setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to create record' });
@@ -610,34 +716,157 @@ export default function ClinicDashboard() {
                   <PlusCircle size={18} className="text-emerald-500" /> New Patient File
                 </h2>
                 <form onSubmit={handleCreatePatient} className="space-y-3.5 text-xs font-semibold text-slate-600">
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-700 font-bold">
+                        Employee ID / Student Matrix <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <Sparkles size={11} /> Auto-fetches HR details
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 pr-20 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-medium transition-all"
+                        required
+                        placeholder="e.g. ST-4921 or NOUN/2026/001"
+                        value={newPatient.patientId}
+                        onChange={(e) => setNewPatient({ ...newPatient, patientId: e.target.value })}
+                        onFocus={() => {
+                          if (staffMatchInfo?.suggestions && staffMatchInfo.suggestions.length > 0) {
+                            setShowSuggestions(true);
+                          }
+                        }}
+                      />
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {isLookingUpStaff ? (
+                          <span className="flex items-center gap-1 text-[11px] text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+                            <Loader2 size={12} className="animate-spin text-emerald-600" />
+                            <span>Checking...</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => lookupStaffRecord(newPatient.patientId, true)}
+                            className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1 rounded-md transition-colors"
+                            title="Lookup and auto-fill staff details"
+                          >
+                            Lookup
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Suggestions Dropdown for partial matches */}
+                    {showSuggestions && staffMatchInfo?.suggestions && staffMatchInfo.suggestions.length > 0 && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden divide-y divide-slate-100 max-h-52 overflow-y-auto">
+                        <div className="bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex justify-between items-center">
+                          <span>Matching Staff Records ({staffMatchInfo.suggestions.length})</span>
+                          <button type="button" onClick={() => setShowSuggestions(false)} className="text-slate-400 hover:text-slate-600 font-normal">Close</button>
+                        </div>
+                        {staffMatchInfo.suggestions.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => handleSelectStaffSuggestion(s)}
+                            className="w-full text-left p-2.5 hover:bg-emerald-50/60 transition-colors flex items-center justify-between gap-2"
+                          >
+                            <div>
+                              <div className="font-bold text-slate-800 text-xs">{s.name}</div>
+                              <div className="text-[10px] text-slate-500 font-normal">
+                                ID: <span className="font-mono font-semibold text-slate-700">{s.staffId}</span> • {s.rank || 'Staff'} {s.unit ? `(${s.unit})` : ''}
+                              </div>
+                            </div>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                              Auto-fill <ArrowRight size={10} />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Verified HR Record Banner */}
+                    {staffMatchInfo?.found && (
+                      <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900">
+                        <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-800">
+                          <UserCheck size={14} className="text-emerald-600" />
+                          <span>HR Record Verified: {staffMatchInfo.name}</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-700 mt-0.5 flex flex-wrap gap-x-3">
+                          {staffMatchInfo.rank && <span><strong>Rank:</strong> {staffMatchInfo.rank}</span>}
+                          {staffMatchInfo.unit && <span><strong>Unit:</strong> {staffMatchInfo.unit}</span>}
+                          <span><strong>Gender:</strong> {staffMatchInfo.gender}</span>
+                          <span><strong>DOB:</strong> {staffMatchInfo.dob || 'On File'}</span>
+                        </div>
+                        <p className="text-[10px] text-emerald-600 font-normal mt-1 italic">
+                          ✓ Name, Date of Birth, and Gender have been automatically populated from HR records.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Existing Patient File Alert */}
+                    {staffMatchInfo?.existingPatientFile && (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800">
+                            <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
+                            <span>Patient File Already Exists!</span>
+                          </div>
+                          <p className="text-[11px] text-amber-700 mt-0.5">
+                            A registered medical file already exists for <strong>{staffMatchInfo.existingPatientFile.name}</strong> (File ID: {staffMatchInfo.existingPatientFile.patientId}).
+                          </p>
+                        </div>
+                        {['CLINIC_NURSE', 'SUPER_USER', 'ADMIN', 'CLINIC_HEAD'].includes(activeRole) && (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEncounter(staffMatchInfo.existingPatientFile!.id)}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-sm whitespace-nowrap flex-shrink-0"
+                          >
+                            Start Visit Now
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <div>
-                    <label className="block mb-1">Employee ID / Student Matrix</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-700 font-bold">Full Name <span className="text-red-500">*</span></label>
+                      {autoFilledFields.name && (
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                          <CheckCircle size={10} /> Auto-filled from HR
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
-                      className="w-full border rounded-lg p-2 outline-none"
+                      className={`w-full border rounded-lg p-2 outline-none transition-all ${autoFilledFields.name ? 'bg-emerald-50/40 border-emerald-300' : 'border-slate-300'}`}
                       required
-                      placeholder="e.g. ST-4921 or NOUN/2026/001"
-                      value={newPatient.patientId}
-                      onChange={(e) => setNewPatient({ ...newPatient, patientId: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">Full Name</label>
-                    <input
-                      type="text"
-                      className="w-full border rounded-lg p-2 outline-none"
-                      placeholder="Auto-pulls if HR staff matches"
+                      placeholder="e.g. Dr. John Musa Doe"
                       value={newPatient.name}
-                      onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
+                      onChange={(e) => {
+                        setNewPatient({ ...newPatient, name: e.target.value });
+                        setAutoFilledFields(prev => ({ ...prev, name: false }));
+                      }}
                     />
                   </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block mb-1">Gender</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-700 font-bold">Gender <span className="text-red-500">*</span></label>
+                        {autoFilledFields.gender && (
+                          <span className="text-[10px] text-emerald-600 font-semibold">✓ HR</span>
+                        )}
+                      </div>
                       <select
-                        className="w-full border rounded-lg p-2 outline-none bg-white"
+                        className={`w-full border rounded-lg p-2 outline-none bg-white transition-all ${autoFilledFields.gender ? 'bg-emerald-50/40 border-emerald-300' : 'border-slate-300'}`}
                         value={newPatient.gender}
-                        onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}
+                        onChange={(e) => {
+                          setNewPatient({ ...newPatient, gender: e.target.value });
+                          setAutoFilledFields(prev => ({ ...prev, gender: false }));
+                        }}
                       >
                         <option value="MALE">Male</option>
                         <option value="FEMALE">Female</option>
@@ -645,13 +874,21 @@ export default function ClinicDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="block mb-1">Date of Birth</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-700 font-bold">Date of Birth <span className="text-red-500">*</span></label>
+                        {autoFilledFields.dob && (
+                          <span className="text-[10px] text-emerald-600 font-semibold">✓ HR</span>
+                        )}
+                      </div>
                       <input
                         type="date"
-                        className="w-full border rounded-lg p-2 outline-none"
+                        className={`w-full border rounded-lg p-2 outline-none transition-all ${autoFilledFields.dob ? 'bg-emerald-50/40 border-emerald-300' : 'border-slate-300'}`}
                         required
                         value={newPatient.dob}
-                        onChange={(e) => setNewPatient({ ...newPatient, dob: e.target.value })}
+                        onChange={(e) => {
+                          setNewPatient({ ...newPatient, dob: e.target.value });
+                          setAutoFilledFields(prev => ({ ...prev, dob: false }));
+                        }}
                       />
                     </div>
                   </div>

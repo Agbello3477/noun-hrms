@@ -16,23 +16,47 @@ export const createPatientFile = async (req: AuthRequest, res: Response) => {
     const { patientId, name, gender, dob, bloodGroup, genotype, allergies, medicalHistory } = req.body;
 
     try {
+        const trimmedPatientId = String(patientId || '').trim();
+        if (!trimmedPatientId) {
+            return res.status(400).json({ message: 'Employee ID / Student Matrix is required' });
+        }
+
+        // Check if patient file already exists
+        const existing = await prisma.clinicPatientFile.findFirst({
+            where: {
+                patientId: { equals: trimmedPatientId, mode: 'insensitive' }
+            }
+        });
+        if (existing) {
+            return res.status(400).json({
+                message: `A patient file with ID "${trimmedPatientId}" already exists (${existing.name}). You can start a clinical visit directly.`
+            });
+        }
+
         // Search if employee exists in system
-        const staff = await prisma.staffProfile.findUnique({
-            where: { staffId: patientId },
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { staffId: { equals: trimmedPatientId, mode: 'insensitive' } },
+                    { ippisNumber: { equals: trimmedPatientId, mode: 'insensitive' } }
+                ]
+            },
             include: { user: true }
         });
 
         const encryptedHistory = encrypt(medicalHistory || 'None');
 
+        const resolvedName = name?.trim() || (staff ? [staff.surname, staff.otherNames].filter(Boolean).join(' ').trim() || staff.user?.name || 'Unknown Patient' : 'Unknown Patient');
+
         const patientFile = await prisma.clinicPatientFile.create({
             data: {
-                patientId,
-                name: name || (staff ? `${staff.surname || ''} ${staff.otherNames || ''}`.trim() : 'Unknown Patient'),
-                gender,
-                dob: new Date(dob),
-                bloodGroup,
-                genotype,
-                allergies,
+                patientId: trimmedPatientId,
+                name: resolvedName,
+                gender: gender || (staff?.gender?.toUpperCase().startsWith('F') ? 'FEMALE' : 'MALE') || 'MALE',
+                dob: dob ? new Date(dob) : (staff?.dateOfBirth ? new Date(staff.dateOfBirth) : new Date('2000-01-01')),
+                bloodGroup: bloodGroup || null,
+                genotype: genotype || null,
+                allergies: allergies || null,
                 encryptedMedicalHistory: encryptedHistory,
                 userId: staff?.userId || null
             }
@@ -422,5 +446,168 @@ export const updateInventory = async (req: AuthRequest, res: Response) => {
         res.json(item);
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to update stock' });
+    }
+};
+
+export const lookupStaffForPatientFile = async (req: AuthRequest, res: Response) => {
+    try {
+        const identifier = (req.query.identifier || req.query.staffId || req.query.query || '') as string;
+        const trimmed = identifier.trim();
+        if (!trimmed) {
+            return res.status(400).json({ message: 'Staff ID or search query is required' });
+        }
+
+        // 1. Check exact staff ID, IPPIS, User email, or profile ID
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                isDeleted: false,
+                OR: [
+                    { staffId: { equals: trimmed, mode: 'insensitive' } },
+                    { ippisNumber: { equals: trimmed, mode: 'insensitive' } },
+                    { id: trimmed },
+                    { user: { email: { equals: trimmed, mode: 'insensitive' } } }
+                ]
+            },
+            include: {
+                user: { select: { id: true, name: true, email: true } },
+                unit: { select: { id: true, name: true, type: true } }
+            }
+        });
+
+        if (staff) {
+            // Check if patient file already exists
+            const existingFile = await prisma.clinicPatientFile.findFirst({
+                where: {
+                    OR: [
+                        { patientId: staff.staffId || trimmed },
+                        { userId: staff.userId }
+                    ]
+                },
+                select: { id: true, patientId: true, name: true, createdAt: true }
+            });
+
+            // Normalize gender to form standard: MALE / FEMALE / OTHER
+            let normalizedGender = 'MALE';
+            if (staff.gender) {
+                const g = staff.gender.trim().toUpperCase();
+                if (g === 'FEMALE' || g === 'F') normalizedGender = 'FEMALE';
+                else if (g === 'MALE' || g === 'M') normalizedGender = 'MALE';
+                else normalizedGender = 'OTHER';
+            }
+
+            // Compute Full Name
+            const fullName = [staff.surname, staff.otherNames].filter(Boolean).join(' ').trim() || staff.user?.name || '';
+            
+            // Format DOB as YYYY-MM-DD
+            let formattedDob = '';
+            if (staff.dateOfBirth) {
+                try {
+                    formattedDob = new Date(staff.dateOfBirth).toISOString().split('T')[0];
+                } catch {}
+            }
+
+            return res.json({
+                found: true,
+                staffId: staff.staffId || trimmed,
+                name: fullName,
+                surname: staff.surname || '',
+                otherNames: staff.otherNames || '',
+                gender: normalizedGender,
+                dob: formattedDob,
+                rank: staff.rank || '',
+                cadre: staff.cadre || null,
+                unit: staff.unit?.name || '',
+                phone: staff.phone || '',
+                email: staff.user?.email || staff.emailPersonal || '',
+                existingPatientFile: existingFile || null
+            });
+        }
+
+        // 2. If exact match not found, check for autocomplete suggestions by partial staffId or name
+        const partialMatches = await prisma.staffProfile.findMany({
+            where: {
+                isDeleted: false,
+                OR: [
+                    { staffId: { contains: trimmed, mode: 'insensitive' } },
+                    { surname: { contains: trimmed, mode: 'insensitive' } },
+                    { otherNames: { contains: trimmed, mode: 'insensitive' } },
+                    { user: { name: { contains: trimmed, mode: 'insensitive' } } }
+                ]
+            },
+            select: {
+                id: true,
+                staffId: true,
+                surname: true,
+                otherNames: true,
+                gender: true,
+                dateOfBirth: true,
+                rank: true,
+                unit: { select: { name: true } },
+                user: { select: { name: true, email: true } }
+            },
+            take: 8
+        });
+
+        if (partialMatches.length === 1 && partialMatches[0].staffId) {
+            const match = partialMatches[0];
+            const existingFile = await prisma.clinicPatientFile.findFirst({
+                where: {
+                    OR: [
+                        { patientId: match.staffId || trimmed },
+                        { userId: match.id }
+                    ]
+                },
+                select: { id: true, patientId: true, name: true, createdAt: true }
+            });
+
+            let normalizedGender = 'MALE';
+            if (match.gender) {
+                const g = match.gender.trim().toUpperCase();
+                if (g === 'FEMALE' || g === 'F') normalizedGender = 'FEMALE';
+                else if (g === 'MALE' || g === 'M') normalizedGender = 'MALE';
+                else normalizedGender = 'OTHER';
+            }
+
+            const fullName = [match.surname, match.otherNames].filter(Boolean).join(' ').trim() || match.user?.name || '';
+            let formattedDob = '';
+            if (match.dateOfBirth) {
+                try {
+                    formattedDob = new Date(match.dateOfBirth).toISOString().split('T')[0];
+                } catch {}
+            }
+
+            return res.json({
+                found: true,
+                staffId: match.staffId || trimmed,
+                name: fullName,
+                surname: match.surname || '',
+                otherNames: match.otherNames || '',
+                gender: normalizedGender,
+                dob: formattedDob,
+                rank: match.rank || '',
+                unit: match.unit?.name || '',
+                existingPatientFile: existingFile || null,
+                suggestions: []
+            });
+        }
+
+        const formattedSuggestions = partialMatches.map(p => ({
+            id: p.id,
+            staffId: p.staffId,
+            name: [p.surname, p.otherNames].filter(Boolean).join(' ').trim() || p.user?.name || 'Staff',
+            gender: p.gender ? (p.gender.toUpperCase().startsWith('F') ? 'FEMALE' : 'MALE') : 'MALE',
+            dob: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().split('T')[0] : '',
+            rank: p.rank || '',
+            unit: p.unit?.name || ''
+        }));
+
+        return res.json({
+            found: false,
+            message: 'No exact staff record found',
+            suggestions: formattedSuggestions
+        });
+    } catch (error: any) {
+        console.error('Failed to lookup staff for patient file:', error);
+        res.status(500).json({ message: 'Staff lookup failed' });
     }
 };
