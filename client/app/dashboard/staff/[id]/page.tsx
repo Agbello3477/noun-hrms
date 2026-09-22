@@ -586,6 +586,71 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 </div>
             </div>
 
+            {/* Promotion Maturity & Career Milestone Overview Card */}
+            <div className="bg-white rounded-3xl border border-emerald-200 shadow-sm p-6 overflow-hidden relative">
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-600"></div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-700 border border-emerald-100">
+                            <TrendingUp size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Promotion Maturity &amp; Career Milestone</h2>
+                            <p className="text-xs text-gray-500">Substantive promotion maturity schedule and institutional appraisal eligibility.</p>
+                        </div>
+                    </div>
+                    <div>
+                        {staff.staffProfile?.promotionEligibilityStatus === 'DUE_THIS_CYCLE' ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                <Info size={13} className="text-amber-700" /> Due This Cycle (2026)
+                            </span>
+                        ) : staff.staffProfile?.promotionEligibilityStatus === 'MATURED_OVERDUE' ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-900 border border-red-200">
+                                <Info size={13} className="text-red-700" /> Matured / Overdue
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <TrendingUp size={13} className="text-emerald-700" /> Pending Maturity
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Last Promotion Date</span>
+                        <span className="text-sm font-extrabold text-slate-800">
+                            {staff.staffProfile?.lastPromotionDate 
+                                ? new Date(staff.staffProfile.lastPromotionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : (staff.staffProfile?.dateOfFirstAppointment ? new Date(staff.staffProfile.dateOfFirstAppointment).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'First Appointment')}
+                        </span>
+                    </div>
+
+                    <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Next Due Year</span>
+                        <span className="text-lg font-black text-emerald-950 font-mono">
+                            {staff.staffProfile?.nextPromotionDueYear || computedPromotionSchedule.calculatedYear}
+                        </span>
+                    </div>
+
+                    <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Target Effective Date</span>
+                        <span className="text-sm font-extrabold text-emerald-950">
+                            {staff.staffProfile?.nextPromotionDueDate 
+                                ? new Date(staff.staffProfile.nextPromotionDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : `${staff.staffProfile?.cadre === 'ACADEMIC' ? '01 Oct' : '01 Jan'} ${staff.staffProfile?.nextPromotionDueYear || computedPromotionSchedule.calculatedYear}`}
+                        </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Cadre Waiting Rule</span>
+                        <span className="text-xs font-bold text-slate-800">
+                            {staff.staffProfile?.cadre === 'ACADEMIC' ? 'Academic (3 Yrs • Oct 1)' : 'Admin/Junior (3–4 Yrs • Jan 1)'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             {/* Staff Profile Management Panel */}
             {canManage && (
                 <div className="bg-white rounded-3xl border border-blue-200/60 shadow-md overflow-hidden relative">

@@ -394,6 +394,12 @@ export const getStaffFile = async (req: Request, res: Response) => {
             role: profile.user.role,
             unit: profile.unit,
             studyCenter: profile.studyCenter,
+            dateOfBirth: profile.dateOfBirth,
+            dateOfFirstAppointment: profile.dateOfFirstAppointment,
+            lastPromotionDate: profile.lastPromotionDate || profile.dateOfLastPromotion,
+            nextPromotionDueYear: profile.nextPromotionDueYear || profile.nextDueYear,
+            nextPromotionDueDate: profile.nextPromotionDueDate || profile.nextDueDate,
+            promotionEligibilityStatus: profile.promotionEligibilityStatus || profile.eligibilityStatus,
             createdAt: profile.createdAt,
             createdBy: profile.createdBy
         });
