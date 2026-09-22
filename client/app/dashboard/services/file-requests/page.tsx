@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '../../../../lib/api';
-import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
@@ -67,6 +67,7 @@ export default function FileRequestPage() {
 
     // Staff Selection State
     const [staffList, setStaffList] = useState<any[]>([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
     const [selectedStaffId, setSelectedStaffId] = useState('');
     const [staffSearch, setStaffSearch] = useState('');
 
@@ -82,11 +83,28 @@ export default function FileRequestPage() {
     };
 
     const fetchStaff = async () => {
+        setLoadingStaff(true);
         try {
-            const res = await api.get('/api/staff');
-            setStaffList(res.data || []);
+            const res = await api.get('/api/staff?dropdown=true&limit=1000');
+            const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+            if (data.length > 0) {
+                setStaffList(data);
+            } else {
+                const regRes = await api.get('/api/registry/files');
+                const regData = Array.isArray(regRes.data) ? regRes.data : (regRes.data?.data || []);
+                setStaffList(regData);
+            }
         } catch (error) {
-            console.error('Failed to fetch staff list', error);
+            console.error('Failed to fetch staff list via /api/staff, trying fallback', error);
+            try {
+                const regRes = await api.get('/api/registry/files');
+                const regData = Array.isArray(regRes.data) ? regRes.data : (regRes.data?.data || []);
+                setStaffList(regData);
+            } catch (e) {
+                console.error('Failed fallback fetch registry files', e);
+            }
+        } finally {
+            setLoadingStaff(false);
         }
     };
 
@@ -226,29 +244,43 @@ export default function FileRequestPage() {
                                     onChange={e => setStaffSearch(e.target.value)}
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm outline-none mb-1"
                                 />
-                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mt-2 mb-1">Select Staff Member *</label>
+                                <div className="flex items-center justify-between mt-2 mb-1">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Select Staff Member *</label>
+                                    {loadingStaff && (
+                                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                                            <Loader2 size={12} className="animate-spin" /> Loading directory...
+                                        </span>
+                                    )}
+                                </div>
                                 <select
                                     required
-                                    className="block w-full border border-gray-300 rounded-md p-2"
+                                    className="block w-full border border-gray-300 rounded-md p-2 bg-white text-sm"
                                     value={selectedStaffId}
                                     onChange={e => setSelectedStaffId(e.target.value)}
+                                    disabled={loadingStaff}
                                 >
-                                    <option value="">-- Choose Staff Member --</option>
+                                    <option value="">-- Choose Staff Member ({staffList.length} Active Records) --</option>
                                     {staffList
                                         .filter(s => {
                                             const query = staffSearch.toLowerCase().trim();
                                             if (!query) return true;
                                             const name = (s.name || '').toLowerCase();
-                                            const staffId = (s.staffProfile?.staffId || '').toLowerCase();
-                                            const surname = (s.staffProfile?.surname || '').toLowerCase();
-                                            const otherNames = (s.staffProfile?.otherNames || '').toLowerCase();
+                                            const staffId = (s.staffProfile?.staffId || s.staffId || '').toLowerCase();
+                                            const surname = (s.staffProfile?.surname || s.surname || '').toLowerCase();
+                                            const otherNames = (s.staffProfile?.otherNames || s.otherNames || '').toLowerCase();
                                             return name.includes(query) || staffId.includes(query) || surname.includes(query) || otherNames.includes(query);
                                         })
-                                        .map(s => (
-                                            <option key={s.id} value={s.staffProfile?.id}>
-                                                {s.name} ({s.staffProfile?.staffId || 'No ID'})
-                                            </option>
-                                        ))
+                                        .map(s => {
+                                            const profileId = s.staffProfile?.id || s.id;
+                                            const staffIdCode = s.staffProfile?.staffId || s.staffId || 'No ID';
+                                            const fullName = s.name || (s.staffProfile ? `${s.staffProfile.surname || ''} ${s.staffProfile.otherNames || ''}`.trim() : `${s.surname || ''} ${s.otherNames || ''}`.trim()) || 'Staff';
+                                            const unitName = s.staffProfile?.unit?.name || s.unit?.name || '';
+                                            return (
+                                                <option key={s.id || profileId} value={profileId}>
+                                                    {fullName} — {staffIdCode} {unitName ? `(${unitName})` : ''}
+                                                </option>
+                                            );
+                                        })
                                     }
                                 </select>
                             </div>

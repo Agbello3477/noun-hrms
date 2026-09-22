@@ -5,16 +5,31 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
+const requestRoles = [
+    Role.UNIT_HEAD,
+    Role.STUDY_CENTER_MANAGER,
+    Role.HR_ADMIN,
+    Role.SUPER_USER,
+    Role.BURSARY,
+    Role.AUDIT,
+    Role.ADMIN,
+    Role.VICE_CHANCELLOR,
+    Role.UNIT_ADMIN,
+    Role.CLINIC_HEAD,
+    Role.CLINIC_DOCTOR,
+    Role.SECURITY_HEAD
+];
+
 // Create Request (VC, Registrar, Dean, etc) - Open to Unit Heads+
 router.post('/request',
     verifyToken,
-    requireRole([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.HR_ADMIN, Role.SUPER_USER, Role.BURSARY, Role.AUDIT]),
+    requireRole(requestRoles),
     createRequest
 );
 
 router.post('/',
     verifyToken,
-    requireRole([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.HR_ADMIN, Role.SUPER_USER, Role.BURSARY, Role.AUDIT]),
+    requireRole(requestRoles),
     createRequest
 );
 

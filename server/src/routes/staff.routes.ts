@@ -19,7 +19,17 @@ const viewRoles = [
     Role.UNIT_HEAD,
     Role.UNIT_ADMIN,
     Role.ADMIN,
-    Role.VICE_CHANCELLOR
+    Role.VICE_CHANCELLOR,
+    Role.BURSARY,
+    Role.AUDIT,
+    Role.CLINIC_HEAD,
+    Role.CLINIC_DOCTOR,
+    Role.CLINIC_NURSE,
+    Role.CLINIC_PHARMACIST,
+    Role.CLINIC_LAB_SCIENTIST,
+    Role.SECURITY_HEAD,
+    Role.SECURITY_OFFICER,
+    Role.STAFF
 ];
 
 // Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin

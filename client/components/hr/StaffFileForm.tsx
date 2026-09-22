@@ -354,14 +354,14 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">Residential Address</label>
                         <input name="address" className="w-full border p-1.5 rounded" value={formData.address} onChange={handleChange} />
                     </div>
-                    <div className="col-span-2">
-                        <label className="block text-xs font-medium text-gray-700 flex items-center gap-1.5 mb-0.5">
-                            <GraduationCap size={14} className="text-nounGreen" />
+                    <div className="col-span-2 bg-emerald-50/70 p-3 rounded-lg border border-emerald-200 mt-1">
+                        <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                            <GraduationCap size={15} className="text-[#006533]" />
                             Highest Qualification
                         </label>
                         <select
                             name="highestQualification"
-                            className="w-full border p-1.5 rounded bg-white text-gray-900 text-xs"
+                            className="w-full border border-emerald-300 rounded p-2 bg-white text-gray-900 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
                             value={formData.highestQualification}
                             onChange={handleChange}
                         >
@@ -375,8 +375,8 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             <input
                                 type="text"
                                 name="customQualification"
-                                placeholder="Enter specific qualification (e.g. Ph.D. in Cyber Security, LL.M, etc.)"
-                                className="w-full border p-1.5 rounded mt-1.5 bg-white text-xs text-gray-900"
+                                placeholder="Specify exact qualification (e.g. Ph.D. in Cyber Security, LL.M, etc.)"
+                                className="w-full border border-emerald-300 rounded p-2 mt-2 bg-white text-xs text-gray-900 font-medium"
                                 value={formData.customQualification}
                                 onChange={handleChange}
                             />

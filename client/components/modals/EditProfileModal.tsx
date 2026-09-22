@@ -1,8 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Camera, Save, Loader2 } from 'lucide-react';
+import { X, Camera, Save, Loader2, GraduationCap } from 'lucide-react';
 import api from '../../lib/api';
+
+const STANDARD_QUALIFICATIONS = [
+    'Ph.D. / Doctorate',
+    'M.Sc. / Masters',
+    'M.Phil.',
+    'MBA / MPA / Professional Masters',
+    'PGD (Post Graduate Diploma)',
+    'B.Sc. / B.A. / B.Ed. / First Degree',
+    'HND (Higher National Diploma)',
+    'OND / ND (National Diploma)',
+    'NCE (Nigeria Certificate in Education)',
+    'SSCE / WAEC / NECO / GCE',
+    'FSLC (First School Leaving Certificate)'
+];
 
 interface EditProfileModalProps {
     user: any;
@@ -12,18 +26,23 @@ interface EditProfileModalProps {
 
 export default function EditProfileModal({ user, onClose, onSuccess }: EditProfileModalProps) {
     const [isLoading, setIsLoading] = useState(false);
+    const initialQual = user.staffProfile?.highestQualification || '';
+    const isStandard = STANDARD_QUALIFICATIONS.includes(initialQual);
+    
     const [formData, setFormData] = useState({
-        surname: user.staffProfile?.surname || user.name.split(' ')[0] || '',
-        otherNames: user.staffProfile?.otherNames || user.name.split(' ').slice(1).join(' ') || '',
+        surname: user.staffProfile?.surname || user.name?.split(' ')[0] || '',
+        otherNames: user.staffProfile?.otherNames || user.name?.split(' ').slice(1).join(' ') || '',
         phone: user.staffProfile?.phone || '',
         address: user.staffProfile?.address || '',
         stateOfOrigin: user.staffProfile?.stateOfOrigin || '',
         lga: user.staffProfile?.lga || '',
+        highestQualification: isStandard ? initialQual : (initialQual ? 'CUSTOM' : ''),
+        customQualification: isStandard ? '' : initialQual
     });
     const [passport, setPassport] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(user.staffProfile?.passportUrl ? `${process.env.NEXT_PUBLIC_API_URL}${user.staffProfile.passportUrl}` : null);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
@@ -40,10 +59,21 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
         setIsLoading(true);
 
         try {
+            const effectiveQual = formData.highestQualification === 'CUSTOM'
+                ? formData.customQualification.trim()
+                : formData.highestQualification;
+
             const data = new FormData();
-            Object.entries(formData).forEach(([key, value]) => {
-                data.append(key, value);
-            });
+            data.append('surname', formData.surname);
+            data.append('otherNames', formData.otherNames);
+            data.append('phone', formData.phone);
+            data.append('address', formData.address);
+            data.append('stateOfOrigin', formData.stateOfOrigin);
+            data.append('lga', formData.lga);
+            if (effectiveQual) {
+                data.append('highestQualification', effectiveQual);
+            }
+
             if (passport) {
                 data.append('passport', passport);
             }
@@ -114,6 +144,37 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
                                 className="mt-1 block w-full rounded-md border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
+
+                        {/* Highest Qualification Field */}
+                        <div className="col-span-2 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200">
+                            <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                <GraduationCap size={16} className="text-[#006533]" />
+                                Highest Educational / Academic Qualification
+                            </label>
+                            <select
+                                name="highestQualification"
+                                value={formData.highestQualification}
+                                onChange={handleChange}
+                                className="block w-full rounded-lg border border-emerald-300 bg-white p-2.5 text-sm text-gray-900 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                            >
+                                <option value="">Select Highest Qualification</option>
+                                {STANDARD_QUALIFICATIONS.map(q => (
+                                    <option key={q} value={q}>{q}</option>
+                                ))}
+                                <option value="CUSTOM">Other / Specific Degree Title</option>
+                            </select>
+                            {formData.highestQualification === 'CUSTOM' && (
+                                <input
+                                    type="text"
+                                    name="customQualification"
+                                    placeholder="Specify exact degree title (e.g. Ph.D. in Cyber Security, LL.M, etc.)"
+                                    value={formData.customQualification}
+                                    onChange={handleChange}
+                                    className="mt-2 block w-full rounded-lg border border-emerald-300 bg-white p-2.5 text-sm text-gray-900 placeholder:text-gray-400"
+                                />
+                            )}
+                        </div>
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Phone</label>
                             <input

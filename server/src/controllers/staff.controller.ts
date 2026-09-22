@@ -85,10 +85,18 @@ export const getAllStaff = async (req: Request, res: Response) => {
         }
 
         let profileFilters: any = {};
+        const isDropdown = req.query.dropdown === 'true';
 
-        // Enforce Placement Boundaries for Unit Heads, Managers, and Scoped Admins
-        if (!isHQAdmin) {
-            if ([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.HR_ADMIN, Role.ADMIN, Role.STAFF].includes(requesterRole as any)) {
+        // Enforce Placement Boundaries for Unit Heads, Managers, and Scoped Admins (only for directory tables, not dropdown selectors)
+        if (!isHQAdmin && !isDropdown) {
+            const allowedViewRoles = [
+                Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER,
+                Role.HR_ADMIN, Role.ADMIN, Role.STAFF, Role.BURSARY, Role.AUDIT,
+                Role.CLINIC_HEAD, Role.CLINIC_DOCTOR, Role.CLINIC_NURSE,
+                Role.CLINIC_PHARMACIST, Role.CLINIC_LAB_SCIENTIST,
+                Role.SECURITY_HEAD, Role.SECURITY_OFFICER
+            ];
+            if (allowedViewRoles.includes(requesterRole as any)) {
                 if (requesterProfile) {
                     if (requesterRole === Role.STUDY_CENTER_MANAGER && requesterProfile.centerId && !requesterProfile.unitId) {
                         profileFilters.centerId = requesterProfile.centerId;
@@ -121,11 +129,7 @@ export const getAllStaff = async (req: Request, res: Response) => {
                         }
                     } else if (requesterProfile.centerId) {
                         profileFilters.centerId = requesterProfile.centerId;
-                    } else {
-                        return res.json([]);
                     }
-                } else {
-                    return res.json([]);
                 }
             } else {
                 return res.status(403).json({ message: 'Unauthorized: You do not have permission to list staff members.' });
@@ -187,9 +191,8 @@ export const getAllStaff = async (req: Request, res: Response) => {
             }
         }
 
-        const isDropdown = req.query.dropdown === 'true';
         const pageNum = page ? parseInt(String(page)) : 1;
-        const limitNum = isDropdown ? 200 : Math.min(parseInt(String(limit || 25)), 25);
+        const limitNum = isDropdown ? Math.min(parseInt(String(limit || 1000)), 1000) : Math.min(parseInt(String(limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
 
         const [total, staff] = await Promise.all([
