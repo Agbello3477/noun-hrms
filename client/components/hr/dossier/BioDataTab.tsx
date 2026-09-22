@@ -77,6 +77,14 @@ export default function BioDataTab({ staff }: { staff: any }) {
                             <span className="text-gray-500 text-sm">Study Center</span>
                             <span className="col-span-2 font-medium text-gray-900">{staff.studyCenter?.name || 'HQ'}</span>
                         </div>
+                        <div className="grid grid-cols-3 gap-2 border-b pb-3">
+                            <span className="text-gray-500 text-sm flex items-center gap-1">
+                                <GraduationCap size={14} className="text-nounGreen" /> Highest Qualification
+                            </span>
+                            <span className="col-span-2 font-medium text-gray-900">
+                                {staff.highestQualification || staff.staffProfile?.highestQualification || 'Not Specified'}
+                            </span>
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                             <span className="text-gray-500 text-sm">Date Created</span>
                             <span className="col-span-2 font-medium text-gray-900">{new Date(staff.createdAt).toLocaleDateString()}</span>

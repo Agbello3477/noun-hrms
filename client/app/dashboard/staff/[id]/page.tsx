@@ -20,6 +20,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
 import api from '../../../../lib/api';
+import { STANDARD_QUALIFICATIONS } from '../../../../lib/qualifications';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
 import QueryHistoryTab from '../../../../components/hr/dossier/QueryHistoryTab';
 
@@ -33,6 +34,7 @@ interface StaffDetail {
         staffId: string | null;
         surname: string | null;
         otherNames: string | null;
+        highestQualification?: string | null;
         department: string | null;
         rank: string | null;
         level: string | null;
@@ -88,6 +90,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     // Bio & Career form state
     const [editSurname, setEditSurname] = useState('');
     const [editOtherNames, setEditOtherNames] = useState('');
+    const [editHighestQualification, setEditHighestQualification] = useState('');
+    const [editCustomQualification, setEditCustomQualification] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [editAddress, setEditAddress] = useState('');
     const [editCadre, setEditCadre] = useState('ADMINISTRATIVE');
@@ -275,6 +279,14 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditTitle(staffData.staffProfile?.title || '');
                 setEditSurname(staffData.staffProfile?.surname || '');
                 setEditOtherNames(staffData.staffProfile?.otherNames || '');
+                const qual = staffData.staffProfile?.highestQualification || '';
+                if (qual && !STANDARD_QUALIFICATIONS.includes(qual)) {
+                    setEditHighestQualification('CUSTOM');
+                    setEditCustomQualification(qual);
+                } else {
+                    setEditHighestQualification(qual);
+                    setEditCustomQualification('');
+                }
                 setEditPhone(staffData.staffProfile?.phone || '');
                 setEditAddress(staffData.staffProfile?.address || '');
                 setEditCadre(staffData.staffProfile?.cadre || 'ADMINISTRATIVE');
@@ -381,10 +393,15 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 }
             }
 
+            const effectiveQualification = editHighestQualification === 'CUSTOM'
+                ? editCustomQualification.trim()
+                : editHighestQualification;
+
             const payload = {
                 title: editTitle,
                 surname: editSurname,
                 otherNames: editOtherNames,
+                highestQualification: effectiveQualification || undefined,
                 phone: editPhone,
                 address: editAddress,
                 level: editLevel,
@@ -533,7 +550,19 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                         </div>
                     </div>
 
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-50">
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-gray-50">
+                        <div className="flex items-center gap-3 text-gray-700">
+                            <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                                <GraduationCap size={20} className="text-nounGreen" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Highest Qualification</p>
+                                <p className="font-bold text-gray-850 text-sm truncate max-w-[200px]" title={staff.staffProfile?.highestQualification || 'Not Specified'}>
+                                    {staff.staffProfile?.highestQualification || 'Not Specified'}
+                                </p>
+                            </div>
+                        </div>
+
                         <div className="flex items-center gap-3 text-gray-700">
                             <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
                                 <Phone size={20} />
@@ -710,6 +739,32 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
                                         placeholder="e.g. 2"
                                     />
+                                </div>
+                                {/* Highest Qualification */}
+                                <div className="space-y-1 md:col-span-2">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <GraduationCap size={15} className="text-nounGreen" /> Highest Educational Qualification
+                                    </label>
+                                    <select
+                                        value={editHighestQualification}
+                                        onChange={e => setEditHighestQualification(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
+                                    >
+                                        <option value="">Select Highest Qualification</option>
+                                        {STANDARD_QUALIFICATIONS.map(q => (
+                                            <option key={q} value={q}>{q}</option>
+                                        ))}
+                                        <option value="CUSTOM">Other / Specific Degree Title</option>
+                                    </select>
+                                    {editHighestQualification === 'CUSTOM' && (
+                                        <input
+                                            type="text"
+                                            value={editCustomQualification}
+                                            onChange={e => setEditCustomQualification(e.target.value)}
+                                            placeholder="Enter specific qualification (e.g. Ph.D. in Cyber Security, LL.M, etc.)"
+                                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mt-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
+                                        />
+                                    )}
                                 </div>
                                 {/* Date of Birth */}
                                 <div className="space-y-1">

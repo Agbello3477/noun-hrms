@@ -367,6 +367,7 @@ export const createStaff = async (req: Request, res: Response) => {
         const {
             surname, otherNames, email, role,
             staffId, level, step, cadre, cadreType, currentGradeLevel,
+            highestQualification,
             phone, stateOfOrigin, lga, address,
             unitId, centerId,
             // Phase 9
@@ -506,6 +507,7 @@ export const createStaff = async (req: Request, res: Response) => {
                         cadre: resolvedCadre,
                         cadreType: resolvedCadreType,
                         currentGradeLevel: effectiveGradeLevel,
+                        highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                         phone,
                         stateOfOrigin,
                         lga,
@@ -719,6 +721,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         const {
             surname, otherNames, title, phone, stateOfOrigin, lga, address,
             level, step, cadre, cadreType, currentGradeLevel, gender,
+            highestQualification,
             role, unitId, centerId, rank,
             dateOfBirth, dateOfFirstAppointment, status,
             // Promotion Milestone Fields
@@ -836,6 +839,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 surname, otherNames, title, phone, stateOfOrigin, lga, address,
                 level, step, cadre: resolvedCadre, cadreType: effectiveCadreType,
                 currentGradeLevel: effectiveGradeLevel,
+                highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                 gender,
                 passportUrl,
                 rank: rank || undefined,
@@ -865,6 +869,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 cadre: resolvedCadre !== undefined ? resolvedCadre : undefined,
                 cadreType: effectiveCadreType !== undefined ? effectiveCadreType : undefined,
                 currentGradeLevel: effectiveGradeLevel !== undefined ? effectiveGradeLevel : undefined,
+                highestQualification: highestQualification !== undefined ? (highestQualification ? String(highestQualification).trim() : null) : undefined,
                 gender,
                 rank: rank !== undefined ? rank : undefined,
                 dateOfBirth: dob !== undefined ? dob : undefined,
@@ -1485,6 +1490,7 @@ export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
 
         const {
             surname, otherNames, title, rank, level, step, cadre, cadreType, currentGradeLevel,
+            highestQualification,
             unitId, centerId, dateOfBirth, dateOfFirstAppointment, status,
             lastPromotionDate, dateOfLastPromotion,
             nextPromotionDueYear, nextDueYear,
@@ -1529,6 +1535,7 @@ export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
                 ...(rank !== undefined ? { rank } : {}),
                 ...(level !== undefined ? { level } : {}),
                 ...(step !== undefined ? { step } : {}),
+                ...(highestQualification !== undefined ? { highestQualification: highestQualification ? String(highestQualification).trim() : null } : {}),
                 ...(dob !== undefined ? { dateOfBirth: dob } : {}),
                 ...(apptDate !== undefined ? { dateOfFirstAppointment: apptDate } : {}),
                 ...(unitId !== undefined ? { unitId: unitId === '' || unitId === 'null' ? null : unitId } : {}),

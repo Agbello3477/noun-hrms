@@ -35,6 +35,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
             email, name, password, // User basics
             surname, otherNames, title, phone, gender,
             stateOfOrigin, lga, address,
+            highestQualification,
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
@@ -115,6 +116,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
                         create: {
                             surname, otherNames, title,
                             staffId,
+                            highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
@@ -166,6 +168,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
             email, name, password,
             surname, otherNames, title, phone, gender,
             stateOfOrigin, lga, address,
+            highestQualification,
             role, cadre, level, step,
             centerId, unitId,
             programmeId, facilitatorInfo,
@@ -256,6 +259,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
                         create: {
                             surname, otherNames, title,
                             staffId,
+                            highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             phone, gender, stateOfOrigin, lga, address,
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
@@ -377,6 +381,7 @@ export const getStaffFile = async (req: Request, res: Response) => {
             name: profile.user.name,
             email: profile.user.email,
             staffId: profile.staffId,
+            highestQualification: profile.highestQualification,
             title: profile.title,
             phone: profile.phone,
             gender: profile.gender,

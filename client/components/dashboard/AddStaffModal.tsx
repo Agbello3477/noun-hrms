@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Calendar, TrendingUp, AlertCircle, Info, Shield } from 'lucide-react';
+import { X, Calendar, TrendingUp, AlertCircle, Info, Shield, GraduationCap } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
+import { STANDARD_QUALIFICATIONS } from '../../lib/qualifications';
 import Button from '../ui/Button';
 
 interface AddStaffModalProps {
@@ -37,6 +38,8 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         role: 'STAFF',
         cadre: 'ADMINISTRATIVE', // Default
         cadreType: 'SENIOR_ADMIN',
+        highestQualification: '',
+        customQualification: '',
         level: '',
         step: '',
         dateOfFirstAppointment: '',
@@ -285,8 +288,13 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 submittedPhone = `+234${withoutZero}`;
             }
 
+            const effectiveQualification = formData.highestQualification === 'CUSTOM'
+                ? formData.customQualification.trim()
+                : formData.highestQualification;
+
             const payload = {
                 ...formData,
+                highestQualification: effectiveQualification || undefined,
                 phone: submittedPhone,
                 role: dbRole,
                 rank: assignedRank,
@@ -438,6 +446,35 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                             <label className="block text-xs font-medium text-gray-700">Residential Address</label>
                             <input type="text" name="address" className="mt-1 w-full border rounded p-2"
                                 value={formData.address} onChange={handleChange} />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 flex items-center gap-1.5 mb-1">
+                                <GraduationCap size={15} className="text-nounGreen" />
+                                Highest Qualification
+                            </label>
+                            <select
+                                name="highestQualification"
+                                className="w-full border rounded p-2 text-xs bg-white text-gray-900"
+                                value={formData.highestQualification}
+                                onChange={handleChange}
+                            >
+                                <option value="">Select Highest Qualification</option>
+                                {STANDARD_QUALIFICATIONS.map(q => (
+                                    <option key={q} value={q}>{q}</option>
+                                ))}
+                                <option value="CUSTOM">Other / Specific Degree Title</option>
+                            </select>
+                            {formData.highestQualification === 'CUSTOM' && (
+                                <input
+                                    type="text"
+                                    name="customQualification"
+                                    placeholder="Enter specific qualification (e.g. Ph.D. in Cyber Security, LL.M, etc.)"
+                                    className="w-full border rounded p-2 mt-2 text-xs bg-white text-gray-900"
+                                    value={formData.customQualification}
+                                    onChange={handleChange}
+                                />
+                            )}
                         </div>
                     </div>
 

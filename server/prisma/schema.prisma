@@ -200,6 +200,7 @@ model StaffProfile {
   title       String?  // e.g. Mr, Mrs, Dr, Prof
   rank        String?  // e.g. Director, Dean, Senior Admin Officer
   staffId     String?  @unique // Indexed specifically
+  highestQualification String? // e.g. Ph.D., M.Sc, B.Sc, HND, PGD, etc.
   
   level       String?  // e.g. "CONTISS 13"
   step        String?  // e.g. "2"
