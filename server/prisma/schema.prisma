@@ -85,6 +85,10 @@ model User {
   // Promotion Audit Logs
   promotionAuditLogs PromotionAuditLog[] @relation("PromotionAuditActor")
 
+  // Official Registry Applications
+  applicationsSubmitted    OfficialApplication[] @relation("ApplicantApplications")
+  applicationsAcknowledged OfficialApplication[] @relation("AcknowledgedApplications")
+
   @@map("users")
 }
 
@@ -167,7 +171,8 @@ model Unit {
   headId    String?
   // We could link head to User or StaffProfile. User is safer for Auth checks.
   
-  staff     StaffProfile[]
+  staff                StaffProfile[]
+  officialApplications OfficialApplication[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1309,4 +1314,55 @@ model Voicemail {
   @@index([recipientExtension])
   @@map("voicemails")
 }
+
+enum OfficialApplicationStatus {
+  PENDING_ACKNOWLEDGMENT
+  ACKNOWLEDGED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model OfficialApplication {
+  id                 String                    @id @default(uuid())
+  referenceNumber    String                    @unique
+  applicantId        String
+  applicant          User                      @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+  applicantStaffId   String?
+  applicantName      String
+  applicantRank      String?
+  applicantUnit      String?
+  applicantRole      String?
+  unitId             String?
+  unit               Unit?                     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  targetDirectorate  String                    @default("CENTRAL_REGISTRY_HR")
+  category           String                    @default("GENERAL_REQUEST")
+  subject            String
+  content            String                    @db.Text
+  urgency            String                    @default("NORMAL")
+  attachmentUrl      String?
+  attachmentName     String?
+  status             OfficialApplicationStatus @default(PENDING_ACKNOWLEDGMENT)
+  submittedAt        DateTime                  @default(now())
+
+  // Stamping & Acknowledgment by Registry
+  acknowledgedById            String?
+  acknowledgedBy              User?     @relation("AcknowledgedApplications", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt              DateTime?
+  registryStampNumber         String?
+  registryRemarks             String?   @db.Text
+  registryOfficerName         String?
+  registryOfficerDesignation  String?
+  metadata                    Json?
+
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([applicantId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@map("official_applications")
+}
+
 

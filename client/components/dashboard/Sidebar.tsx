@@ -131,6 +131,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
                         <LinkItem href="/dashboard/registry/file-requests" icon={FileInput} label="File Request Gateway" />
+                        <LinkItem href="/dashboard/registry/applications" icon={FileText} label="Registry Applications" />
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
