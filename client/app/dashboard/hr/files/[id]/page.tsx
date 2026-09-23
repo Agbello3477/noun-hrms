@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, User, Building, MapPin, Calendar, Shield, X } from 'lucide-react';
-import api from '../../../../../lib/api';
+import api, { getImageUrl } from '../../../../../lib/api';
 import DigitalDossier from '../../../../../components/dashboard/DigitalDossier';
 import BioDataTab from '../../../../../components/hr/dossier/BioDataTab';
 import LeaveHistoryTab from '../../../../../components/hr/dossier/LeaveHistoryTab';
@@ -100,8 +100,22 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
                 <div className="flex flex-col md:flex-row justify-between md:items-start gap-6">
                     <div className="flex items-start gap-4">
-                        <div className="h-16 w-16 bg-nounGreen/10 rounded-full flex items-center justify-center text-nounGreen font-bold text-2xl border border-nounGreen/20">
-                            {staff.name?.charAt(0) || 'S'}
+                        <div className="h-16 w-16 bg-nounGreen/10 rounded-full flex items-center justify-center text-nounGreen font-bold text-2xl border border-nounGreen/20 overflow-hidden relative flex-shrink-0">
+                            {(staff.passportUrl || staff.staffProfile?.passportUrl) ? (
+                                <img
+                                    src={getImageUrl(staff.passportUrl || staff.staffProfile?.passportUrl)}
+                                    alt={staff.name}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        const fallback = e.currentTarget.parentElement?.querySelector('.hr-avatar-initials') as HTMLElement;
+                                        if (fallback) fallback.style.display = 'block';
+                                    }}
+                                />
+                            ) : null}
+                            <span className={`hr-avatar-initials ${(staff.passportUrl || staff.staffProfile?.passportUrl) ? 'hidden' : 'block'}`}>
+                                {staff.name?.charAt(0) || 'S'}
+                            </span>
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>

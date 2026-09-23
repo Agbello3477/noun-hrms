@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Send, User as UserIcon, Lock, Clock } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { getSocketUrl } from '@/lib/api';
+import { getSocketUrl, getImageUrl } from '@/lib/api';
 
 interface Message {
     id: string;
@@ -211,12 +211,20 @@ export default function ProjectChat({
                                 <div className={`flex max-w-[85%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                                     <div className={`flex-shrink-0 ${isMe ? 'ml-2' : 'mr-2'} mt-1`}>
                                         {msg.sender?.staffProfile?.passportUrl ? (
-                                            <img src={msg.sender.staffProfile.passportUrl} alt="avatar" className="w-7 h-7 rounded-full object-cover shadow" />
-                                        ) : (
-                                            <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold shadow-sm border border-emerald-200">
-                                                <UserIcon size={14} />
-                                            </div>
-                                        )}
+                                            <img
+                                                src={getImageUrl(msg.sender.staffProfile.passportUrl)}
+                                                alt="avatar"
+                                                className="w-7 h-7 rounded-full object-cover shadow"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                    const fallback = e.currentTarget.parentElement?.querySelector('.chat-avatar-fallback') as HTMLElement;
+                                                    if (fallback) fallback.style.display = 'flex';
+                                                }}
+                                            />
+                                        ) : null}
+                                        <div className={`chat-avatar-fallback w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 items-center justify-center text-xs font-bold shadow-sm border border-emerald-200 ${msg.sender?.staffProfile?.passportUrl ? 'hidden' : 'flex'}`}>
+                                            <UserIcon size={14} />
+                                        </div>
                                     </div>
                                     <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                                         <div className="flex items-center gap-1.5 mb-1 flex-wrap">

@@ -118,13 +118,19 @@ export default function ProfilePage() {
                         <div className="mx-auto h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center text-3xl font-bold text-blue-600 mb-4 overflow-hidden">
                             {user.staffProfile?.passportUrl ? (
                                 <img
-                                    src={`${process.env.NEXT_PUBLIC_API_URL}${user.staffProfile.passportUrl}`}
+                                    src={getImageUrl(user.staffProfile.passportUrl)}
                                     alt="Profile"
                                     className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        const fallback = e.currentTarget.parentElement?.querySelector('.profile-initials') as HTMLElement;
+                                        if (fallback) fallback.style.display = 'block';
+                                    }}
                                 />
-                            ) : (
-                                user.name.charAt(0)
-                            )}
+                            ) : null}
+                            <span className={`profile-initials ${user.staffProfile?.passportUrl ? 'hidden' : 'block'}`}>
+                                {user.name.charAt(0)}
+                            </span>
                         </div>
                         <h2 className="text-xl font-bold text-gray-800">
                             {user.staffProfile?.title ? `${user.staffProfile.title}. ${user.name}` : user.name}

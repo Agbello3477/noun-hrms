@@ -20,7 +20,7 @@ import {
     TrendingUp,
     Calendar
 } from 'lucide-react';
-import api from '../../../lib/api';
+import api, { getImageUrl } from '../../../lib/api';
 import AddStaffModal from '../../../components/dashboard/AddStaffModal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,6 +32,7 @@ interface Staff {
     email: string;
     role: string;
     staffProfile?: {
+        passportUrl?: string;
         staffId?: string;
         department?: string;
         rank?: string;
@@ -487,8 +488,18 @@ export default function StaffPage() {
                                 <div className="p-6 space-y-4">
                                     {/* Card Header (Avatar + Role & Status Badges) */}
                                     <div className="flex justify-between items-start gap-3">
-                                        <div className={`h-12 w-12 flex-shrink-0 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-black text-lg shadow-sm transform group-hover:scale-105 transition-transform`}>
-                                            {staff.name?.charAt(0) || 'U'}
+                                        <div className={`h-12 w-12 flex-shrink-0 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-black text-lg shadow-sm transform group-hover:scale-105 transition-transform overflow-hidden relative`}>
+                                            {staff.staffProfile?.passportUrl ? (
+                                                <img 
+                                                    src={getImageUrl(staff.staffProfile.passportUrl)} 
+                                                    alt={staff.name} 
+                                                    className="w-full h-full object-cover absolute inset-0"
+                                                    onError={(e) => {
+                                                        e.currentTarget.style.display = 'none';
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <span>{staff.name?.charAt(0) || 'U'}</span>
                                         </div>
                                         <div className="flex flex-col items-end gap-1.5">
                                             <span className={`inline-flex flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getRoleBadgeStyle(staff)}`}>
@@ -610,8 +621,18 @@ export default function StaffPage() {
                                             {/* Bio Cell */}
                                             <td className="px-6 py-3.5">
                                                 <div className="flex items-center gap-3 min-w-0">
-                                                    <div className={`h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-bold text-xs shadow-sm`}>
-                                                        {staff.name?.charAt(0) || 'U'}
+                                                    <div className={`h-9 w-9 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradientClass} flex items-center justify-center text-white font-bold text-xs shadow-sm overflow-hidden relative`}>
+                                                        {staff.staffProfile?.passportUrl ? (
+                                                            <img 
+                                                                src={getImageUrl(staff.staffProfile.passportUrl)} 
+                                                                alt={staff.name} 
+                                                                className="w-full h-full object-cover absolute inset-0"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        <span>{staff.name?.charAt(0) || 'U'}</span>
                                                     </div>
                                                     <div className="min-w-0">
                                                         <span className="font-bold text-slate-900 block truncate max-w-[180px] text-xs sm:text-sm">{staff.name}</span>

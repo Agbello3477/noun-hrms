@@ -1,6 +1,7 @@
 'use client';
 
-import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard, Shield } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard, Shield, Camera } from 'lucide-react';
+import { getImageUrl } from '../../../lib/api';
 
 export default function BioDataTab({ staff }: { staff: any }) {
     if (!staff) return null;
@@ -37,6 +38,25 @@ export default function BioDataTab({ staff }: { staff: any }) {
                         <User className="text-nounGreen" size={20} /> Personal Information
                     </h3>
                     <div className="space-y-4">
+                        {(profile.passportUrl || staff.passportUrl) && (
+                            <div className="grid grid-cols-3 gap-2 border-b pb-3 items-center">
+                                <span className="text-gray-500 text-sm flex items-center gap-1">
+                                    <Camera size={14} className="text-nounGreen" /> Passport Photo
+                                </span>
+                                <div className="col-span-2">
+                                    <div className="h-16 w-16 rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-slate-50">
+                                        <img
+                                            src={getImageUrl(profile.passportUrl || staff.passportUrl)}
+                                            alt={staff.name}
+                                            className="h-full w-full object-cover"
+                                            onError={(e) => {
+                                                e.currentTarget.parentElement?.classList.add('hidden');
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Full Name</span>
                             <span className="col-span-2 font-medium text-gray-900">{staff.name}</span>

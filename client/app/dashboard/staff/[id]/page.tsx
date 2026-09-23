@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
-import api from '../../../../lib/api';
+import api, { getImageUrl } from '../../../../lib/api';
 import { STANDARD_QUALIFICATIONS } from '../../../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../../../lib/banks';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
@@ -531,15 +531,21 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                     <div className="absolute -top-16 left-8 h-28 w-28 bg-white rounded-3xl p-1.5 shadow-lg border border-gray-100 overflow-hidden">
                         {staff.staffProfile?.passportUrl ? (
                             <img
-                                src={staff.staffProfile.passportUrl}
+                                src={getImageUrl(staff.staffProfile.passportUrl)}
                                 alt={staff.name}
                                 className="h-full w-full object-cover rounded-2xl"
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallbackEl = e.currentTarget.parentElement?.querySelector('.avatar-initials-fallback') as HTMLElement;
+                                    if (fallbackEl) fallbackEl.style.display = 'flex';
+                                }}
                             />
-                        ) : (
-                            <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner">
-                                {staff.name.charAt(0)}
-                            </div>
-                        )}
+                        ) : null}
+                        <div 
+                            className={`avatar-initials-fallback h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner ${staff.staffProfile?.passportUrl ? 'hidden' : 'flex'}`}
+                        >
+                            {staff.name.charAt(0)}
+                        </div>
                     </div>
 
                     {/* Name / Email / Role row — pl-36 reserves space for the 7rem (112px) avatar + gap */}

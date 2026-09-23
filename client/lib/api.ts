@@ -68,15 +68,21 @@ if (typeof window !== 'undefined') {
 
 export const getImageUrl = (url: string | null | undefined): string => {
     if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    const trimmed = String(url).trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+    
+    const cleanUrl = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
     
     let base = (process.env.NEXT_PUBLIC_API_URL || 'https://noun-hrms.onrender.com').replace(/"/g, '').replace(/'/g, '').trim();
     if (typeof window !== 'undefined') {
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            base = 'http://localhost:5000';
+            const localPort = process.env.NEXT_PUBLIC_PORT || '5000';
+            base = `http://localhost:${localPort}`;
         }
     }
+    base = base.replace(/\/+$/, '');
     return `${base}${cleanUrl}`;
 };
 

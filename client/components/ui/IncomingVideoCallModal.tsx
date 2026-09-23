@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Video, PhoneOff, Users, Sparkles } from 'lucide-react';
 import { startIncomingCallRingtone, stopIncomingCallRingtone } from '../../lib/sound';
 import { showBrowserNotification } from '../../lib/notifications';
+import { getImageUrl } from '../../lib/api';
 
 export interface IncomingVideoCallData {
     roomName: string;
@@ -76,15 +77,19 @@ export default function IncomingVideoCallModal({
                     <div className="absolute -inset-1 rounded-full bg-emerald-500 opacity-75 blur-sm animate-ping" />
                     {incomingCall.callerAvatar ? (
                         <img
-                            src={incomingCall.callerAvatar}
+                            src={getImageUrl(incomingCall.callerAvatar)}
                             alt={incomingCall.callerName}
                             className="relative h-14 w-14 rounded-full object-cover border-2 border-emerald-400 shadow-md"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.parentElement?.querySelector('.incoming-video-fallback') as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                            }}
                         />
-                    ) : (
-                        <div className="relative h-14 w-14 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white font-black text-lg border-2 border-emerald-400 shadow-md">
-                            {initials}
-                        </div>
-                    )}
+                    ) : null}
+                    <div className={`incoming-video-fallback relative h-14 w-14 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 items-center justify-center text-white font-black text-lg border-2 border-emerald-400 shadow-md ${incomingCall.callerAvatar ? 'hidden' : 'flex'}`}>
+                        {initials}
+                    </div>
                     <span className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center">
                         <Video size={9} className="text-white" />
                     </span>

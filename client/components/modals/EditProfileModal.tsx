@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Camera, Save, Loader2, GraduationCap, CreditCard, CheckCircle2, Shield } from 'lucide-react';
-import api from '../../lib/api';
+import api, { getImageUrl } from '../../lib/api';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
 
 const STANDARD_QUALIFICATIONS = [
@@ -48,7 +48,7 @@ export default function EditProfileModal({ user, onClose, onSuccess }: EditProfi
         accountName: user.staffProfile?.accountName || user.name || ''
     });
     const [passport, setPassport] = useState<File | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(user.staffProfile?.passportUrl ? `${process.env.NEXT_PUBLIC_API_URL}${user.staffProfile.passportUrl}` : null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(user.staffProfile?.passportUrl ? getImageUrl(user.staffProfile.passportUrl) : null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });

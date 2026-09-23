@@ -13,8 +13,13 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 
 export const StorageService = {
     uploadFile: async (file: Express.Multer.File, folder: string = 'docs'): Promise<string> => {
-        // Simulate S3 upload
-        const filename = `${Date.now()}-${file.originalname}`;
+        // If file is already processed and written by diskStorage with a filename, reuse it directly
+        if (file.filename) {
+            return `/uploads/${file.filename}`;
+        }
+
+        const sanitized = file.originalname ? file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin';
+        const filename = `${Date.now()}-${sanitized}`;
         const targetPath = path.join(UPLOAD_DIR, filename);
 
         // Ensure upload directory exists asynchronously
@@ -24,8 +29,6 @@ export const StorageService = {
             await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
         }
 
-        // In a real scenario with Multer diskStorage, the file might already be there.
-        // If using memoryStorage, we write it. Assuming memoryStorage buffer here for simplicity in a service abstraction.
         if (file.buffer) {
             await fs.promises.writeFile(targetPath, file.buffer);
         } else if (file.path) {
@@ -33,7 +36,6 @@ export const StorageService = {
             await fs.promises.rename(file.path, targetPath);
         }
 
-        // Return a mock URL
         return `/uploads/${filename}`;
     },
 
