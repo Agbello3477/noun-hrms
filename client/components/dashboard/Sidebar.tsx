@@ -152,7 +152,6 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                             Unit Management
                         </div>
                         <LinkItem href="/dashboard/unit/staff" icon={Briefcase} label="Unit Staff" />
-                        <LinkItem href="/dashboard/registry/due-for-promotion" icon={TrendingUp} label="Promotion Maturity" />
                         <LinkItem href="/dashboard/unit/leaves" icon={FileText} label="Leave Approvals" />
                         <LinkItem href="/dashboard/unit/aper" icon={ClipboardCheck} label="Appraisal Review" />
                         <LinkItem href="/dashboard/unit/memos" icon={Mail} label="Unit Memos" />
