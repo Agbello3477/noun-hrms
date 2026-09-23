@@ -77,7 +77,7 @@ export const createApplication = async (req: Request, res: Response) => {
         let attachmentName: string | null = null;
         if (req.file) {
             const uploaded = await StorageService.uploadFile(req.file, 'applications');
-            attachmentUrl = uploaded.url;
+            attachmentUrl = uploaded;
             attachmentName = req.file.originalname;
         } else if (req.body.attachmentUrl) {
             attachmentUrl = req.body.attachmentUrl;
