@@ -26,7 +26,8 @@ import {
     Calendar,
     HeartPulse,
     Shield,
-    TrendingUp
+    TrendingUp,
+    FileInput
 } from 'lucide-react';
 
 
@@ -129,6 +130,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
+                        <LinkItem href="/dashboard/registry/file-requests" icon={FileInput} label="File Request Gateway" />
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
