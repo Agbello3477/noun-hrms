@@ -53,10 +53,24 @@ import { RlsService } from './services/rls.service';
 import { startDatabaseKeepalive } from './prisma';
 
 import compression from 'compression';
+import { SentinelSDK } from './sentinel-sdk';
 
 const app = express();
 app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
 const PORT = process.env.PORT || 5000;
+
+// 1. Initialize Sentinel Telemetry SDK
+const sentinel = new SentinelSDK({
+  endpoint: process.env.SENTINEL_INGEST_URL || 'https://sentinel.yourdomain.com/api/v1/telemetry/ingest',
+  apiKey: process.env.SENTINEL_API_KEY || 'your-production-telemetry-secret-key',
+  systemId: process.env.SENTINEL_SYSTEM_ID || 'NOUN-HRMS',
+  batchSize: 50,           // Flushes when 50 requests accumulate
+  flushIntervalMs: 5000,   // Or flushes every 5 seconds
+  timeoutMs: 2000,         // Aborts telemetry request after 2s if monitor is slow
+});
+
+// 2. Mount Sentinel Telemetry Middleware as early as possible
+app.use(sentinel.middleware());
 
 // Enable response compression (Gzip/Brotli) for all payloads > 1KB
 app.use(compression({
