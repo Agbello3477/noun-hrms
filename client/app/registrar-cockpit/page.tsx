@@ -29,18 +29,20 @@ export default function RegistrarCockpitPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'audits'>('queue');
+    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits'>('queue');
     const [queueSummary, setQueueSummary] = useState({
         totalPending: 0,
         postings: 0,
         files: 0,
         promotionOverrides: 0,
-        disciplinaryQueries: 0
+        disciplinaryQueries: 0,
+        roleChanges: 0
     });
 
     const [pendingPostings, setPendingPostings] = useState<any[]>([]);
     const [pendingFiles, setPendingFiles] = useState<any[]>([]);
     const [pendingOverrides, setPendingOverrides] = useState<any[]>([]);
+    const [pendingRoleChanges, setPendingRoleChanges] = useState<any[]>([]);
     const [audits, setAudits] = useState<any[]>([]);
 
     const [loadingQueue, setLoadingQueue] = useState(true);
@@ -73,17 +75,19 @@ export default function RegistrarCockpitPage() {
     const loadCockpitData = async () => {
         setLoadingQueue(true);
         try {
-            const [queueRes, postingsRes, filesRes, overridesRes] = await Promise.all([
-                api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0 } } })),
+            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes] = await Promise.all([
+                api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0, roleChanges: 0 } } })),
                 api.get('/api/v1/registrar/postings/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/files/pending').catch(() => ({ data: [] })),
-                api.get('/api/v1/registrar/promotions/pending-overrides').catch(() => ({ data: [] }))
+                api.get('/api/v1/registrar/promotions/pending-overrides').catch(() => ({ data: [] })),
+                api.get('/api/v1/registrar/role-changes/pending').catch(() => ({ data: [] }))
             ]);
 
             setQueueSummary(queueRes.data.queueSummary);
             setPendingPostings(postingsRes.data || []);
             setPendingFiles(filesRes.data || []);
             setPendingOverrides(overridesRes.data || []);
+            setPendingRoleChanges(roleChangesRes.data || []);
 
             if (postingsRes.data && postingsRes.data.length > 0) {
                 setSelectedPosting(postingsRes.data[0]);
@@ -173,6 +177,36 @@ export default function RegistrarCockpitPage() {
         }
     };
 
+    // Institutional Role Change Decision
+    const handleRoleChangeDecision = async (userId: string, decision: 'APPROVED' | 'REJECTED') => {
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            if (decision === 'APPROVED') {
+                const res = await api.post(`/api/v1/registrar/role-changes/${userId}/authorize`, {
+                    remarks: decisionRemarks || 'Institutional role change officially authorized'
+                });
+                setFeedback({ type: 'success', message: res.data.message });
+            } else {
+                const reason = decisionRemarks || prompt('Please enter reason for rejecting this role change request:');
+                if (!reason) {
+                    setActionLoading(false);
+                    return;
+                }
+                const res = await api.post(`/api/v1/registrar/role-changes/${userId}/reject`, {
+                    remarks: reason
+                });
+                setFeedback({ type: 'success', message: res.data.message });
+            }
+            setDecisionRemarks('');
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || 'Role change action failed' });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleExportAuditCsv = () => {
         window.open('/api/v1/registrar/audits?format=csv', '_blank');
     };
@@ -228,7 +262,7 @@ export default function RegistrarCockpitPage() {
             )}
 
             {/* Metrics KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
                 <div
                     onClick={() => setActiveSection('queue')}
                     className={`cursor-pointer p-4 rounded-2xl border transition-all ${
@@ -284,6 +318,20 @@ export default function RegistrarCockpitPage() {
                     <div className="text-2xl font-black text-slate-900">{queueSummary.promotionOverrides}</div>
                     <div className="text-[10px] text-purple-600 font-semibold mt-1">Requires Approval</div>
                 </div>
+
+                <div
+                    onClick={() => setActiveSection('roles')}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                        activeSection === 'roles' ? 'bg-white border-[#006533] ring-2 ring-[#006533]/20 shadow-xs' : 'bg-white border-slate-200/80 hover:border-slate-300'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                        <span className="text-xs font-semibold">Role Changes</span>
+                        <Key size={16} className="text-indigo-600" />
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{queueSummary.roleChanges || pendingRoleChanges.length}</div>
+                    <div className="text-[10px] text-indigo-600 font-semibold mt-1">Dual-Control Gate</div>
+                </div>
             </div>
 
             {/* Navigation Tabs */}
@@ -319,6 +367,14 @@ export default function RegistrarCockpitPage() {
                     }`}
                 >
                     Promotion Override Docket ({pendingOverrides.length})
+                </button>
+                <button
+                    onClick={() => setActiveSection('roles')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'roles' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Role Change Docket ({pendingRoleChanges.length})
                 </button>
                 <button
                     onClick={() => {
@@ -411,6 +467,52 @@ export default function RegistrarCockpitPage() {
                                             }}
                                         >
                                             Clear File
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs md:col-span-2">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <Key size={16} className="text-indigo-600" />
+                                Institutional Role Changes Requiring Dual-Control Clearance
+                            </h2>
+                            <Button variant="ghost" size="xs" onClick={() => setActiveSection('roles')}>
+                                View All ({pendingRoleChanges.length})
+                            </Button>
+                        </div>
+                        {loadingQueue ? (
+                            <div className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                        ) : pendingRoleChanges.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-4 text-center">No pending role change requests.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {pendingRoleChanges.slice(0, 3).map((rc) => (
+                                    <div key={rc.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-900">
+                                                {rc.name} ({rc.staffProfile?.staffId || 'N/A'})
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                                                <span className="font-mono text-slate-600">{rc.role}</span>
+                                                <span>&rarr;</span>
+                                                <span className="font-mono font-bold text-indigo-700">{rc.pendingRole}</span>
+                                                {rc.roleChangeRemarks && (
+                                                    <span className="italic text-slate-400 text-[10px] ml-1">
+                                                        ({rc.roleChangeRemarks})
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="emerald"
+                                            size="xs"
+                                            onClick={() => setActiveSection('roles')}
+                                        >
+                                            Review Request
                                         </Button>
                                     </div>
                                 ))}
@@ -769,6 +871,106 @@ export default function RegistrarCockpitPage() {
                                             onClick={() => handleOverrideDecision(ov.id, 'APPROVED')}
                                         >
                                             Approve Override
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Section: Institutional Role Changes Docket */}
+            {activeSection === 'roles' && (
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <Key size={16} className="text-indigo-600" />
+                                Institutional Role Authorization Docket (Maker-Checker Gate)
+                            </h2>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Dual-control enforcement: Role adjustments requested by HR/Registry Admin require formal Registrar sign-off before taking effect.
+                            </p>
+                        </div>
+                        <span className="text-xs text-slate-500 font-semibold">{pendingRoleChanges.length} pending</span>
+                    </div>
+
+                    {pendingRoleChanges.length === 0 ? (
+                        <div className="py-12 text-center text-slate-400 text-xs">
+                            <Key className="mx-auto mb-2 text-slate-300" size={32} />
+                            No role change requests currently awaiting authorization.
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {pendingRoleChanges.map((rc) => (
+                                <div key={rc.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-slate-900">
+                                                {rc.name}
+                                            </span>
+                                            {rc.staffProfile?.staffId && (
+                                                <span className="text-xs font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                                                    ID: {rc.staffProfile.staffId}
+                                                </span>
+                                            )}
+                                            <span className="text-xs text-slate-500">
+                                                ({rc.email})
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-slate-500">Current Role:</span>
+                                            <span className="px-2 py-0.5 rounded font-mono font-semibold bg-slate-100 text-slate-700">
+                                                {rc.role}
+                                            </span>
+                                            <span className="text-slate-400 font-bold">&rarr;</span>
+                                            <span className="text-slate-500">Requested Role:</span>
+                                            <span className="px-2 py-0.5 rounded font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                                {rc.pendingRole}
+                                            </span>
+                                        </div>
+
+                                        {rc.staffProfile && (
+                                            <div className="text-[11px] text-slate-500">
+                                                {rc.staffProfile.rank && <span>Rank: {rc.staffProfile.rank} &bull; </span>}
+                                                {rc.staffProfile.cadre && <span>Cadre: {rc.staffProfile.cadre} &bull; </span>}
+                                                <span>Unit/Location: {rc.staffProfile.unit?.name || rc.staffProfile.studyCenter?.name || 'Unassigned'}</span>
+                                            </div>
+                                        )}
+
+                                        {rc.roleChangeRemarks && (
+                                            <div className="text-xs italic text-slate-600 bg-amber-50/60 p-2 rounded-lg border border-amber-100 max-w-xl">
+                                                Justification: &ldquo;{rc.roleChangeRemarks}&rdquo;
+                                            </div>
+                                        )}
+
+                                        {rc.roleChangeRequestedAt && (
+                                            <div className="text-[10px] text-slate-400">
+                                                Submitted: {new Date(rc.roleChangeRequestedAt).toLocaleString()}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            isLoading={actionLoading}
+                                            onClick={() => handleRoleChangeDecision(rc.id, 'REJECTED')}
+                                            icon={<XCircle size={14} />}
+                                        >
+                                            Reject
+                                        </Button>
+                                        <Button
+                                            variant="emerald"
+                                            size="sm"
+                                            isLoading={actionLoading}
+                                            onClick={() => handleRoleChangeDecision(rc.id, 'APPROVED')}
+                                            icon={<ShieldCheck size={14} />}
+                                        >
+                                            Authorize Role Change
                                         </Button>
                                     </div>
                                 </div>

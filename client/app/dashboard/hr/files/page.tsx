@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
-import { Search, Plus, FileInput, X, Archive, TrendingUp, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import BatchDossierUploadModal from '../../../../components/dashboard/BatchDossierUploadModal';
+import { Search, Plus, FileInput, X, Archive, TrendingUp, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle, FolderUp } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 import Button from '../../../../components/ui/Button';
 
@@ -55,6 +56,7 @@ export default function FileRegistryPage() {
     // Modals
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showExistingModal, setShowExistingModal] = useState(false);
+    const [showBatchModal, setShowBatchModal] = useState(false);
 
     // Clearance Actions
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -197,6 +199,13 @@ export default function FileRegistryPage() {
                             View Archive
                         </button>
                     )}
+                    <button
+                        onClick={() => setShowBatchModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 border border-blue-300 text-blue-800 bg-blue-50/80 hover:bg-blue-100 rounded-lg shadow-sm text-sm font-semibold transition"
+                    >
+                        <FolderUp size={16} className="text-blue-700" />
+                        Batch Dossier Upload
+                    </button>
                     <button
                         onClick={() => setShowExistingModal(true)}
                         className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 shadow-sm text-sm font-medium"
@@ -397,6 +406,18 @@ export default function FileRegistryPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Batch Dossier Upload Modal */}
+            {showBatchModal && (
+                <BatchDossierUploadModal
+                    onClose={() => setShowBatchModal(false)}
+                    onSuccess={() => {
+                        setShowBatchModal(false);
+                        fetchData();
+                        alert('Batch dossier documents successfully ingested and linked to staff files!');
+                    }}
+                />
             )}
         </div>
     );

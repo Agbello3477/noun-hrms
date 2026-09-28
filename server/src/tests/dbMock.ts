@@ -63,7 +63,17 @@ export const enableDbMock = async () => {
         };
 
         (prisma.user as any).findMany = async (args: any) => {
-            return users.map(u => ({
+            let res = [...users];
+            if (args?.where?.roleChangeStatus) {
+                res = res.filter(u => u.roleChangeStatus === args.where.roleChangeStatus);
+            }
+            if (args?.where?.role) {
+                res = res.filter(u => u.role === args.where.role);
+            }
+            if (args?.where?.id?.in) {
+                res = res.filter(u => args.where.id.in.includes(u.id));
+            }
+            return res.map(u => ({
                 ...u,
                 staffProfile: staffProfiles.find(p => p.userId === u.id) || null
             }));
@@ -942,6 +952,33 @@ export const enableDbMock = async () => {
             delete: async (args: any) => ({ id: args.where?.id }),
             deleteMany: async () => {
                 authorizationAuditTrails.length = 0;
+                return { count: 1 };
+            }
+        };
+
+        // Mock Document
+        const documents: any[] = [];
+        (prisma as any).document = {
+            create: async (args: any) => {
+                const doc = {
+                    id: 'mock-doc-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    ...args.data
+                };
+                documents.push(doc);
+                return doc;
+            },
+            findMany: async (args: any) => {
+                if (args?.where?.ownerId) {
+                    return documents.filter(d => d.ownerId === args.where.ownerId);
+                }
+                return documents;
+            },
+            findUnique: async (args: any) => documents.find(d => d.id === args.where?.id) || null,
+            delete: async (args: any) => ({ id: args.where?.id }),
+            deleteMany: async () => {
+                documents.length = 0;
                 return { count: 1 };
             }
         };

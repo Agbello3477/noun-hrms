@@ -1,6 +1,6 @@
 
 import { Request, Response } from 'express';
-import { Role, Cadre, CadreType, PromotionEligibilityStatus } from '@prisma/client';
+import { Role, Cadre, CadreType, PromotionEligibilityStatus, AuthorizationEntityType, AuthorizationActionTaken } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
@@ -819,7 +819,10 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             passportUrl = await StorageService.uploadFile(file);
         }
 
-        // Handle administrator-only fields: ROLE CHANGE REQUIRES REGISTRAR AUTHORIZATION
+        let roleChangeRequested = false;
+        let roleChangeDirectlyAuthorized = false;
+
+        // Handle administrator-only fields: ROLE CHANGE WITH REGISTRAR APPROVAL WORKFLOW
         if (role && role !== user.role) {
             const isRegistrarAuthorizer = [
                 Role.REGISTRAR,
@@ -827,28 +830,85 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 Role.VICE_CHANCELLOR
             ].includes(updaterRole as any);
 
-            if (!isRegistrarAuthorizer) {
-                return res.status(403).json({
-                    message: 'Unauthorized: No system role can be changed without Registrar authorization. Only the Registrar or Chief Executive can modify user roles.'
-                });
-            }
+            const isImputer = [
+                Role.HR_ADMIN,
+                Role.REGISTRY_ADMIN,
+                Role.ADMIN
+            ].includes(updaterRole as any);
 
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { role: role as Role }
-            });
-
-            try {
-                await prisma.auditLog.create({
+            if (isRegistrarAuthorizer) {
+                // Principal Officer / Registrar: directly changes role immediately
+                await prisma.user.update({
+                    where: { id: user.id },
                     data: {
-                        userId: updaterId!,
-                        action: 'ROLE_CHANGE_AUTHORIZED',
-                        resource: `User:${user.id}`,
-                        details: `Role for ${user.email} changed from ${user.role} to ${role} by ${updaterRole} (${updaterId})`
+                        role: role as Role,
+                        pendingRole: null,
+                        roleChangeStatus: 'APPROVED',
+                        roleChangeRequestedById: null,
+                        roleChangeRequestedAt: null,
+                        roleChangeRemarks: null
                     }
                 });
-            } catch (auditErr) {
-                console.warn('Audit log recording error on role change:', auditErr);
+                roleChangeDirectlyAuthorized = true;
+
+                try {
+                    await prisma.auditLog.create({
+                        data: {
+                            userId: updaterId!,
+                            action: 'ROLE_CHANGE_AUTHORIZED',
+                            resource: `User:${user.id}`,
+                            details: `Role for ${user.email} changed from ${user.role} to ${role} directly authorized by ${updaterRole} (${updaterId})`
+                        }
+                    });
+                } catch (auditErr) {
+                    console.warn('Audit log recording error on role change:', auditErr);
+                }
+            } else if (isImputer) {
+                // HR / Registry Admin: changes role into pending approval state
+                const remarks = req.body.roleChangeRemarks || req.body.overrideReason || `Role change from ${user.role} to ${role} requested by ${updaterRole}`;
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: {
+                        pendingRole: role as Role,
+                        roleChangeStatus: 'PENDING_REGISTRAR_APPROVAL',
+                        roleChangeRequestedById: updaterId,
+                        roleChangeRequestedAt: new Date(),
+                        roleChangeRemarks: remarks
+                    }
+                });
+                roleChangeRequested = true;
+
+                try {
+                    await prisma.auditLog.create({
+                        data: {
+                            userId: updaterId!,
+                            action: 'ROLE_CHANGE_REQUESTED',
+                            resource: `User:${user.id}`,
+                            details: `Role change for ${user.email} from ${user.role} to ${role} requested by ${updaterRole} (${updaterId}). Pending Registrar authorization.`
+                        }
+                    });
+
+                    // Notify all active Registrars
+                    const registrars = await prisma.user.findMany({
+                        where: { role: Role.REGISTRAR, isActive: true },
+                        select: { id: true }
+                    });
+                    for (const reg of registrars) {
+                        await prisma.notification.create({
+                            data: {
+                                userId: reg.id,
+                                title: 'Role Authorization Required',
+                                message: `${updaterRole} requested role change for ${user.name || user.email} to ${role}. Registrar approval required.`
+                            }
+                        }).catch(() => {});
+                    }
+                } catch (auditErr) {
+                    console.warn('Audit log / notification error on role change request:', auditErr);
+                }
+            } else {
+                return res.status(403).json({
+                    message: 'Unauthorized: Only HR/Registry Administrators can request role changes, and only the Registrar can authorize them.'
+                });
             }
         }
 
@@ -1065,7 +1125,19 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             redisService.clearPattern('vc:executive:*'),
             redisService.del(`user:session:${user.id}`)
         ]);
-        res.json({ message: 'Profile updated successfully', passportUrl });
+
+        const successMessage = roleChangeRequested
+            ? `Profile updated. Role change to ${role} requested and will take effect once approved by the Registrar.`
+            : 'Profile updated successfully';
+
+        res.json({
+            message: successMessage,
+            passportUrl,
+            roleChangeRequested,
+            roleChangeDirectlyAuthorized,
+            pendingRole: roleChangeRequested ? role : null,
+            roleChangeStatus: roleChangeRequested ? 'PENDING_REGISTRAR_APPROVAL' : (roleChangeDirectlyAuthorized ? 'APPROVED' : null)
+        });
 
     } catch (error) {
         console.error('Update Staff Error:', error);
@@ -1658,5 +1730,299 @@ export const updateServiceRecord = async (req: AuthRequest, res: Response) => {
         res.status(400).json({ message: error.message || 'Failed to update service record' });
     }
 };
+
+/**
+ * Approve pending role change (Registrar Authorizer only)
+ * POST /api/staff/:id/role/approve
+ */
+export const approveRoleChange = async (req: AuthRequest, res: Response) => {
+    try {
+        const authorizerId = req.user?.id;
+        const authorizerRole = req.user?.role;
+        const { id } = req.params;
+        const { remarks } = req.body;
+
+        const isAuthorizer = [
+            Role.REGISTRAR,
+            Role.SUPER_USER,
+            Role.VICE_CHANCELLOR
+        ].includes(authorizerRole as any);
+
+        if (!isAuthorizer) {
+            return res.status(403).json({
+                message: 'Unauthorized: Only the Registrar or Chief Executive can authorize role changes.'
+            });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id },
+            include: { staffProfile: true }
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.roleChangeStatus !== 'PENDING_REGISTRAR_APPROVAL' || !user.pendingRole) {
+            return res.status(400).json({ message: 'No pending role change request found for this user.' });
+        }
+
+        // Dual-control enforcement: Prevent self-authorization unless SUPER_USER
+        if (user.roleChangeRequestedById === authorizerId && authorizerRole !== Role.SUPER_USER) {
+            return res.status(403).json({
+                message: 'Dual-Control Violation: You cannot authorize a role change you requested. Another authorizer must approve.'
+            });
+        }
+
+        const oldRole = user.role;
+        const approvedRole = user.pendingRole;
+
+        // Determine if rank needs updating for principal officer roles
+        let updatedRank = user.staffProfile?.rank;
+        if (approvedRole === Role.REGISTRAR) {
+            updatedRank = 'University Registrar';
+        } else if (approvedRole === Role.VICE_CHANCELLOR) {
+            updatedRank = 'Vice-Chancellor';
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id },
+                data: {
+                    role: approvedRole,
+                    pendingRole: null,
+                    roleChangeStatus: 'APPROVED'
+                }
+            });
+
+            if (user.staffProfile && updatedRank && updatedRank !== user.staffProfile.rank) {
+                await tx.staffProfile.update({
+                    where: { id: user.staffProfile.id },
+                    data: { rank: updatedRank }
+                });
+            }
+
+            await tx.auditLog.create({
+                data: {
+                    userId: authorizerId!,
+                    action: 'ROLE_CHANGE_APPROVED',
+                    resource: `User:${id}`,
+                    details: `Role change for ${user.email} from ${oldRole} to ${approvedRole} approved by ${authorizerRole} (${authorizerId}). Remarks: ${remarks || 'Approved'}`
+                }
+            });
+
+            // Create Maker-Checker Audit Trail
+            await tx.authorizationAuditTrail.create({
+                data: {
+                    entityType: AuthorizationEntityType.ROLE_CHANGE,
+                    entityId: id,
+                    imputerId: user.roleChangeRequestedById || authorizerId!,
+                    authorizerId: authorizerId!,
+                    authorizerIp: req.ip,
+                    authorizedAt: new Date(),
+                    actionTaken: AuthorizationActionTaken.APPROVED,
+                    remarks: remarks || `Role transition to ${approvedRole} approved by Registrar`,
+                    metadata: {
+                        oldRole,
+                        newRole: approvedRole,
+                        requestedAt: user.roleChangeRequestedAt,
+                        approvedByRole: authorizerRole
+                    }
+                }
+            }).catch(() => {});
+        });
+
+        // Notify staff member and requester
+        if (user.roleChangeRequestedById) {
+            await prisma.notification.create({
+                data: {
+                    userId: user.roleChangeRequestedById,
+                    title: 'Role Change Approved',
+                    message: `Your requested role change for ${user.name || user.email} to ${approvedRole} has been authorized by the Registrar.`,
+                    type: 'ROLE_CHANGE_APPROVED'
+                }
+            }).catch(() => {});
+        }
+
+        await prisma.notification.create({
+            data: {
+                userId: user.id,
+                title: 'System Role Updated',
+                message: `Your system role has been officially updated to ${approvedRole} with full privileges.`,
+                type: 'ROLE_UPDATED'
+            }
+        }).catch(() => {});
+
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*'),
+            redisService.clearPattern('vc:executive:*'),
+            redisService.del(`user:session:${id}`)
+        ]);
+
+        res.json({
+            message: `Role change to ${approvedRole} has been successfully authorized and is now active.`,
+            newRole: approvedRole,
+            roleChangeStatus: 'APPROVED'
+        });
+    } catch (error: any) {
+        console.error('approveRoleChange error:', error);
+        res.status(500).json({ message: 'Internal Server Error approving role change', error: error.message });
+    }
+};
+
+/**
+ * Reject pending role change (Registrar Authorizer only)
+ * POST /api/staff/:id/role/reject
+ */
+export const rejectRoleChange = async (req: AuthRequest, res: Response) => {
+    try {
+        const authorizerId = req.user?.id;
+        const authorizerRole = req.user?.role;
+        const { id } = req.params;
+        const { remarks } = req.body;
+
+        const isAuthorizer = [
+            Role.REGISTRAR,
+            Role.SUPER_USER,
+            Role.VICE_CHANCELLOR
+        ].includes(authorizerRole as any);
+
+        if (!isAuthorizer) {
+            return res.status(403).json({
+                message: 'Unauthorized: Only the Registrar or Chief Executive can reject role change requests.'
+            });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id } });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.roleChangeStatus !== 'PENDING_REGISTRAR_APPROVAL') {
+            return res.status(400).json({ message: 'No pending role change request found for this user.' });
+        }
+
+        const pendingRole = user.pendingRole;
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id },
+                data: {
+                    pendingRole: null,
+                    roleChangeStatus: 'REJECTED',
+                    roleChangeRemarks: remarks || 'Rejected by Registrar'
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    userId: authorizerId!,
+                    action: 'ROLE_CHANGE_REJECTED',
+                    resource: `User:${id}`,
+                    details: `Role change for ${user.email} to ${pendingRole} rejected by ${authorizerRole} (${authorizerId}). Reason: ${remarks || 'No reason provided'}`
+                }
+            });
+
+            await tx.authorizationAuditTrail.create({
+                data: {
+                    entityType: AuthorizationEntityType.ROLE_CHANGE,
+                    entityId: id,
+                    imputerId: user.roleChangeRequestedById || authorizerId!,
+                    authorizerId: authorizerId!,
+                    authorizerIp: req.ip,
+                    authorizedAt: new Date(),
+                    actionTaken: AuthorizationActionTaken.REJECTED,
+                    remarks: remarks || 'Role change request rejected by Registrar',
+                    metadata: {
+                        rejectedRole: pendingRole,
+                        currentRole: user.role
+                    }
+                }
+            }).catch(() => {});
+        });
+
+        // Notify requester of rejection
+        if (user.roleChangeRequestedById) {
+            await prisma.notification.create({
+                data: {
+                    userId: user.roleChangeRequestedById,
+                    title: 'Role Change Request Rejected',
+                    message: `Role change request for ${user.name || user.email} to ${pendingRole} was declined by the Registrar. Reason: ${remarks || 'None provided'}`,
+                    type: 'ROLE_CHANGE_REJECTED'
+                }
+            }).catch(() => {});
+        }
+
+        res.json({
+            message: 'Role change request has been declined.',
+            roleChangeStatus: 'REJECTED'
+        });
+    } catch (error: any) {
+        console.error('rejectRoleChange error:', error);
+        res.status(500).json({ message: 'Internal Server Error rejecting role change', error: error.message });
+    }
+};
+
+/**
+ * Get all pending role change requests
+ * GET /api/staff/pending-role-changes
+ */
+export const getPendingRoleChanges = async (req: AuthRequest, res: Response) => {
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                roleChangeStatus: 'PENDING_REGISTRAR_APPROVAL'
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                pendingRole: true,
+                roleChangeStatus: true,
+                roleChangeRequestedById: true,
+                roleChangeRequestedAt: true,
+                roleChangeRemarks: true,
+                staffProfile: {
+                    select: {
+                        id: true,
+                        staffId: true,
+                        surname: true,
+                        otherNames: true,
+                        rank: true,
+                        level: true,
+                        cadre: true,
+                        passportUrl: true,
+                        unit: { select: { id: true, name: true } },
+                        studyCenter: { select: { id: true, name: true } }
+                    }
+                }
+            },
+            orderBy: { roleChangeRequestedAt: 'desc' }
+        });
+
+        // Fetch requester names in parallel
+        const requesterIds = Array.from(new Set(users.map(u => u.roleChangeRequestedById).filter(Boolean))) as string[];
+        const requesters = await prisma.user.findMany({
+            where: { id: { in: requesterIds } },
+            select: { id: true, name: true, email: true, role: true }
+        });
+
+        const requesterMap = new Map(requesters.map(r => [r.id, r]));
+
+        const enriched = users.map(u => ({
+            ...u,
+            requestedBy: u.roleChangeRequestedById ? requesterMap.get(u.roleChangeRequestedById) : null
+        }));
+
+        res.json(enriched);
+    } catch (error: any) {
+        console.error('getPendingRoleChanges error:', error);
+        res.status(500).json({ message: 'Internal Server Error fetching pending role changes', error: error.message });
+    }
+};
+
 
 

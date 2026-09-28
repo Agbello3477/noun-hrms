@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { uploadDocument, getStaffDossier, deleteDocument, updateDocument } from '../controllers/document.controller';
+import { uploadDocument, getStaffDossier, deleteDocument, updateDocument, batchUploadDocuments } from '../controllers/document.controller';
 import {
     transferStaff,
     batchTransfer,
@@ -35,11 +35,27 @@ const upload = multer({ dest: 'uploads/' });
 
 router.use(verifyToken);
 
+const dossierUploadRoles = [
+    Role.HR_ADMIN,
+    Role.REGISTRY_ADMIN,
+    Role.REGISTRAR,
+    Role.STUDY_CENTER_MANAGER,
+    Role.SUPER_USER,
+    Role.ADMIN,
+    Role.VICE_CHANCELLOR
+];
+
 // Document Management
 router.post('/upload',
-    requireRole([Role.HR_ADMIN, Role.REGISTRAR, Role.STUDY_CENTER_MANAGER, Role.SUPER_USER, Role.ADMIN]),
+    requireRole(dossierUploadRoles),
     upload.single('file'),
     uploadDocument
+);
+
+router.post('/batch-upload',
+    requireRole(dossierUploadRoles),
+    upload.array('files', 100),
+    batchUploadDocuments
 );
 
 router.get('/dossier/:staffId', getStaffDossier);

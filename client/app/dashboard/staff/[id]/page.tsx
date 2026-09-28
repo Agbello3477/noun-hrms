@@ -20,7 +20,10 @@ import {
     CreditCard,
     CheckCircle2,
     Lock,
-    ShieldCheck
+    ShieldCheck,
+    XCircle,
+    AlertCircle,
+    Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
@@ -35,6 +38,11 @@ interface StaffDetail {
     name: string;
     email: string;
     role: string;
+    pendingRole?: string | null;
+    roleChangeStatus?: string | null;
+    roleChangeRequestedById?: string | null;
+    roleChangeRequestedAt?: string | null;
+    roleChangeRemarks?: string | null;
     staffProfile?: {
         id: string;
         staffId: string | null;
@@ -463,7 +471,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 step: editStep,
                 cadre: editCadre,
                 gender: editGender,
-                role: isRegistrarAuthorizer ? dbRole : staff?.role,
+                role: dbRole,
                 rank: dbRank,
                 unitId: isHrAdmin ? (editLocation === 'HQ' ? editUnitId : 'null') : staff?.staffProfile?.unitId,
                 centerId: isHrAdmin ? (editLocation === 'CENTER' ? editCenterId : 'null') : staff?.staffProfile?.centerId,
@@ -478,15 +486,45 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 isDueImmediately: Boolean(isDueImmediately)
             };
 
-            await api.put(`/api/staff/${staff?.id}`, payload);
-            alert('Staff profile updated successfully.');
-            fetchStaffData(); // Reload profile details
+            const { data } = await api.put(`/api/staff/${staff?.id}`, payload);
+            alert(data?.message || 'Staff profile updated successfully.');
             fetchStaffData(); // Reload profile details
         } catch (error: any) {
             console.error(error);
             alert(error.response?.data?.message || 'Failed to update staff profile.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const [authorizingRole, setAuthorizingRole] = useState(false);
+
+    const handleApproveRoleChange = async () => {
+        if (!confirm(`Are you sure you want to officially authorize changing this staff member's role to ${staff?.pendingRole}?`)) return;
+        setAuthorizingRole(true);
+        try {
+            const { data } = await api.post(`/api/staff/${staff?.id}/role/approve`, { remarks: 'Registrar dual-control clearance granted' });
+            alert(data.message || 'Role change authorized successfully.');
+            fetchStaffData();
+        } catch (err: any) {
+            alert('Failed to authorize role change: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setAuthorizingRole(false);
+        }
+    };
+
+    const handleRejectRoleChange = async () => {
+        const reason = prompt('Please enter reason for rejecting this role change request:');
+        if (!reason) return;
+        setAuthorizingRole(true);
+        try {
+            const { data } = await api.post(`/api/staff/${staff?.id}/role/reject`, { remarks: reason });
+            alert(data.message || 'Role change request rejected.');
+            fetchStaffData();
+        } catch (err: any) {
+            alert('Failed to reject role change: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setAuthorizingRole(false);
         }
     };
 
@@ -1069,7 +1107,11 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                 <h3 className="text-sm font-extrabold text-blue-700 uppercase tracking-wider">
                                     2. System Role & Structure Configuration
                                 </h3>
-                                {!isHrAdmin ? (
+                                {staff?.roleChangeStatus === 'PENDING_REGISTRAR_APPROVAL' ? (
+                                    <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1.5 animate-pulse">
+                                        <Clock size={12} className="text-amber-600" /> Pending Registrar Authorization
+                                    </span>
+                                ) : !isHrAdmin ? (
                                     <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded border border-amber-200">
                                         Read-Only for Managers
                                     </span>
@@ -1078,11 +1120,73 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <ShieldCheck size={12} className="text-emerald-600" /> Registrar Authorization Active
                                     </span>
                                 ) : (
-                                    <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
-                                        <Lock size={12} className="text-amber-600" /> Role Locked (Requires Registrar Authorization)
+                                    <span className="text-[10px] bg-blue-50 text-blue-800 font-bold px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
+                                        <Lock size={12} className="text-blue-600" /> Maker-Checker Role Governance
                                     </span>
                                 )}
                             </div>
+
+                            {/* Pending Registrar Approval Banner */}
+                            {staff?.roleChangeStatus === 'PENDING_REGISTRAR_APPROVAL' && (
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-amber-100 text-amber-800 rounded-xl mt-0.5">
+                                            <AlertCircle size={20} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="text-sm font-bold text-amber-900">
+                                                    Pending Institutional Role Change
+                                                </h4>
+                                                <span className="text-xs bg-amber-200 text-amber-900 font-semibold px-2 py-0.5 rounded-full">
+                                                    Awaiting Registrar
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-amber-800 mt-1">
+                                                A request to change this staff member&apos;s role to{' '}
+                                                <span className="font-mono font-bold uppercase underline">
+                                                    {staff.pendingRole}
+                                                </span>{' '}
+                                                is currently pending dual-control sign-off.
+                                                {staff.roleChangeRemarks && (
+                                                    <span className="block mt-0.5 italic text-amber-700">
+                                                        Remarks: &ldquo;{staff.roleChangeRemarks}&rdquo;
+                                                    </span>
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons for Authorizers (Registrar / Super User / VC) */}
+                                    {isRegistrarAuthorizer && (
+                                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                            <button
+                                                type="button"
+                                                onClick={handleApproveRoleChange}
+                                                disabled={authorizingRole}
+                                                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                                            >
+                                                {authorizingRole ? (
+                                                    <Loader2 size={14} className="animate-spin" />
+                                                ) : (
+                                                    <ShieldCheck size={14} />
+                                                )}
+                                                Authorize Change
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleRejectRoleChange}
+                                                disabled={authorizingRole}
+                                                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-red-50 text-red-700 border border-red-200 text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                                            >
+                                                <XCircle size={14} />
+                                                Reject
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                 {/* Role Dropdown */}
                                 <div className="space-y-1">
@@ -1090,7 +1194,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                     <select
                                         value={editRole}
                                         onChange={e => setEditRole(e.target.value)}
-                                        disabled={!isRegistrarAuthorizer}
+                                        disabled={!isHrAdmin}
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed font-medium"
                                     >
                                         <option value="STAFF">Regular Staff</option>
@@ -1114,9 +1218,17 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="SECURITY_OFFICER">Officer</option>
                                         <option value="DRIVER">Driver</option>
                                     </select>
-                                    {!isRegistrarAuthorizer && (
-                                        <p className="text-[10px] text-amber-700 font-semibold mt-1 flex items-center gap-1">
-                                            <Lock size={10} /> Institutional Rule: No role can be changed without Registrar authorization.
+                                    {isRegistrarAuthorizer ? (
+                                        <p className="text-[10px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+                                            <ShieldCheck size={10} /> Direct Authorization: Changes take effect immediately.
+                                        </p>
+                                    ) : isHrAdmin ? (
+                                        <p className="text-[10px] text-blue-700 font-semibold mt-1 flex items-center gap-1">
+                                            <Lock size={10} /> Dual-Control Policy: Role changes submitted by HR will require Registrar approval.
+                                        </p>
+                                    ) : (
+                                        <p className="text-[10px] text-gray-500 font-semibold mt-1 flex items-center gap-1">
+                                            <Lock size={10} /> Institutional Rule: Role changes restricted to HR and the Registrar.
                                         </p>
                                     )}
                                 </div>

@@ -32,14 +32,27 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
         }
 
         // Find Target Staff Profile
-        const targetProfile = await prisma.staffProfile.findUnique({ where: { id: targetStaffId } });
+        let targetProfile = await prisma.staffProfile.findUnique({ where: { id: targetStaffId } });
+        if (!targetProfile) {
+            targetProfile = await prisma.staffProfile.findFirst({
+                where: {
+                    OR: [
+                        { staffId: targetStaffId },
+                        { userId: targetStaffId }
+                    ]
+                }
+            });
+        }
 
         if (!targetProfile) return res.status(404).json({ message: 'Target staff profile not found' });
+        targetStaffId = targetProfile.id;
 
         // 1. Permission Check
         if (uploaderId !== targetProfile.userId) {
             const isManagerOrAdmin = [
                 Role.HR_ADMIN,
+                Role.REGISTRY_ADMIN,
+                Role.REGISTRAR,
                 Role.SUPER_USER,
                 Role.ADMIN,
                 Role.STUDY_CENTER_MANAGER,
@@ -259,5 +272,155 @@ export const getMyDocuments = async (req: AuthRequest, res: Response) => {
         res.json(docs);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching documents' });
+    }
+};
+
+/**
+ * Batch upload multiple documents to staff dossiers
+ * POST /api/registry/batch-upload
+ */
+export const batchUploadDocuments = async (req: AuthRequest, res: Response) => {
+    try {
+        const uploaderId = req.user?.id;
+        const uploaderRole = req.user?.role;
+        const files = req.files as Express.Multer.File[];
+
+        if (!uploaderId || !files || files.length === 0) {
+            return res.status(400).json({ message: 'No files uploaded or missing authentication' });
+        }
+
+        const isManagerOrAdmin = [
+            Role.HR_ADMIN,
+            Role.REGISTRY_ADMIN,
+            Role.REGISTRAR,
+            Role.SUPER_USER,
+            Role.ADMIN,
+            Role.STUDY_CENTER_MANAGER,
+            Role.UNIT_HEAD,
+            Role.UNIT_ADMIN,
+            Role.VICE_CHANCELLOR
+        ].includes(uploaderRole as any);
+
+        if (!isManagerOrAdmin) {
+            return res.status(403).json({ message: 'Unauthorized: Only HR/Registry administrators or managers can perform batch dossier uploads' });
+        }
+
+        const uploaderProfile = await prisma.staffProfile.findUnique({ where: { userId: uploaderId } });
+
+        // Parse metadata: either sent as a JSON array string in req.body.metadata, or per-file items
+        let metadataList: Array<{ staffId: string; title?: string; type?: string; accessLevel?: string }> = [];
+        if (req.body.metadata) {
+            try {
+                metadataList = typeof req.body.metadata === 'string' ? JSON.parse(req.body.metadata) : req.body.metadata;
+            } catch (err) {
+                console.warn('Failed to parse metadata JSON, using defaults');
+            }
+        }
+
+        const defaultStaffId = req.body.staffId;
+        const defaultType = req.body.type || 'OTHER';
+        const defaultAccessLevel = req.body.accessLevel || 'CONFIDENTIAL';
+
+        const results: any[] = [];
+        const errors: any[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const meta = metadataList[i] || {};
+            let targetStaffId = meta.staffId || defaultStaffId;
+
+            // If still no staffId, try to extract staffId from filename (e.g. "00001_Appointment.pdf" or "NOUN_2026_001_CV.pdf")
+            if (!targetStaffId) {
+                const match = file.originalname.match(/^([A-Za-z0-9_\/-]+)[_-\s]/);
+                if (match) {
+                    const candidateId = match[1].replace(/_/g, '/');
+                    const profile = await prisma.staffProfile.findFirst({
+                        where: {
+                            OR: [
+                                { staffId: candidateId },
+                                { staffId: match[1] },
+                                { id: match[1] }
+                            ]
+                        }
+                    });
+                    if (profile) targetStaffId = profile.id;
+                }
+            }
+
+            if (!targetStaffId) {
+                errors.push({ filename: file.originalname, error: 'Could not determine target staff profile' });
+                continue;
+            }
+
+            let targetProfile = await prisma.staffProfile.findUnique({
+                where: { id: targetStaffId },
+                include: { user: true }
+            });
+
+            if (!targetProfile) {
+                targetProfile = await prisma.staffProfile.findFirst({
+                    where: {
+                        OR: [
+                            { staffId: targetStaffId },
+                            { userId: targetStaffId }
+                        ]
+                    },
+                    include: { user: true }
+                });
+            }
+
+            if (!targetProfile) {
+                errors.push({ filename: file.originalname, staffId: targetStaffId, error: 'Staff profile not found' });
+                continue;
+            }
+
+            try {
+                const url = await StorageService.uploadFile(file);
+                const title = meta.title || file.originalname.substring(0, file.originalname.lastIndexOf('.')) || file.originalname;
+                const type = (meta.type || defaultType) as DocumentType;
+                const accessLevel = (meta.accessLevel || defaultAccessLevel) as AccessLevel;
+
+                const doc = await prisma.document.create({
+                    data: {
+                        title,
+                        type,
+                        url,
+                        ownerId: targetProfile.id,
+                        uploadedById: uploaderProfile ? uploaderProfile.id : targetProfile.id,
+                        accessLevel,
+                        currentLocation: Department.REGISTRY_MAIN
+                    }
+                });
+
+                results.push({
+                    documentId: doc.id,
+                    filename: file.originalname,
+                    title,
+                    type,
+                    staffId: targetProfile.staffId,
+                    staffName: `${targetProfile.surname} ${targetProfile.otherNames}`
+                });
+            } catch (uploadErr: any) {
+                errors.push({ filename: file.originalname, error: uploadErr.message });
+            }
+        }
+
+        await AuditService.log(
+            uploaderId,
+            AuditService.ACTIONS.CREATE,
+            'DOCUMENT_BATCH',
+            `Batch uploaded ${results.length} dossier documents (${errors.length} failed)`
+        );
+
+        res.status(200).json({
+            message: `Batch dossier upload completed: ${results.length} succeeded, ${errors.length} failed`,
+            successfulCount: results.length,
+            failedCount: errors.length,
+            results,
+            errors
+        });
+    } catch (error: any) {
+        console.error('Batch Upload Error:', error);
+        res.status(500).json({ message: 'Internal Server Error during batch upload', error: error.message });
     }
 };

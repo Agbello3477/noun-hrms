@@ -82,6 +82,24 @@ router.post('/promotions/run-cron', requireRole([Role.SUPER_USER]), manualRunPro
 router.post('/retirement/run-cron', requireRole([Role.SUPER_USER, Role.HR_ADMIN]), manualRunRetirementCron);
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Dual-Control Role Authorization Endpoints ───────────────────────────────
+import {
+    approveRoleChange,
+    rejectRoleChange,
+    getPendingRoleChanges
+} from '../controllers/staff.controller';
+
+const authorizerRoles = [Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR];
+const roleChangeViewerRoles = [Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.HR_ADMIN, Role.REGISTRY_ADMIN, Role.ADMIN];
+
+// GET /api/staff/pending-role-changes
+router.get('/pending-role-changes', requireRole(roleChangeViewerRoles), getPendingRoleChanges);
+// POST /api/staff/:id/role/approve
+router.post('/:id/role/approve', requireRole(authorizerRoles), approveRoleChange);
+// POST /api/staff/:id/role/reject
+router.post('/:id/role/reject', requireRole(authorizerRoles), rejectRoleChange);
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { upload } from '../middleware/upload.middleware';
 import { updateStaff, uploadSignature, updateServiceRecord } from '../controllers/staff.controller';
 

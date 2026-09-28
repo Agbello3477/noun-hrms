@@ -19,7 +19,8 @@
 import prisma from '../prisma';
 import { enableDbMock } from './dbMock';
 import { Role } from '@prisma/client';
-import { updateStaff } from '../controllers/staff.controller';
+import { updateStaff, approveRoleChange, rejectRoleChange, getPendingRoleChanges } from '../controllers/staff.controller';
+import { batchUploadDocuments } from '../controllers/document.controller';
 import { getOrInitializeLeaveBalances, checkIsPrincipalOfficer } from '../services/leaveEntitlement.service';
 
 let passedCount = 0;
@@ -53,6 +54,7 @@ async function runRoleAuthorizationAndVcTests() {
     data: {
       id: staffUserId,
       email: 'john.doe@noun.edu.ng',
+      password: 'hashed-password',
       name: 'John Doe',
       role: Role.STAFF,
       isActive: true,
@@ -76,6 +78,7 @@ async function runRoleAuthorizationAndVcTests() {
     data: {
       id: hrAdminId,
       email: 'hr.imputer@noun.edu.ng',
+      password: 'hashed-password',
       name: 'HR Officer',
       role: Role.HR_ADMIN,
       isActive: true
@@ -87,6 +90,7 @@ async function runRoleAuthorizationAndVcTests() {
     data: {
       id: registryAdminId,
       email: 'registry.clerk@noun.edu.ng',
+      password: 'hashed-password',
       name: 'Registry Clerk',
       role: Role.REGISTRY_ADMIN,
       isActive: true
@@ -98,6 +102,7 @@ async function runRoleAuthorizationAndVcTests() {
     data: {
       id: registrarId,
       email: 'registrar@noun.edu.ng',
+      password: 'hashed-password',
       name: 'University Registrar',
       role: Role.REGISTRAR,
       isActive: true
@@ -109,6 +114,7 @@ async function runRoleAuthorizationAndVcTests() {
     data: {
       id: vcUserId,
       email: 'vc@noun.edu.ng',
+      password: 'hashed-password',
       name: 'Prof. Olufemi Peters',
       role: Role.VICE_CHANCELLOR,
       isActive: true,
@@ -128,17 +134,17 @@ async function runRoleAuthorizationAndVcTests() {
   });
 
   // =========================================================================
-  // Section 1: Registrar Authorization Security Gate
+  // Section 1: Dual-Control Maker-Checker Role Governance
   // =========================================================================
-  console.log('--- 1. Testing Registrar Authorization Gate on Role Modifications ---');
+  console.log('--- 1. Testing Dual-Control Maker-Checker Role Governance ---');
 
-  // Scenario A: HR_ADMIN attempts to change a user's role to UNIT_HEAD
+  // Scenario A: HR_ADMIN (Maker / Imputer) requests a role change to UNIT_HEAD
   let hrResStatus = 200;
   let hrResBody: any = null;
   const mockHrReq: any = {
     params: { id: staffUserId },
     user: { id: hrAdminId, role: Role.HR_ADMIN },
-    body: { role: Role.UNIT_HEAD }
+    body: { role: Role.UNIT_HEAD, overrideReason: 'Promoted to Head of Department by Faculty Board' }
   };
   const mockHrRes: any = {
     status: (code: number) => {
@@ -152,46 +158,49 @@ async function runRoleAuthorizationAndVcTests() {
 
   await updateStaff(mockHrReq, mockHrRes);
 
-  assert(hrResStatus === 403, 'HR_ADMIN cannot change role (HTTP 403 Forbidden)', `Received status ${hrResStatus}`);
-  assert(
-    hrResBody?.message?.includes('No system role can be changed without Registrar authorization'),
-    'HR_ADMIN receives explicit Registrar authorization error message'
-  );
+  assert(hrResStatus === 200, 'HR_ADMIN role change request accepted into dual-control queue (HTTP 200)');
+  assert(hrResBody?.roleChangeRequested === true, 'Response confirms role change requested flag is true');
+  assert(hrResBody?.roleChangeStatus === 'PENDING_REGISTRAR_APPROVAL', 'Status is PENDING_REGISTRAR_APPROVAL');
 
-  // Verify staff role was NOT changed
+  // Verify staff active role was NOT changed immediately
   const staffAfterHrAttempt = await prisma.user.findUnique({ where: { id: staffUserId } });
-  assert(staffAfterHrAttempt?.role === Role.STAFF, 'Staff role remains unchanged (STAFF) after unauthorized attempt');
+  assert(staffAfterHrAttempt?.role === Role.STAFF, 'Staff active role remains unchanged (STAFF) pending Registrar sign-off');
+  assert(staffAfterHrAttempt?.pendingRole === Role.UNIT_HEAD, 'Pending role correctly recorded as UNIT_HEAD');
 
-  // Scenario B: REGISTRY_ADMIN attempts to change role
-  let regClerkStatus = 200;
-  let regClerkBody: any = null;
-  const mockRegReq: any = {
+  // Verify audit log for request
+  const requestAuditLogs = await prisma.auditLog.findMany({
+    where: { action: 'ROLE_CHANGE_REQUESTED' }
+  });
+  assert(requestAuditLogs.length > 0, 'AuditLog generated for ROLE_CHANGE_REQUESTED');
+  assert(requestAuditLogs[0]?.userId === hrAdminId, 'AuditLog attributes request to HR Admin');
+
+  // Scenario B: Non-authorizer (HR_ADMIN) attempting to authorize the role change is rejected
+  let unauthorizedApproveStatus = 200;
+  const mockUnauthApproveReq: any = {
     params: { id: staffUserId },
-    user: { id: registryAdminId, role: Role.REGISTRY_ADMIN },
-    body: { role: Role.BURSARY }
+    user: { id: hrAdminId, role: Role.HR_ADMIN },
+    body: { remarks: 'Self-authorization attempt' }
   };
-  const mockRegRes: any = {
+  const mockUnauthApproveRes: any = {
     status: (code: number) => {
-      regClerkStatus = code;
-      return {
-        json: (data: any) => { regClerkBody = data; }
-      };
+      unauthorizedApproveStatus = code;
+      return { json: () => {} };
     },
-    json: (data: any) => { regClerkBody = data; }
+    json: () => {}
   };
 
-  await updateStaff(mockRegReq, mockRegRes);
-  assert(regClerkStatus === 403, 'REGISTRY_ADMIN cannot change role (HTTP 403 Forbidden)');
+  await approveRoleChange(mockUnauthApproveReq, mockUnauthApproveRes);
+  assert(unauthorizedApproveStatus === 403, 'Non-Registrar cannot authorize role change (HTTP 403 Forbidden)');
 
-  // Scenario C: REGISTRAR authorizes role change to UNIT_HEAD
+  // Scenario C: REGISTRAR (Authorizer / Checker) authorizes the pending role change
   let regSuccessStatus = 200;
   let regSuccessBody: any = null;
-  const mockRegistrarReq: any = {
+  const mockRegistrarApproveReq: any = {
     params: { id: staffUserId },
     user: { id: registrarId, role: Role.REGISTRAR },
-    body: { role: Role.UNIT_HEAD, rank: 'Head of Unit' }
+    body: { remarks: 'Registrar dual-control clearance granted after verifying Faculty Board minutes' }
   };
-  const mockRegistrarRes: any = {
+  const mockRegistrarApproveRes: any = {
     status: (code: number) => {
       regSuccessStatus = code;
       return {
@@ -201,30 +210,51 @@ async function runRoleAuthorizationAndVcTests() {
     json: (data: any) => { regSuccessBody = data; }
   };
 
-  await updateStaff(mockRegistrarReq, mockRegistrarRes);
+  await approveRoleChange(mockRegistrarApproveReq, mockRegistrarApproveRes);
   assert(regSuccessStatus === 200, 'REGISTRAR successfully authorizes role change (HTTP 200)');
+  assert(regSuccessBody?.roleChangeStatus === 'APPROVED', 'Approval response confirms roleChangeStatus = APPROVED');
 
   const staffAfterRegistrar = await prisma.user.findUnique({ where: { id: staffUserId } });
-  assert(staffAfterRegistrar?.role === Role.UNIT_HEAD, 'Staff role successfully updated to UNIT_HEAD by Registrar');
+  assert(staffAfterRegistrar?.role === Role.UNIT_HEAD, 'Staff active role successfully updated to UNIT_HEAD upon Registrar sign-off');
+  assert(staffAfterRegistrar?.pendingRole === null, 'Pending role cleared after authorization');
 
-  // Scenario D: Audit log was created for the authorized role change
-  const auditLogs = await prisma.auditLog.findMany({
-    where: { action: 'ROLE_CHANGE_AUTHORIZED' }
+  // Verify Audit log for approved change
+  const authorizedAuditLogs = await prisma.auditLog.findMany({
+    where: { action: 'ROLE_CHANGE_APPROVED' }
   });
-  assert(auditLogs.length > 0, 'AuditLog record generated for authorized role change');
-  assert(auditLogs[0]?.userId === registrarId, 'AuditLog correctly attributes change to Registrar user ID');
+  assert(authorizedAuditLogs.length > 0, 'AuditLog record generated for ROLE_CHANGE_APPROVED');
+  assert(authorizedAuditLogs[0]?.userId === registrarId, 'AuditLog attributes authorization to Registrar user ID');
+
+  // Scenario D: Regular STAFF member attempting to change roles is strictly rejected
+  let regularStaffStatus = 200;
+  const mockRegularStaffReq: any = {
+    params: { id: staffUserId },
+    user: { id: staffUserId, role: Role.STAFF },
+    body: { role: Role.REGISTRAR }
+  };
+  const mockRegularStaffRes: any = {
+    status: (code: number) => {
+      regularStaffStatus = code;
+      return { json: () => {} };
+    },
+    json: () => {}
+  };
+
+  await updateStaff(mockRegularStaffReq, mockRegularStaffRes);
+  assert(regularStaffStatus === 403, 'Regular staff member cannot modify system roles (HTTP 403 Forbidden)');
 
   // =========================================================================
   // Section 2: Assigning "The VC" and "The Registrar" Roles
   // =========================================================================
   console.log('\n--- 2. Testing Assign Role: The Registrar & The VC ---');
 
-  // Scenario A: Registrar assigns another user as VICE_CHANCELLOR
+  // Scenario A: Registrar directly assigns another user as VICE_CHANCELLOR
   const secondUserId = 'user-senior-prof';
   await prisma.user.create({
     data: {
       id: secondUserId,
       email: 'deputy.vc@noun.edu.ng',
+      password: 'hashed-password',
       name: 'Prof. Deputy VC',
       role: Role.STAFF,
       isActive: true,
@@ -258,28 +288,10 @@ async function runRoleAuthorizationAndVcTests() {
   };
 
   await updateStaff(mockAssignVcReq, mockAssignVcRes);
-  assert(assignVcStatus === 200, 'Registrar can assign VICE_CHANCELLOR role to designated academic');
+  assert(assignVcStatus === 200, 'Registrar can directly assign VICE_CHANCELLOR role to designated academic');
 
   const promotedUser = await prisma.user.findUnique({ where: { id: secondUserId } });
-  assert(promotedUser?.role === Role.VICE_CHANCELLOR, 'User role successfully assigned as VICE_CHANCELLOR');
-
-  // Scenario B: Non-authorizer (HR_ADMIN) attempting to self-assign or assign REGISTRAR role
-  const mockUnauthorizedAssignReq: any = {
-    params: { id: hrAdminId },
-    user: { id: hrAdminId, role: Role.HR_ADMIN },
-    body: { role: Role.REGISTRAR }
-  };
-  let unauthAssignStatus = 200;
-  const mockUnauthorizedAssignRes: any = {
-    status: (code: number) => {
-      unauthAssignStatus = code;
-      return { json: () => {} };
-    },
-    json: () => {}
-  };
-
-  await updateStaff(mockUnauthorizedAssignReq, mockUnauthorizedAssignRes);
-  assert(unauthAssignStatus === 403, 'Unauthorized attempt to assign REGISTRAR role is strictly rejected with HTTP 403');
+  assert(promotedUser?.role === Role.VICE_CHANCELLOR, 'User role successfully assigned as VICE_CHANCELLOR immediately');
 
   // =========================================================================
   // Section 3: VC System Functionality Verification
@@ -291,7 +303,7 @@ async function runRoleAuthorizationAndVcTests() {
     where: { id: vcProfileId },
     include: { user: true }
   });
-  const isVcPrincipalOfficer = checkIsPrincipalOfficer(vcProfile);
+  const isVcPrincipalOfficer = checkIsPrincipalOfficer(vcProfile!);
   assert(isVcPrincipalOfficer === true, 'Whoever is assigned VC is recognized as Principal Officer');
 
   // 2. Check VC Statutory Annual Leave Entitlement (42 working days)
@@ -300,17 +312,63 @@ async function runRoleAuthorizationAndVcTests() {
   assert(vcAnnualLeave?.totalDaysEntitled === 42, 'VC receives full Principal Officer quota: 42 working days annual leave');
 
   // 3. VC Executive Command Access
-  const authorizerRoles = [Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR];
-  assert(authorizerRoles.includes(promotedUser!.role as Role), 'VC possesses full Principal Officer authorizer status');
+  const authorizerRoles: Role[] = [Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR];
+  assert(authorizerRoles.includes(promotedUser!.role as any), 'VC possesses full Principal Officer authorizer status');
 
-  const payrollAuditRoles = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR];
-  assert(payrollAuditRoles.includes(promotedUser!.role as Role), 'VC possesses executive payroll approval authority');
+  const payrollAuditRoles: Role[] = [Role.AUDIT, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR];
+  assert(payrollAuditRoles.includes(promotedUser!.role as any), 'VC possesses executive payroll approval authority');
 
-  const vcAnalyticsRoles = [Role.VICE_CHANCELLOR, Role.SUPER_USER];
-  assert(vcAnalyticsRoles.includes(promotedUser!.role as Role), 'VC possesses access to VC Command Center (/api/analytics/vc-executive)');
+  const vcAnalyticsRoles: Role[] = [Role.VICE_CHANCELLOR, Role.SUPER_USER];
+  assert(vcAnalyticsRoles.includes(promotedUser!.role as any), 'VC possesses access to VC Command Center (/api/analytics/vc-executive)');
+
+  // =========================================================================
+  // Section 4: Batch Dossier Upload API Verification
+  // =========================================================================
+  console.log('\n--- 4. Testing Batch Dossier Upload API ---');
+
+  const mockFiles: any[] = [
+    {
+      originalname: 'NOUN_2026_001_Appointment_Letter.pdf',
+      mimetype: 'application/pdf',
+      size: 1024,
+      buffer: Buffer.from('%PDF-1.4 mock')
+    },
+    {
+      originalname: 'NOUN_2026_001_Credentials.pdf',
+      mimetype: 'application/pdf',
+      size: 2048,
+      buffer: Buffer.from('%PDF-1.4 mock 2')
+    }
+  ];
+
+  let batchUploadStatus = 200;
+  let batchUploadBody: any = null;
+  const mockBatchReq: any = {
+    user: { id: hrAdminId, role: Role.HR_ADMIN },
+    files: mockFiles,
+    body: {
+      staffId: staffProfileId,
+      type: 'APPOINTMENT_LETTER',
+      accessLevel: 'CONFIDENTIAL'
+    }
+  };
+  const mockBatchRes: any = {
+    status: (code: number) => {
+      batchUploadStatus = code;
+      return {
+        json: (data: any) => { batchUploadBody = data; }
+      };
+    },
+    json: (data: any) => { batchUploadBody = data; }
+  };
+
+  await batchUploadDocuments(mockBatchReq, mockBatchRes);
+
+  assert(batchUploadStatus === 200, 'Batch dossier upload succeeds with HTTP 200');
+  assert(batchUploadBody?.successfulCount === 2, 'Batch upload successfully ingests both uploaded files');
 
   console.log('\n================================');
-  console.log('🎉 Role Authorization & VC Tests Completed!');
+  console.log('🎉 Role Authorization, Dual Control & Dossier Tests Completed!');
   console.log(`Passed: ${passedCount}`);
   console.log(`Failed: ${failedCount}`);
   console.log('================================\n');

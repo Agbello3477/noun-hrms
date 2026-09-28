@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Eye, Lock, Trash2, Download } from 'lucide-react';
+import { FileText, Eye, Lock, Trash2, Download, FolderUp } from 'lucide-react';
 import api from '../../lib/api';
 import UploadDocumentModal from './UploadDocumentModal';
+import BatchDossierUploadModal from './BatchDossierUploadModal';
 import DocumentViewerModal from './DocumentViewerModal';
 
 interface Document {
@@ -22,6 +23,7 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
     const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
     const [error, setError] = useState('');
 
@@ -119,12 +121,20 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
                         </button>
                     )}
                     {!readOnly && (
-                        <button
-                            onClick={() => setIsUploadOpen(true)}
-                            className="text-sm bg-nounGreen hover:bg-green-800 text-white font-bold px-4 py-2 rounded-md transition-colors shadow-sm"
-                        >
-                            + Upload Document
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsBatchUploadOpen(true)}
+                                className="text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold px-3 py-2 rounded-md transition-colors shadow-sm border border-blue-200 flex items-center gap-1.5"
+                            >
+                                <FolderUp size={16} /> Batch Upload
+                            </button>
+                            <button
+                                onClick={() => setIsUploadOpen(true)}
+                                className="text-sm bg-nounGreen hover:bg-green-800 text-white font-bold px-3 py-2 rounded-md transition-colors shadow-sm"
+                            >
+                                + Upload Document
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -196,6 +206,18 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
                     staffId={staffId}
                     onClose={() => setIsUploadOpen(false)}
                     onSuccess={fetchDossier}
+                />
+            )}
+
+            {isBatchUploadOpen && (
+                <BatchDossierUploadModal
+                    defaultStaffId={staffId}
+                    defaultStaffName={staffName}
+                    onClose={() => setIsBatchUploadOpen(false)}
+                    onSuccess={() => {
+                        setIsBatchUploadOpen(false);
+                        fetchDossier();
+                    }}
                 />
             )}
 
