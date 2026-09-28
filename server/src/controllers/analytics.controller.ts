@@ -949,3 +949,241 @@ export const getDashboardBootstrap = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * GET /api/analytics/sla-kpi
+ * Computes institutional, unit-level, and personal SLA & KPI turnaround metrics:
+ *  - Average Processing Time (hours & days)
+ *  - % Processed Within SLA (Success Rate)
+ *  - Overdue Bottleneck Rate (% Breached)
+ *  - Categorical breakdowns for Leaves, File Requests, Official Applications, Queries
+ */
+export const getSlaKpiMetrics = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const user = req.user as { id: string; role: Role; staffProfile?: { id: string; unitId?: string | null } };
+        const { scope = 'auto', timeframe = '30d', unitId: requestedUnitId } = req.query as Record<string, string>;
+
+        const isExecutive = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.REGISTRAR, Role.ADMIN].includes(user?.role as any);
+        const isUnitManager = [Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN].includes(user?.role as any);
+
+        let effectiveScope = scope;
+        if (scope === 'auto') {
+            effectiveScope = isExecutive ? 'institutional' : isUnitManager ? 'unit' : 'personal';
+        }
+
+        // Timeframe filter calculation
+        const now = new Date();
+        let startDate: Date;
+        if (timeframe === '7d') {
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (timeframe === '90d') {
+            startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        } else if (timeframe === '365d') {
+            startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        } else if (timeframe === 'all') {
+            startDate = new Date(0);
+        } else {
+            // default 30d
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+
+        // Determine user's staffProfile & unit
+        const staff = await prisma.staffProfile.findFirst({
+            where: { userId: user?.id },
+            select: { id: true, unitId: true, centerId: true, unit: { select: { name: true } } }
+        });
+
+        const targetUnitId = requestedUnitId || (effectiveScope === 'unit' ? (staff?.unitId || staff?.centerId) : undefined);
+
+        // Build Where clauses
+        const leaveWhere: any = { createdAt: { gte: startDate } };
+        const fileReqWhere: any = { createdAt: { gte: startDate } };
+        const appWhere: any = { createdAt: { gte: startDate } };
+        const queryWhere: any = { createdAt: { gte: startDate } };
+
+        if (effectiveScope === 'personal' && staff) {
+            leaveWhere.staffId = staff.id;
+            fileReqWhere.OR = [{ staffId: staff.id }, { requesterId: user?.id }];
+            appWhere.applicantId = user?.id;
+            queryWhere.staffId = staff.id;
+        } else if (effectiveScope === 'unit' && targetUnitId) {
+            leaveWhere.staff = { OR: [{ unitId: targetUnitId }, { centerId: targetUnitId }] };
+            fileReqWhere.staff = { OR: [{ unitId: targetUnitId }, { centerId: targetUnitId }] };
+            queryWhere.staff = { OR: [{ unitId: targetUnitId }, { centerId: targetUnitId }] };
+        }
+
+        // Parallel queries
+        const [leaves, fileRequests, applications, queries] = await Promise.all([
+            prisma.leaveRequest.findMany({
+                where: leaveWhere,
+                select: {
+                    id: true,
+                    type: true,
+                    status: true,
+                    submittedAt: true,
+                    expectedResolutionAt: true,
+                    resolvedAt: true,
+                    turnaroundTimeHours: true,
+                    slaBreach: true,
+                    staff: { select: { surname: true, otherNames: true, staffId: true } }
+                }
+            }),
+            prisma.fileRequest.findMany({
+                where: fileReqWhere,
+                select: {
+                    id: true,
+                    status: true,
+                    submittedAt: true,
+                    expectedResolutionAt: true,
+                    resolvedAt: true,
+                    turnaroundTimeHours: true,
+                    slaBreach: true,
+                    staff: { select: { surname: true, otherNames: true, staffId: true } }
+                }
+            }),
+            prisma.officialApplication.findMany({
+                where: appWhere,
+                select: {
+                    id: true,
+                    subject: true,
+                    status: true,
+                    submittedAt: true,
+                    expectedResolutionAt: true,
+                    resolvedAt: true,
+                    turnaroundTimeHours: true,
+                    slaBreach: true,
+                    applicant: { select: { name: true, email: true } }
+                }
+            }),
+            prisma.staffQuery.findMany({
+                where: queryWhere,
+                select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    createdAt: true,
+                    responseDeadline: true,
+                    slaBreached: true,
+                    actionType: true,
+                    staff: { select: { surname: true, otherNames: true, staffId: true } }
+                }
+            })
+        ]);
+
+        // Helper to process and normalize SLA items
+        const processItems = (items: any[], typeName: string, titleFn: (i: any) => string, staffFn: (i: any) => string) => {
+            return items.map(item => {
+                const subAt = new Date(item.submittedAt || item.createdAt);
+                const resAt = item.resolvedAt ? new Date(item.resolvedAt) : null;
+                let turnaround = item.turnaroundTimeHours;
+                if (!turnaround && resAt) {
+                    turnaround = Math.max(0, parseFloat(((resAt.getTime() - subAt.getTime()) / (1000 * 60 * 60)).toFixed(1)));
+                }
+
+                // Check SLA breach
+                const isBreached = item.slaBreach === true || item.slaBreached === true || (
+                    !resAt && item.expectedResolutionAt && new Date() > new Date(item.expectedResolutionAt)
+                ) || (
+                    !resAt && item.responseDeadline && new Date() > new Date(item.responseDeadline)
+                );
+
+                const isResolved = Boolean(resAt) || ['APPROVED', 'REJECTED', 'CLOSED', 'ACKNOWLEDGED', 'FORWARDED_DIRECTORATE', 'DEFAULTED_UNANSWERED'].includes(item.status);
+
+                return {
+                    id: item.id,
+                    category: typeName,
+                    title: titleFn(item),
+                    staffName: staffFn(item),
+                    status: item.status,
+                    submittedAt: subAt,
+                    expectedResolutionAt: item.expectedResolutionAt || item.responseDeadline || null,
+                    resolvedAt: resAt,
+                    turnaroundHours: turnaround,
+                    isBreached,
+                    isResolved
+                };
+            });
+        };
+
+        const allProcessed = [
+            ...processItems(leaves, 'Leave Application', (l) => `${l.type} Leave`, (l) => l.staff ? `${l.staff.surname} ${l.staff.otherNames}` : 'Staff'),
+            ...processItems(fileRequests, 'Staff File Request', () => 'File Access Request', (f) => f.staff ? `${f.staff.surname} ${f.staff.otherNames}` : 'Staff'),
+            ...processItems(applications, 'Official Registry Application', (a) => a.subject || 'Official Application', (a) => a.applicant?.name || 'Applicant'),
+            ...processItems(queries, 'Disciplinary Action', (q) => q.title || `${q.actionType || 'Query'}`, (q) => q.staff ? `${q.staff.surname} ${q.staff.otherNames}` : 'Staff')
+        ];
+
+        const totalRequests = allProcessed.length;
+        const totalResolved = allProcessed.filter(p => p.isResolved).length;
+        const totalPending = totalRequests - totalResolved;
+
+        const resolvedWithTurnaround = allProcessed.filter(p => p.turnaroundHours !== null && p.turnaroundHours !== undefined && p.turnaroundHours > 0);
+        const avgTurnaroundHours = resolvedWithTurnaround.length > 0
+            ? parseFloat((resolvedWithTurnaround.reduce((sum, p) => sum + p.turnaroundHours!, 0) / resolvedWithTurnaround.length).toFixed(1))
+            : 0;
+
+        const totalBreached = allProcessed.filter(p => p.isBreached).length;
+        const resolvedWithinSla = allProcessed.filter(p => p.isResolved && !p.isBreached).length;
+
+        const slaSuccessRate = totalResolved > 0
+            ? parseFloat(((resolvedWithinSla / totalResolved) * 100).toFixed(1))
+            : (totalRequests > 0 ? (totalBreached === 0 ? 100 : parseFloat((((totalRequests - totalBreached) / totalRequests) * 100).toFixed(1))) : 100);
+
+        const overdueBottleneckRate = totalRequests > 0
+            ? parseFloat(((totalBreached / totalRequests) * 100).toFixed(1))
+            : 0;
+
+        // Categorical summary
+        const categories = ['Leave Application', 'Staff File Request', 'Official Registry Application', 'Disciplinary Action'].map(cat => {
+            const catItems = allProcessed.filter(p => p.category === cat);
+            const catResolved = catItems.filter(p => p.isResolved);
+            const catBreached = catItems.filter(p => p.isBreached);
+            const catWithTurnaround = catItems.filter(p => p.turnaroundHours !== null && p.turnaroundHours !== undefined && p.turnaroundHours > 0);
+            const catAvgHours = catWithTurnaround.length > 0
+                ? parseFloat((catWithTurnaround.reduce((sum, p) => sum + p.turnaroundHours!, 0) / catWithTurnaround.length).toFixed(1))
+                : 0;
+            const catSuccess = catResolved.length > 0
+                ? parseFloat((((catResolved.length - catBreached.length) / catResolved.length) * 100).toFixed(1))
+                : 100;
+
+            return {
+                category: cat,
+                total: catItems.length,
+                resolved: catResolved.length,
+                pending: catItems.length - catResolved.length,
+                breached: catBreached.length,
+                avgHours: catAvgHours,
+                avgDays: parseFloat((catAvgHours / 24).toFixed(1)),
+                successRate: Math.max(0, catSuccess)
+            };
+        });
+
+        // Recent Breached Bottlenecks
+        const bottlenecks = allProcessed
+            .filter(p => p.isBreached)
+            .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+            .slice(0, 10);
+
+        res.json({
+            scope: effectiveScope,
+            timeframe,
+            unitName: staff?.unit?.name || 'All Units',
+            metrics: {
+                totalRequests,
+                totalResolved,
+                totalPending,
+                averageProcessingTimeHours: avgTurnaroundHours,
+                averageProcessingTimeDays: parseFloat((avgTurnaroundHours / 24).toFixed(1)),
+                processedWithinSlaCount: resolvedWithinSla,
+                slaSuccessRate,
+                slaBreachCount: totalBreached,
+                overdueBottleneckRate
+            },
+            categories,
+            bottlenecks
+        });
+    } catch (error: any) {
+        console.error('getSlaKpiMetrics error:', error);
+        res.status(500).json({ message: 'Failed to compute SLA KPI metrics' });
+    }
+};
+

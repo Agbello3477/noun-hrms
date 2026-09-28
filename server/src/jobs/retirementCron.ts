@@ -46,14 +46,19 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
     console.log(`[RETIREMENT_CRON] Job started at ${startTs}. Trigger: ${triggeredBy}`);
 
     try {
-        // Fetch all ACTIVE staff who have DOB or appointment date
+        // Fetch all ACTIVE permanent staff who have DOB or appointment date (excluding CONTRACT, NYSC, VOLUNTEER)
         const candidates = await prisma.staffProfile.findMany({
             where: {
                 isDeleted: false,
                 status: 'ACTIVE',
-                OR: [
-                    { dateOfBirth: { not: null } },
-                    { dateOfFirstAppointment: { not: null } }
+                employmentCategory: 'PERMANENT',
+                AND: [
+                    {
+                        OR: [
+                            { dateOfBirth: { not: null } },
+                            { dateOfFirstAppointment: { not: null } }
+                        ]
+                    }
                 ]
             },
             include: {

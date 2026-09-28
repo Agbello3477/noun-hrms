@@ -379,47 +379,62 @@ export class PromotionService {
         const take = Math.min(Math.max(Number(limit) || 15, 1), 100);
         const skip = (Math.max(Number(page) || 1, 1) - 1) * take;
 
+        const permanentFilter = {
+            employmentCategory: 'PERMANENT' as const
+        };
+
+        const andConditions: any[] = [permanentFilter];
+
         const where: any = {
             isDeleted: false,
-            status: 'ACTIVE'
+            status: 'ACTIVE',
+            AND: andConditions
         };
 
         if (tab === 'DUE_THIS_CYCLE') {
-            where.OR = [
-                { nextPromotionDueYear: targetYear },
-                { nextDueYear: targetYear },
-                {
-                    AND: [
-                        { isDueForPromotion: true },
-                        { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] }
-                    ]
-                }
-            ];
+            andConditions.push({
+                OR: [
+                    { nextPromotionDueYear: targetYear },
+                    { nextDueYear: targetYear },
+                    {
+                        AND: [
+                            { isDueForPromotion: true },
+                            { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] }
+                        ]
+                    }
+                ]
+            });
         } else if (tab === 'MATURED_OVERDUE') {
-            where.OR = [
-                { nextPromotionDueYear: { lt: targetYear } },
-                { nextDueYear: { lt: targetYear } },
-                { isDueForPromotion: true }
-            ];
+            andConditions.push({
+                OR: [
+                    { nextPromotionDueYear: { lt: targetYear } },
+                    { nextDueYear: { lt: targetYear } },
+                    { isDueForPromotion: true }
+                ]
+            });
             where.eligibilityStatus = { in: [PromotionEligibilityStatus.DUE_FOR_REVIEW, PromotionEligibilityStatus.UNDER_EVALUATION, PromotionEligibilityStatus.PENDING_MATURITY] };
         } else if (tab === 'UPCOMING') {
-            where.OR = [
-                { nextPromotionDueYear: { gt: targetYear } },
-                { nextDueYear: { gt: targetYear } }
-            ];
+            andConditions.push({
+                OR: [
+                    { nextPromotionDueYear: { gt: targetYear } },
+                    { nextDueYear: { gt: targetYear } }
+                ]
+            });
         } else if (tab === 'ALL') {
             // All configured
         } else if (year) {
-            where.OR = [
-                { nextPromotionDueYear: targetYear },
-                { nextDueYear: targetYear },
-                {
-                    AND: [
-                        { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] },
-                        { isDueForPromotion: true }
-                    ]
-                }
-            ];
+            andConditions.push({
+                OR: [
+                    { nextPromotionDueYear: targetYear },
+                    { nextDueYear: targetYear },
+                    {
+                        AND: [
+                            { OR: [{ nextPromotionDueYear: null }, { nextDueYear: null }] },
+                            { isDueForPromotion: true }
+                        ]
+                    }
+                ]
+            });
         }
 
         if (cadre && cadre !== 'ALL') {
@@ -521,10 +536,15 @@ export class PromotionService {
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
-                    OR: [
-                        { nextPromotionDueYear: targetYear },
-                        { nextDueYear: targetYear },
-                        { isDueForPromotion: true }
+                    AND: [
+                        permanentFilter,
+                        {
+                            OR: [
+                                { nextPromotionDueYear: targetYear },
+                                { nextDueYear: targetYear },
+                                { isDueForPromotion: true }
+                            ]
+                        }
                     ]
                 }
             }),
@@ -532,9 +552,14 @@ export class PromotionService {
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
-                    OR: [
-                        { nextPromotionDueYear: { lt: targetYear } },
-                        { nextDueYear: { lt: targetYear } }
+                    AND: [
+                        permanentFilter,
+                        {
+                            OR: [
+                                { nextPromotionDueYear: { lt: targetYear } },
+                                { nextDueYear: { lt: targetYear } }
+                            ]
+                        }
                     ]
                 }
             }),
@@ -542,16 +567,22 @@ export class PromotionService {
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
-                    OR: [
-                        { nextPromotionDueYear: { gt: targetYear } },
-                        { nextDueYear: { gt: targetYear } }
+                    AND: [
+                        permanentFilter,
+                        {
+                            OR: [
+                                { nextPromotionDueYear: { gt: targetYear } },
+                                { nextDueYear: { gt: targetYear } }
+                            ]
+                        }
                     ]
                 }
             }),
             prisma.staffProfile.count({
                 where: {
                     isDeleted: false,
-                    status: 'ACTIVE'
+                    status: 'ACTIVE',
+                    AND: [permanentFilter]
                 }
             })
         ]);
@@ -635,10 +666,15 @@ export class PromotionService {
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
-                    OR: [
-                        { nextDueYear: { lte: targetCycleYear } },
-                        { nextPromotionDueYear: { lte: targetCycleYear } },
-                        { isDueForPromotion: true }
+                    employmentCategory: 'PERMANENT',
+                    AND: [
+                        {
+                            OR: [
+                                { nextDueYear: { lte: targetCycleYear } },
+                                { nextPromotionDueYear: { lte: targetCycleYear } },
+                                { isDueForPromotion: true }
+                            ]
+                        }
                     ]
                 },
                 include: {

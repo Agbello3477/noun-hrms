@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Calendar, ToggleLeft, ToggleRight, Edit, Loader2 } from 'lucide-react';
 import api from '../../../../lib/api';
 import { AperSession } from '../../../../types/aper';
+import AperClosingBanner from '../../../../components/aper/AperClosingBanner';
 
 export default function HRAperDashboard() {
     const [sessions, setSessions] = useState<AperSession[]>([]);
@@ -60,6 +61,7 @@ export default function HRAperDashboard() {
 
     return (
         <div className="p-8">
+            <AperClosingBanner userRole="HR_ADMIN" />
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800">Performance Management (APER)</h1>

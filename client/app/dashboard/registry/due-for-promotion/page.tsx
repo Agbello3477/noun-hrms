@@ -74,8 +74,14 @@ export default function DueForPromotionPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    // Tabs: 'docket' | 'schedule' | 'audit'
-    const [activeTab, setActiveTab] = useState<'docket' | 'schedule' | 'audit'>('docket');
+    // Tabs: 'docket' | 'schedule' | 'audit' | 'overrides'
+    const [activeTab, setActiveTab] = useState<'docket' | 'schedule' | 'audit' | 'overrides'>('docket');
+
+    // Pending Registrar Overrides Queue State
+    const [pendingOverrides, setPendingOverrides] = useState<any[]>([]);
+    const [pendingOverridesLoading, setPendingOverridesLoading] = useState(false);
+    const [overrideActionLoading, setOverrideActionLoading] = useState<Record<string, boolean>>({});
+    const [registrarRemarks, setRegistrarRemarks] = useState<Record<string, string>>({});
 
     // Data State
     const [candidates, setCandidates] = useState<StaffProfileData[]>([]);
@@ -217,11 +223,59 @@ export default function DueForPromotionPage() {
         }
     };
 
+    // Fetch Pending Registrar Overrides Queue
+    const fetchPendingOverrides = useCallback(async () => {
+        setPendingOverridesLoading(true);
+        try {
+            const res = await api.get('/api/v1/registry/promotions/pending-overrides');
+            setPendingOverrides(res.data || []);
+        } catch (err) {
+            console.error('Failed to load pending overrides:', err);
+        } finally {
+            setPendingOverridesLoading(false);
+        }
+    }, []);
+
+    const handleAuthorizeOverride = async (candidateId: string) => {
+        const remarks = registrarRemarks[candidateId] || 'Authorized by Registrar';
+        setOverrideActionLoading(prev => ({ ...prev, [candidateId]: true }));
+        try {
+            await api.post(`/api/v1/registry/promotions/${candidateId}/authorize-override`, { remarks });
+            showToast('Promotion due date override authorized and committed to docket.', 'success');
+            fetchPendingOverrides();
+            fetchDueList();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to authorize promotion override', 'error');
+        } finally {
+            setOverrideActionLoading(prev => ({ ...prev, [candidateId]: false }));
+        }
+    };
+
+    const handleRejectOverride = async (candidateId: string) => {
+        const reason = registrarRemarks[candidateId];
+        if (!reason || !reason.trim()) {
+            showToast('Please enter rejection remarks / justification before rejecting.', 'error');
+            return;
+        }
+        setOverrideActionLoading(prev => ({ ...prev, [candidateId]: true }));
+        try {
+            await api.post(`/api/v1/registry/promotions/${candidateId}/reject-override`, { reason });
+            showToast('Promotion override request rejected.', 'success');
+            fetchPendingOverrides();
+            fetchDueList();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to reject promotion override', 'error');
+        } finally {
+            setOverrideActionLoading(prev => ({ ...prev, [candidateId]: false }));
+        }
+    };
+
     useEffect(() => {
         if (user && ALLOWED_ROLES.includes(user.role)) {
             fetchDueList();
+            fetchPendingOverrides();
         }
-    }, [fetchDueList, user]);
+    }, [fetchDueList, fetchPendingOverrides, user]);
 
     // Open Configure / Override Modal
     const handleOpenScheduleModal = (staff: StaffProfileData) => {
@@ -547,7 +601,8 @@ export default function DueForPromotionPage() {
                     {[
                         { id: 'docket', label: 'Annual Promotion Due List & Docket', icon: ClipboardList, count: total },
                         { id: 'schedule', label: 'Cadre Rules & Maturity Engine Info', icon: Award },
-                        { id: 'audit', label: 'Governance & Audit Log', icon: History }
+                        { id: 'audit', label: 'Governance & Audit Log', icon: History },
+                        { id: 'overrides', label: 'Registrar Overrides Queue', icon: ShieldAlert, count: pendingOverrides.length }
                     ].map(({ id, label, icon: Icon, count }) => (
                         <button
                             key={id}
@@ -1055,6 +1110,186 @@ export default function DueForPromotionPage() {
                             <div className="p-6 text-center text-slate-500 text-sm">
                                 Click the <History size={14} className="inline mx-1 text-slate-600" /> icon next to any staff member in the Docket view to view their dedicated audit timeline.
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* REGISTRAR PROMOTION OVERRIDES QUEUE TAB */}
+                {activeTab === 'overrides' && (
+                    <div className="space-y-5">
+                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h2 className="text-lg font-bold text-slate-950">Registrar Promotion Due Date Authorization Queue</h2>
+                                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                            Maker-Checker Gate
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Dual-control administrative clearance: Promotion maturity overrides staged by HR administrators remain uncommitted until formally reviewed and authorized by the Registrar or Vice Chancellor.
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={fetchPendingOverrides}
+                                    variant="outline"
+                                    size="sm"
+                                    isLoading={pendingOverridesLoading}
+                                    icon={<RefreshCw size={14} />}
+                                >
+                                    Refresh Queue
+                                </Button>
+                            </div>
+
+                            {pendingOverridesLoading ? (
+                                <div className="py-16 text-center">
+                                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-2"></div>
+                                    <p className="text-xs text-slate-500">Loading pending authorization requests...</p>
+                                </div>
+                            ) : pendingOverrides.length === 0 ? (
+                                <div className="py-16 text-center max-w-md mx-auto">
+                                    <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3 border border-emerald-200">
+                                        <CheckCircle2 size={24} />
+                                    </div>
+                                    <h3 className="font-bold text-slate-900 text-sm">No Pending Overrides</h3>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        All promotion due date schedules are currently synchronized with statutory cadre guidelines. No overrides are awaiting clearance.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100 mt-4 space-y-4">
+                                    {pendingOverrides.map((candidate: any) => {
+                                        const calculatedYear = candidate.nextDueYear || candidate.nextPromotionDueYear || 'N/A';
+                                        const requestedYear = candidate.requestedPromotionDueYear;
+                                        const diffYears = typeof requestedYear === 'number' && typeof calculatedYear === 'number'
+                                            ? requestedYear - calculatedYear
+                                            : null;
+
+                                        return (
+                                            <div key={candidate.id} className="pt-4 first:pt-0 space-y-4">
+                                                <div className="bg-slate-50/80 rounded-2xl border border-slate-200 p-5 space-y-4 shadow-2xs">
+                                                    {/* Candidate Title & Metadata */}
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <h4 className="font-bold text-slate-900 text-base">
+                                                                    {candidate.title ? `${candidate.title} ` : ''}{candidate.surname} {candidate.otherNames}
+                                                                </h4>
+                                                                <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-semibold">
+                                                                    {candidate.staffId || 'NO_ID'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-slate-500 mt-0.5">
+                                                                {candidate.rank || 'Staff'} &bull; {candidate.unit?.name || candidate.department || 'Headquarters'} &bull; Cadre: <strong>{candidate.cadreType || candidate.cadre || 'N/A'}</strong> (Level {candidate.currentGradeLevel || candidate.level || 'N/A'})
+                                                            </p>
+                                                        </div>
+
+                                                        {candidate.promotionOverrideRequestedAt && (
+                                                            <span className="text-[11px] text-slate-400">
+                                                                Staged: {new Date(candidate.promotionOverrideRequestedAt).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Side-by-Side Diff View */}
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        {/* Statutory Cadre Calculation */}
+                                                        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                                                                Calculated Statutory Maturity (Cadre Rule)
+                                                            </span>
+                                                            <div className="flex items-baseline gap-2">
+                                                                <span className="text-2xl font-black text-slate-800">
+                                                                    {calculatedYear}
+                                                                </span>
+                                                                <span className="text-xs text-slate-500">
+                                                                    (Standard Cycle)
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-400 mt-1">
+                                                                Computed from official last milestone date ({candidate.lastPromotionDate ? new Date(candidate.lastPromotionDate).toISOString().split('T')[0] : 'Not Set'})
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Requested Administrative Override */}
+                                                        <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 shadow-2xs">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                                                                    Requested Override Due Year (Admin Staged)
+                                                                </span>
+                                                                {diffYears !== null && (
+                                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                                                        diffYears < 0 
+                                                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                                                            : diffYears > 0 
+                                                                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                                                                : 'bg-slate-100 text-slate-800'
+                                                                    }`}>
+                                                                        {diffYears < 0 ? `Accelerated (${Math.abs(diffYears)} yr)` : diffYears > 0 ? `Deferred (+${diffYears} yr)` : 'No Variance'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-baseline gap-2">
+                                                                <span className="text-2xl font-black text-amber-950">
+                                                                    {requestedYear || 'Unset'}
+                                                                </span>
+                                                                <span className="text-xs text-amber-800 font-semibold">
+                                                                    (Staged by HR)
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-amber-800 mt-1">
+                                                                Pending executive confirmation by Registrar before staging in docket
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Justification Box */}
+                                                    <div className="p-3.5 bg-white rounded-xl border border-slate-200">
+                                                        <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                                                            Administrative Justification Note:
+                                                        </span>
+                                                        <p className="text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                            &ldquo;{candidate.promotionOverrideJustification || 'No justification note recorded by submitting officer.'}&rdquo;
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Registrar Decision Deck */}
+                                                    <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Registrar decision remarks / authorization note..."
+                                                            value={registrarRemarks[candidate.id] || ''}
+                                                            onChange={e => setRegistrarRemarks({ ...registrarRemarks, [candidate.id]: e.target.value })}
+                                                            className="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        />
+
+                                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                                            <Button
+                                                                onClick={() => handleRejectOverride(candidate.id)}
+                                                                isLoading={overrideActionLoading[candidate.id]}
+                                                                variant="danger"
+                                                                size="sm"
+                                                                icon={<XCircle size={14} />}
+                                                            >
+                                                                Reject Override
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() => handleAuthorizeOverride(candidate.id)}
+                                                                isLoading={overrideActionLoading[candidate.id]}
+                                                                variant="emerald"
+                                                                size="sm"
+                                                                icon={<CheckCircle2 size={14} />}
+                                                            >
+                                                                Approve Override
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

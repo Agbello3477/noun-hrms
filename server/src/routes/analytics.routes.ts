@@ -1,9 +1,15 @@
 import { Router } from 'express';
-import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics, getVcExecutiveAnalytics, getDashboardBootstrap } from '../controllers/analytics.controller';
+import { getHRAnalytics, getManagerDashboardStats, getRecruitmentAnalytics, getVcExecutiveAnalytics, getDashboardBootstrap, getSlaKpiMetrics } from '../controllers/analytics.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
+
+// Service Request SLA & KPI Timeframe Engine
+router.get('/sla-kpi',
+    verifyToken,
+    getSlaKpiMetrics
+);
 
 // Consolidated Single-Payload Dashboard Bootstrap (0ms fast load)
 router.get('/dashboard-bootstrap',

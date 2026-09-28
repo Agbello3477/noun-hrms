@@ -6,6 +6,7 @@ import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import OfficialAperForm from '../../../../components/aper/OfficialAperForm';
+import AperClosingBanner from '../../../../components/aper/AperClosingBanner';
 
 export default function StaffAperPage() {
     const router = useRouter();
@@ -134,6 +135,7 @@ export default function StaffAperPage() {
 
     return (
         <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-4">
+            <AperClosingBanner session={activeSession} userRole={user?.role} />
             <OfficialAperForm
                 mode="STAFF"
                 session={activeSession}

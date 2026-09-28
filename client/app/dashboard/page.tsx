@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useSwrData } from '../../hooks/useSwrData';
 import Link from 'next/link';
+import AperClosingBanner from '../../components/aper/AperClosingBanner';
 
 // Emergency Contact Banner Component
 const EmergencyContacts = ({ hotlines, className }: { hotlines?: any; className?: string }) => {
@@ -357,6 +358,7 @@ export default function DashboardHome() {
 
         return (
             <div className="space-y-8 animate-in fade-in duration-500">
+                <AperClosingBanner userRole={user?.role} />
                 {/* Executive Welcome Banner */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 p-8 text-white shadow-2xl">
                     <div className="relative z-10 max-w-3xl">
@@ -672,6 +674,7 @@ export default function DashboardHome() {
 
         return (
             <div className="space-y-6">
+                <AperClosingBanner userRole={user?.role} />
                 {/* Welcome Header */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-900 p-8 text-white shadow-xl animate-in fade-in slide-in-from-top duration-500">
                     <div className="relative z-10">
@@ -904,6 +907,7 @@ export default function DashboardHome() {
 
         return (
             <div className="space-y-6">
+                <AperClosingBanner userRole={user?.role} />
                 {/* Welcome Header */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-dark to-slate-900 p-8 text-white shadow-xl">
                     <div className="relative z-10">
@@ -1104,6 +1108,7 @@ export default function DashboardHome() {
 
     return (
         <div className="space-y-6">
+            <AperClosingBanner userRole={user?.role} />
             <div>
                 <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
                     HQ Registry Overview
