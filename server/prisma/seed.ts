@@ -89,6 +89,59 @@ async function main() {
         }
     });
 
+    // University Registrar (Principal Officer / Authorizer) - Staff ID 00002
+    const registrarUser = await prisma.user.upsert({
+        where: { email: 'registrar@noun.edu.ng' },
+        update: {
+            role: Role.REGISTRAR,
+            name: 'University Registrar',
+            isActive: true,
+        },
+        create: {
+            email: 'registrar@noun.edu.ng',
+            name: 'University Registrar',
+            password,
+            role: Role.REGISTRAR,
+            isActive: true,
+        }
+    });
+
+    await prisma.staffProfile.upsert({
+        where: { userId: registrarUser.id },
+        update: {
+            staffId: '00002',
+            surname: 'Registrar',
+            otherNames: 'University',
+            title: 'Mr.',
+            rank: 'University Registrar',
+            level: 'CONTISS 15',
+            step: '09',
+            cadre: 'ADMINISTRATIVE',
+            department: Department.REGISTRY_MAIN,
+            status: 'ACTIVE',
+            accountStatus: 'CLEARED_ACTIVE',
+            isActivated: true,
+            voipExtension: '1000'
+        },
+        create: {
+            userId: registrarUser.id,
+            staffId: '00002',
+            surname: 'Registrar',
+            otherNames: 'University',
+            title: 'Mr.',
+            rank: 'University Registrar',
+            level: 'CONTISS 15',
+            step: '09',
+            cadre: 'ADMINISTRATIVE',
+            department: Department.REGISTRY_MAIN,
+            centerId: abujaCenter.id,
+            status: 'ACTIVE',
+            accountStatus: 'CLEARED_ACTIVE',
+            isActivated: true,
+            voipExtension: '1000'
+        }
+    });
+
     // 4. Bursary Auditor (HQ)
     await prisma.user.upsert({
         where: { email: 'bursary@noun.edu.ng' },

@@ -81,8 +81,9 @@ export const enableDbMock = async () => {
         };
 
         (prisma.user as any).findUnique = async (args: any) => {
-            const u = users.find(u => u.id === args.where.id || u.email === args.where.email);
+            const u = users.find(u => (args.where.id && u.id === args.where.id) || (args.where.email && u.email === args.where.email));
             if (!u) {
+                if (args.where?.email) return null;
                 return {
                     id: mockUserId,
                     email: 'mock-user@noun.edu.ng',
@@ -139,7 +140,8 @@ export const enableDbMock = async () => {
                 status: args.data.status || 'ACTIVE',
                 cadre: args.data.cadre || 'ADMINISTRATIVE',
                 isDeleted: false,
-                deletedAt: null
+                deletedAt: null,
+                ...args.data
             };
             staffProfiles.push(profile);
             return profile;
@@ -157,17 +159,24 @@ export const enableDbMock = async () => {
                 id: mockProfileId,
                 userId: args.where.userId || mockUserId,
                 status: currentStaffStatus,
-                isDeleted: currentStaffDeleted
+                isDeleted: currentStaffDeleted,
+                ...args.data
             };
         };
 
         (prisma.staffProfile as any).findUnique = async (args: any) => {
-            const p = staffProfiles.find(p => p.id === args.where.id || p.userId === args.where.userId);
+            const p = staffProfiles.find(p => (args.where.id && p.id === args.where.id) || (args.where.userId && p.userId === args.where.userId) || (args.where.staffId && p.staffId === args.where.staffId));
             const userObj = p ? users.find(u => u.id === p.userId) : null;
             const fallbackUser = { id: mockUserId, name: 'Test User', email: 'mock@noun.edu.ng' };
             const profileId = p ? p.id : (args.where.id || args.where.userId || mockProfileId);
             const matchedQueries = staffQueries.filter(q => q.staffId === profileId && (q.status === 'OPEN' || q.status === 'PENDING_RESPONSE' || q.status === 'UNDER_REVIEW'));
             if (!p) {
+                if (args.where.userId && users.some(u => u.id === args.where.userId)) {
+                    return null;
+                }
+                if (args.where.staffId) {
+                    return null;
+                }
                 return {
                     id: mockProfileId,
                     userId: args.where.id || args.where.userId || mockUserId,
@@ -187,7 +196,19 @@ export const enableDbMock = async () => {
 
         (prisma.staffProfile as any).findFirst = async (args: any) => {
             const ext = args?.where?.voipExtension;
-            const p = staffProfiles.find(p => p.voipExtension === ext || (ext && p.voipExtension?.includes(ext)));
+            const staffId = args?.where?.staffId;
+            const userId = args?.where?.userId;
+            const p = staffProfiles.find(p => {
+                if (ext) return p.voipExtension === ext || (p.voipExtension && p.voipExtension.includes(ext));
+                if (staffId) return p.staffId === staffId;
+                if (userId) {
+                    if (typeof userId === 'object' && userId.not) {
+                        return p.userId !== userId.not;
+                    }
+                    return p.userId === userId;
+                }
+                return false;
+            });
             const userObj = p ? users.find(u => u.id === p.userId) : null;
             const fallbackUser = { id: mockUserId, name: 'Capt. VoIP Test', email: 'voip_tester_1001@noun.edu.ng', role: 'SUPER_USER', isActive: true };
             if (!p) {
@@ -752,6 +773,13 @@ export const enableDbMock = async () => {
                 authorizationAuditTrails.length = 0;
                 return { count: 1 };
             }
+        };
+
+        // Mock StudyCenter
+        (prisma as any).studyCenter = {
+            findFirst: async (args: any) => ({ id: 'mock-hq-center-uuid', code: 'HQ-001', name: 'Abuja Head Quarters' }),
+            findUnique: async (args: any) => ({ id: 'mock-hq-center-uuid', code: 'HQ-001', name: 'Abuja Head Quarters' }),
+            findMany: async () => [{ id: 'mock-hq-center-uuid', code: 'HQ-001', name: 'Abuja Head Quarters' }]
         };
 
         // Mock Transaction

@@ -10,6 +10,7 @@ import {
     validateDualControlSelfAuthorization,
 } from '../middleware/rbac.middleware';
 import { Role } from '@prisma/client';
+import { ensureRegistrarAccount } from '../services/registrarSeed.service';
 
 async function runTests() {
     await enableDbMock();
@@ -239,6 +240,25 @@ async function runTests() {
 
         assert(fileAuditTrail.entityType === 'STAFF_FILE', 'File clearance recorded in authorization audit trail');
         assert(fileAuditTrail.digitalStampRef === 'NOUN-REG-CLEARANCE-999', 'Clearance seal reference stored');
+
+        // --- 6. Registrar Account Provisioning & ID 00002 Verification ---
+        console.log('\n--- 6. Testing Registrar Account Provisioning (ID 00002) ---');
+        await ensureRegistrarAccount();
+
+        const registrarUser = await (prisma.user as any).findUnique({
+            where: { email: 'registrar@noun.edu.ng' }
+        });
+        assert(registrarUser !== null, 'Registrar user exists in database');
+        assert(registrarUser.role === Role.REGISTRAR, 'Registrar user assigned REGISTRAR role');
+        assert(registrarUser.isActive === true, 'Registrar account is active');
+
+        const registrarProfile = await (prisma.staffProfile as any).findFirst({
+            where: { staffId: '00002' }
+        });
+        assert(registrarProfile !== null, 'Registrar profile exists with ID number 00002');
+        assert(registrarProfile.staffId === '00002', 'Registrar staffId is exactly 00002');
+        assert(registrarProfile.rank === 'University Registrar', 'Registrar rank is University Registrar');
+        assert(registrarProfile.status === 'ACTIVE', 'Registrar profile is ACTIVE');
 
         console.log(`\n================================`);
         console.log(`🎉 RBAC Maker-Checker Tests Completed!`);

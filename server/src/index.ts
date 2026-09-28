@@ -55,6 +55,7 @@ import { scheduleAperReminderCron } from './jobs/aperReminderCron';
 import { scheduleQueryDeadlineCron } from './jobs/queryDeadlineCron';
 import { RlsService } from './services/rls.service';
 import { startDatabaseKeepalive } from './prisma';
+import { ensureRegistrarAccount } from './services/registrarSeed.service';
 
 import compression from 'compression';
 import { SentinelSDK } from './sentinel-sdk';
@@ -304,5 +305,10 @@ server.listen(PORT, () => {
     // Automatically ensure Row Level Security (RLS) is enabled on all tables
     RlsService.enableRlsOnAllTables().catch((err: any) => {
         console.error('[Startup RLS Enforcer] Failed to enforce RLS on startup:', err);
+    });
+
+    // Automatically ensure University Registrar account with Staff ID 00002 exists
+    ensureRegistrarAccount().catch((err: any) => {
+        console.error('[Startup Registrar Seeder] Failed to ensure Registrar account on startup:', err);
     });
 });
