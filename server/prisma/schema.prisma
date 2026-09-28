@@ -97,6 +97,9 @@ model User {
   // Transfers Authorization (Registrar / Imputer-Authorizer)
   transfersAuthorized      TransferLog[]         @relation("TransferAuthorizer")
 
+  // Academic Publications Vetted
+  vettedPublications       AcademicPublication[] @relation("VettedPublications")
+
   @@map("users")
 }
 
@@ -184,6 +187,35 @@ enum PromotionEligibilityStatus {
   DEFERRED
   DISQUALIFIED_DISCIPLINARY
   PENDING_REGISTRAR_OVERRIDE
+}
+
+enum PublicationType {
+  JOURNAL_ARTICLE
+  CONFERENCE_PROCEEDING
+  COURSE_MATERIAL
+  ACADEMIC_BOOK
+  BOOK_CHAPTER
+}
+
+enum PublicationVerificationStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum AcademicRank {
+  ASSISTANT_LECTURER
+  LECTURER_II
+  LECTURER_I
+  SENIOR_LECTURER
+  ASSOCIATE_PROFESSOR
+  PROFESSOR
+}
+
+enum HighestQualification {
+  BACHELORS
+  MASTERS
+  PHD
 }
 
 enum UnitType {
@@ -302,8 +334,16 @@ model StaffProfile {
   
   // Phase 8
   publications Publication[]
+  academicPublications AcademicPublication[]
   teaching     TeachingAllocation[]
   ippisNumber  String?  @unique // For Payroll Integration
+
+  // Academic Promotion & Publication Engine Fields
+  phdRegistrationProofUrl        String?
+  phdGraduationDate              DateTime?
+  currentAcademicRank            String?   // ASSISTANT_LECTURER, LECTURER_II, LECTURER_I, SENIOR_LECTURER, ASSOCIATE_PROFESSOR, PROFESSOR
+  targetPromotionRank            String?   // Computed or set target rank
+  totalVerifiedPublicationPoints Float     @default(0.0)
 
   // Phase 9: Academic & Facilitator
   programmeId     String?
@@ -429,6 +469,40 @@ model Publication {
   updatedAt   DateTime @updatedAt
 
   @@map("publications")
+}
+
+model AcademicPublication {
+  id                  String                        @id @default(uuid())
+  staffId             String
+  staff               StaffProfile                  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  
+  title               String
+  type                PublicationType               @default(JOURNAL_ARTICLE)
+  doiOrIsbn           String?
+  peerReviewed        Boolean                       @default(true)
+  pointsClaimed       Float                         @default(0.0)
+  pointsAwarded       Float                         @default(0.0)
+  verificationStatus  PublicationVerificationStatus @default(PENDING_VERIFICATION)
+  publicationDate     DateTime                      @default(now())
+  year                Int?
+  citation            String?                       @db.Text
+  link                String?
+  evidenceDocumentUrl String?
+  indexingStatus      String?                       // e.g. Scopus, Web of Science, Institutional Repository
+  
+  vettedById          String?
+  vettedBy            User?                         @relation("VettedPublications", fields: [vettedById], references: [id], onDelete: SetNull)
+  vettedAt            DateTime?
+  vettingRemarks      String?                       @db.Text
+  
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  @@index([staffId])
+  @@index([type])
+  @@index([verificationStatus])
+  @@index([doiOrIsbn])
+  @@map("academic_publications")
 }
 
 model Course {

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
 import { useSocket } from '@/context/SocketContext';
 import { useRouter } from 'next/navigation';
-import api from '../../../../lib/api';
+import api, { getImageUrl } from '../../../../lib/api';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import Button from '@/components/ui/Button';
 import {
@@ -13,7 +13,8 @@ import {
     Download, Calendar, User, Briefcase, Star, Filter,
     Clock, PlayCircle, ToggleLeft, ToggleRight, ClipboardList, Video,
     Edit3, History, CheckSquare, Square, Layers, Award,
-    AlertCircle, Sparkles, FileText, Info
+    AlertCircle, Sparkles, FileText, Info, BookOpen, ExternalLink,
+    FileCheck, GraduationCap, Check, X
 } from 'lucide-react';
 
 interface StaffProfileData {
@@ -145,6 +146,14 @@ export default function DueForPromotionPage() {
     const [meetingRoomName, setMeetingRoomName] = useState('');
     const [meetingCandidateName, setMeetingCandidateName] = useState('');
     const { startVideoCall } = useSocket();
+
+    // Academic Appraisal Dossier Drawer State
+    const [dossierDrawerOpen, setDossierDrawerOpen] = useState(false);
+    const [selectedDossierStaff, setSelectedDossierStaff] = useState<StaffProfileData | null>(null);
+    const [dossierData, setDossierData] = useState<any | null>(null);
+    const [dossierLoading, setDossierLoading] = useState(false);
+    const [vettingLoading, setVettingLoading] = useState<Record<string, boolean>>({});
+    const [vettingForm, setVettingForm] = useState<Record<string, { pointsAwarded: number; vettingRemarks: string }>>({});
 
     // Toast alerts
     const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -377,6 +386,57 @@ export default function DueForPromotionPage() {
             module: 'promotion',
             targetId: logId
         });
+    };
+
+    // Open Academic Appraisal Scoring Dossier Drawer
+    const handleOpenDossierDrawer = async (staff: StaffProfileData) => {
+        setSelectedDossierStaff(staff);
+        setDossierDrawerOpen(true);
+        setDossierLoading(true);
+        try {
+            const res = await api.get(`/api/v1/academic/dossier/${staff.id}`);
+            setDossierData(res.data);
+            const initialForm: Record<string, { pointsAwarded: number; vettingRemarks: string }> = {};
+            if (res.data?.publications) {
+                res.data.publications.forEach((pub: any) => {
+                    initialForm[pub.id] = {
+                        pointsAwarded: pub.pointsAwarded !== null && pub.pointsAwarded !== undefined && Number(pub.pointsAwarded) > 0
+                            ? Number(pub.pointsAwarded)
+                            : (Number(pub.pointsClaimed) || 0),
+                        vettingRemarks: pub.vettingRemarks || ''
+                    };
+                });
+            }
+            setVettingForm(initialForm);
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to load candidate academic dossier.', 'error');
+        } finally {
+            setDossierLoading(false);
+        }
+    };
+
+    // Vetting publication points & approval
+    const handleVetPublication = async (pubId: string, status: 'VERIFIED' | 'REJECTED') => {
+        if (!selectedDossierStaff) return;
+        setVettingLoading(prev => ({ ...prev, [pubId]: true }));
+        try {
+            const form = vettingForm[pubId] || { pointsAwarded: 0, vettingRemarks: '' };
+            await api.post(`/api/v1/academic/publications/${pubId}/vet`, {
+                pointsAwarded: status === 'VERIFIED' ? Number(form.pointsAwarded) : 0,
+                verificationStatus: status,
+                vettingRemarks: form.vettingRemarks
+            });
+            showToast(status === 'VERIFIED' ? 'Publication verified and points recorded.' : 'Publication marked as rejected.', 'success');
+            
+            // Refresh dossier and candidate list
+            const res = await api.get(`/api/v1/academic/dossier/${selectedDossierStaff.id}`);
+            setDossierData(res.data);
+            fetchDueList();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Failed to vet publication.', 'error');
+        } finally {
+            setVettingLoading(prev => ({ ...prev, [pubId]: false }));
+        }
     };
 
     const statusBadge = (status?: string | null) => {
@@ -837,6 +897,13 @@ export default function DueForPromotionPage() {
                                                         </td>
                                                         <td className="px-4 py-3.5 text-right">
                                                             <div className="flex items-center justify-end gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleOpenDossierDrawer(cand)}
+                                                                    className="p-1.5 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition shadow-xs"
+                                                                    title="Open Academic Appraisal Scoring & Publications Dossier"
+                                                                >
+                                                                    <BookOpen size={14} />
+                                                                </button>
                                                                 {canManage && (
                                                                     <button
                                                                         onClick={() => handleOpenScheduleModal(cand)}
@@ -1328,6 +1395,435 @@ export default function DueForPromotionPage() {
                                     {runningEngine ? 'Evaluating Candidates...' : 'Run Maturity Engine Now'}
                                 </Button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ACADEMIC APPRAISAL SCORING & DOSSIER DRAWER */}
+            {dossierDrawerOpen && selectedDossierStaff && (
+                <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white max-w-4xl w-full h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300">
+                        {/* Drawer Header */}
+                        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md">
+                                    <BookOpen size={20} />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-extrabold text-base tracking-tight">Academic Staff Appraisal & Publications Scoring Dossier</h3>
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-900 text-emerald-300 border border-emerald-700">
+                                            Institutional Gate Engine
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-400">
+                                        {selectedDossierStaff.surname} {selectedDossierStaff.otherNames} ({selectedDossierStaff.staffId || 'No ID'}) &bull; {selectedDossierStaff.rank || 'Staff'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setDossierDrawerOpen(false)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                            >
+                                <XCircle size={22} />
+                            </button>
+                        </div>
+
+                        {/* Drawer Body */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+                            {dossierLoading ? (
+                                <div className="flex flex-col items-center justify-center h-80 gap-3">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600" />
+                                    <p className="text-xs font-semibold text-slate-500">Evaluating statutory promotion criteria & publications matrix...</p>
+                                </div>
+                            ) : !dossierData ? (
+                                <div className="text-center py-16 text-slate-400">
+                                    <AlertCircle size={36} className="mx-auto mb-2 text-slate-300" />
+                                    <p className="text-sm font-semibold text-slate-600">Failed to load academic appraisal dossier.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Evaluation Verdict Hero Card */}
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+                                        <div className="flex items-center justify-between flex-wrap gap-3">
+                                            <div>
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Substantive Cadre Transition</span>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="font-extrabold text-slate-900 text-base">
+                                                        {dossierData.evaluation?.currentRankLabel || selectedDossierStaff.rank}
+                                                    </span>
+                                                    <span className="text-emerald-600 font-bold">&rarr;</span>
+                                                    <span className="font-extrabold text-emerald-800 text-base bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                                                        {dossierData.evaluation?.targetRankLabel || 'Target Rank'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                {dossierData.evaluation?.overallEligible ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                        <CheckCircle2 size={14} /> QUALIFIED FOR PROMOTION
+                                                    </span>
+                                                ) : dossierData.evaluation?.disciplinaryGate?.passed === false ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                                        <ShieldAlert size={14} /> DISCIPLINARY HOLD
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                                        <AlertTriangle size={14} /> CRITERIA DEFICIENT
+                                                    </span>
+                                                )}
+                                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                                                    {dossierData.evaluation?.passedGatesCount || 0} / {dossierData.evaluation?.totalGatesCount || 4} Gates Passed
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Publications Scoring Metric Meter */}
+                                        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-2.5">
+                                            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                                                <span>Verified Publication Points: {dossierData.evaluation?.publicationBreakdown?.totalValidPoints || 0} / {dossierData.evaluation?.rule?.minPublicationPoints || 0} Points Required</span>
+                                                <span className="text-emerald-700 font-extrabold">
+                                                    {Math.min(100, Math.round(((dossierData.evaluation?.publicationBreakdown?.totalValidPoints || 0) / (dossierData.evaluation?.rule?.minPublicationPoints || 1)) * 100))}% Met
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                                <div
+                                                    className={`h-2.5 rounded-full transition-all duration-500 ${
+                                                        (dossierData.evaluation?.publicationBreakdown?.totalValidPoints || 0) >= (dossierData.evaluation?.rule?.minPublicationPoints || 1)
+                                                            ? 'bg-emerald-600'
+                                                            : 'bg-amber-500'
+                                                    }`}
+                                                    style={{
+                                                        width: `${Math.min(100, ((dossierData.evaluation?.publicationBreakdown?.totalValidPoints || 0) / (dossierData.evaluation?.rule?.minPublicationPoints || 1)) * 100)}%`
+                                                    }}
+                                                />
+                                            </div>
+
+                                            {/* Category Score Badges */}
+                                            <div className="flex items-center gap-2 pt-1 flex-wrap text-[11px]">
+                                                <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold border border-blue-200">
+                                                    Journals: {dossierData.evaluation?.publicationBreakdown?.categoryPoints?.JOURNAL_ARTICLE || 0} pts
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-semibold border border-purple-200">
+                                                    Books: {dossierData.evaluation?.publicationBreakdown?.categoryPoints?.ACADEMIC_BOOK || 0} pts
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-semibold border border-indigo-200">
+                                                    Chapters: {dossierData.evaluation?.publicationBreakdown?.categoryPoints?.BOOK_CHAPTER || 0} pts
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-semibold border border-teal-200">
+                                                    Conferences: {dossierData.evaluation?.publicationBreakdown?.categoryPoints?.CONFERENCE_PROCEEDING || 0} pts
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold border border-amber-200">
+                                                    Course Materials: {dossierData.evaluation?.publicationBreakdown?.courseMaterialsUtilizedPoints || 0} pts
+                                                    {dossierData.evaluation?.publicationBreakdown?.courseMaterialsCapped && ' (Capped at 2 max)'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 4 Statutory Gate Evaluation Cards */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">
+                                            Statutory Criteria Verification Gates
+                                        </h4>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {/* Gate 1: Educational Qualification */}
+                                            <div className={`p-4 rounded-xl border transition-all ${
+                                                dossierData.evaluation?.qualificationGate?.passed
+                                                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                                                    : 'bg-rose-50/50 border-rose-200 text-rose-950'
+                                            }`}>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-bold flex items-center gap-1.5">
+                                                        <GraduationCap size={15} /> Educational Qualification
+                                                    </span>
+                                                    {dossierData.evaluation?.qualificationGate?.passed ? (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                                                            PASSED
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
+                                                            DEFICIENT
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-medium leading-relaxed">
+                                                    {dossierData.evaluation?.qualificationGate?.details}
+                                                </p>
+                                                <p className="text-[11px] text-slate-500 mt-1">
+                                                    Highest: <strong>{dossierData.evaluation?.highestQualification || 'Not specified'}</strong>
+                                                    {dossierData.evaluation?.phdRegistrationProofUrl && (
+                                                        <a
+                                                            href={getImageUrl(dossierData.evaluation.phdRegistrationProofUrl)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 text-emerald-700 font-bold underline ml-2"
+                                                        >
+                                                            <ExternalLink size={10} /> Ph.D. Registration Proof
+                                                        </a>
+                                                    )}
+                                                </p>
+                                            </div>
+
+                                            {/* Gate 2: Publication Scoring */}
+                                            <div className={`p-4 rounded-xl border transition-all ${
+                                                dossierData.evaluation?.publicationScoringGate?.passed
+                                                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                                                    : 'bg-rose-50/50 border-rose-200 text-rose-950'
+                                            }`}>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-bold flex items-center gap-1.5">
+                                                        <Award size={15} /> Publication Output Scoring
+                                                    </span>
+                                                    {dossierData.evaluation?.publicationScoringGate?.passed ? (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                                                            PASSED
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
+                                                            DEFICIENT
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-medium leading-relaxed">
+                                                    {dossierData.evaluation?.publicationScoringGate?.details}
+                                                </p>
+                                                <p className="text-[11px] text-slate-500 mt-1">
+                                                    Verified Score: <strong>{dossierData.evaluation?.publicationBreakdown?.totalValidPoints || 0} pts</strong> &bull; Required: <strong>{dossierData.evaluation?.rule?.minPublicationPoints || 0} pts</strong>
+                                                </p>
+                                            </div>
+
+                                            {/* Gate 3: Statutory Tenure */}
+                                            <div className={`p-4 rounded-xl border transition-all ${
+                                                dossierData.evaluation?.tenureGate?.passed
+                                                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                                                    : 'bg-amber-50/50 border-amber-200 text-amber-950'
+                                            }`}>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-bold flex items-center gap-1.5">
+                                                        <Clock size={15} /> Statutory 3-Year Tenure
+                                                    </span>
+                                                    {dossierData.evaluation?.tenureGate?.passed ? (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                                                            MATURED
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800">
+                                                            PENDING
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-medium leading-relaxed">
+                                                    {dossierData.evaluation?.tenureGate?.details}
+                                                </p>
+                                            </div>
+
+                                            {/* Gate 4: Disciplinary Clearance */}
+                                            <div className={`p-4 rounded-xl border transition-all ${
+                                                dossierData.evaluation?.disciplinaryGate?.passed
+                                                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                                                    : 'bg-rose-50/50 border-rose-200 text-rose-950'
+                                            }`}>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-bold flex items-center gap-1.5">
+                                                        <Shield size={15} /> Disciplinary Clearance
+                                                    </span>
+                                                    {dossierData.evaluation?.disciplinaryGate?.passed ? (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                                                            CLEARED
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
+                                                            HOLD
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-medium leading-relaxed">
+                                                    {dossierData.evaluation?.disciplinaryGate?.details}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Itemized Candidate Publications Vetting Section */}
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-extrabold text-slate-900">
+                                                    Candidate Research Output &amp; Publications ({dossierData.publications?.length || 0})
+                                                </h4>
+                                                <p className="text-xs text-slate-500">
+                                                    Appraisal Committee scoring, peer-review verification, and evidence offprint vetting
+                                                </p>
+                                            </div>
+                                            <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-300">
+                                                {dossierData.verifiedPublicationsCount || 0} Verified
+                                            </span>
+                                        </div>
+
+                                        {dossierData.publications?.length === 0 ? (
+                                            <div className="text-center py-10 text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                                                No publications submitted by candidate yet.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {dossierData.publications.map((pub: any) => {
+                                                    const isVerified = pub.verificationStatus === 'VERIFIED';
+                                                    const isRejected = pub.verificationStatus === 'REJECTED';
+
+                                                    return (
+                                                        <div
+                                                            key={pub.id}
+                                                            className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3 transition-colors hover:border-slate-300"
+                                                        >
+                                                            {/* Publication Header */}
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div>
+                                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 uppercase">
+                                                                            {pub.type?.replace(/_/g, ' ')}
+                                                                        </span>
+                                                                        {pub.indexingStatus && (
+                                                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                                                {pub.indexingStatus}
+                                                                            </span>
+                                                                        )}
+                                                                        {pub.peerReviewed && (
+                                                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                Peer-Reviewed
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <h5 className="font-bold text-slate-900 text-sm">{pub.title}</h5>
+                                                                    <p className="text-xs text-slate-600 mt-0.5">
+                                                                        {pub.citation || 'No citation'} &bull; {pub.year || new Date(pub.publicationDate).getFullYear()}
+                                                                        {pub.doiOrIsbn && ` • DOI/ISBN: ${pub.doiOrIsbn}`}
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Status Pill */}
+                                                                <div>
+                                                                    {isVerified ? (
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                                            <CheckCircle2 size={12} /> Verified ({pub.pointsAwarded || 0} pts)
+                                                                        </span>
+                                                                    ) : isRejected ? (
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                                                            <XCircle size={12} /> Rejected
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                                                            <Clock size={12} /> Pending Vetting
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Evidence Document Link */}
+                                                            {pub.evidenceDocumentUrl && (
+                                                                <div className="pt-1">
+                                                                    <a
+                                                                        href={getImageUrl(pub.evidenceDocumentUrl)}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200"
+                                                                    >
+                                                                        <ExternalLink size={12} /> View Uploaded Evidence / Offprint PDF
+                                                                    </a>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Vetting Remarks / Previous Audit */}
+                                                            {pub.vettedBy && (
+                                                                <div className="text-[11px] text-slate-500 bg-white p-2.5 rounded-lg border border-slate-200">
+                                                                    Vetted by: <strong>{pub.vettedBy?.name || pub.vettedBy?.email}</strong> on {fmtDate(pub.vettedAt)}
+                                                                    {pub.vettingRemarks && <p className="mt-0.5 text-slate-700"><em>Remarks: &quot;{pub.vettingRemarks}&quot;</em></p>}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Committee Vetting Controls */}
+                                                            {canManage && (
+                                                                <div className="bg-white p-3 rounded-xl border border-slate-200/90 space-y-2.5">
+                                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
+                                                                        <div>
+                                                                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Points to Award</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                step="0.5"
+                                                                                min="0"
+                                                                                max="20"
+                                                                                value={vettingForm[pub.id]?.pointsAwarded ?? (pub.pointsAwarded || pub.pointsClaimed || 0)}
+                                                                                onChange={e => setVettingForm(prev => ({
+                                                                                    ...prev,
+                                                                                    [pub.id]: {
+                                                                                        ...prev[pub.id],
+                                                                                        pointsAwarded: parseFloat(e.target.value) || 0
+                                                                                    }
+                                                                                }))}
+                                                                                className="w-full text-xs font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                                                                            />
+                                                                        </div>
+                                                                        <div className="sm:col-span-2">
+                                                                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Appraisal Committee Remarks</label>
+                                                                            <input
+                                                                                type="text"
+                                                                                placeholder="e.g. Scopus verified, 1st author points approved..."
+                                                                                value={vettingForm[pub.id]?.vettingRemarks ?? (pub.vettingRemarks || '')}
+                                                                                onChange={e => setVettingForm(prev => ({
+                                                                                    ...prev,
+                                                                                    [pub.id]: {
+                                                                                        ...prev[pub.id],
+                                                                                        vettingRemarks: e.target.value
+                                                                                    }
+                                                                                }))}
+                                                                                className="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="emerald"
+                                                                            isLoading={vettingLoading[pub.id]}
+                                                                            onClick={() => handleVetPublication(pub.id, 'VERIFIED')}
+                                                                            icon={<Check size={13} />}
+                                                                        >
+                                                                            Verify &amp; Award Points
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="danger"
+                                                                            isLoading={vettingLoading[pub.id]}
+                                                                            onClick={() => handleVetPublication(pub.id, 'REJECTED')}
+                                                                            icon={<X size={13} />}
+                                                                        >
+                                                                            Reject
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Drawer Footer */}
+                        <div className="p-4 border-t border-slate-200 bg-white flex items-center justify-between">
+                            <span className="text-xs text-slate-500">
+                                Registry Academic Appraisal Verification Console &bull; NOUN HRMS
+                            </span>
+                            <Button onClick={() => setDossierDrawerOpen(false)} variant="outline" size="sm">
+                                Close Dossier
+                            </Button>
                         </div>
                     </div>
                 </div>

@@ -474,6 +474,20 @@ export class PromotionService {
                     user: { select: { id: true, email: true, name: true } },
                     unit: { select: { id: true, name: true, headId: true } },
                     studyCenter: { select: { id: true, name: true } },
+                    academicPublications: {
+                        select: {
+                            id: true,
+                            title: true,
+                            type: true,
+                            peerReviewed: true,
+                            pointsClaimed: true,
+                            pointsAwarded: true,
+                            verificationStatus: true,
+                            evidenceDocumentUrl: true,
+                            doiOrIsbn: true,
+                            indexingStatus: true
+                        }
+                    },
                     queries: {
                         where: { status: { in: ['OPEN', 'DEFAULTED_UNANSWERED'] } },
                         select: { id: true, title: true, status: true, source: true }
