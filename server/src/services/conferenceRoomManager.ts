@@ -102,74 +102,77 @@ class ConferenceRoomManager {
           startedAt: new Date()
         }
       });
+    }
 
-      // Register host participant in DB
-      await prisma.callParticipant.upsert({
-        where: {
-          callSessionId_userId: {
-            callSessionId: session.id,
-            userId: hostUser.id
-          }
-        },
-        create: {
-          callSessionId: session.id,
-          userId: hostUser.id,
-          role: CallParticipantRole.HOST,
-          participationStatus: CallParticipationStatus.CONNECTED,
-          joinedAt: new Date()
-        },
-        update: {
-          role: CallParticipantRole.HOST,
-          participationStatus: CallParticipationStatus.CONNECTED,
-          joinedAt: new Date(),
-          leftAt: null
+    const currentSession = session;
+    const currentSessionId = currentSession.id;
+
+    // Register host participant in DB
+    await prisma.callParticipant.upsert({
+      where: {
+        callSessionId_userId: {
+          callSessionId: currentSessionId,
+          userId: hostUser.id
         }
-      });
-
-      // Register invited participants in DB
-      if (targetUserIds.length > 0) {
-        const invitePromises = targetUserIds
-          .filter((uid) => uid !== hostUser.id)
-          .map((uid) =>
-            prisma.callParticipant.upsert({
-              where: {
-                callSessionId_userId: {
-                  callSessionId: session.id,
-                  userId: uid
-                }
-              },
-              create: {
-                callSessionId: session.id,
-                userId: uid,
-                role: CallParticipantRole.PARTICIPANT,
-                participationStatus: CallParticipationStatus.INVITED,
-                invitedAt: new Date()
-              },
-              update: {
-                participationStatus: CallParticipationStatus.INVITED,
-                invitedAt: new Date(),
-                joinedAt: null,
-                leftAt: null
-              }
-            })
-          );
-        await Promise.all(invitePromises);
+      },
+      create: {
+        callSessionId: currentSessionId,
+        userId: hostUser.id,
+        role: CallParticipantRole.HOST,
+        participationStatus: CallParticipationStatus.CONNECTED,
+        joinedAt: new Date()
+      },
+      update: {
+        role: CallParticipantRole.HOST,
+        participationStatus: CallParticipationStatus.CONNECTED,
+        joinedAt: new Date(),
+        leftAt: null
       }
+    });
+
+    // Register invited participants in DB
+    if (targetUserIds.length > 0) {
+      const invitePromises = targetUserIds
+        .filter((uid) => uid !== hostUser.id)
+        .map((uid) =>
+          prisma.callParticipant.upsert({
+            where: {
+              callSessionId_userId: {
+                callSessionId: currentSessionId,
+                userId: uid
+              }
+            },
+            create: {
+              callSessionId: currentSessionId,
+              userId: uid,
+              role: CallParticipantRole.PARTICIPANT,
+              participationStatus: CallParticipationStatus.INVITED,
+              invitedAt: new Date()
+            },
+            update: {
+              participationStatus: CallParticipationStatus.INVITED,
+              invitedAt: new Date(),
+              joinedAt: null,
+              leftAt: null
+            }
+          })
+        );
+      await Promise.all(invitePromises);
     }
 
     const newRoom: ConferenceRoom = {
       roomId,
-      callSessionId: session.id,
-      title: session.title || roomTitle,
-      callType: session.callType,
+      callSessionId: currentSessionId,
+      title: currentSession.title || roomTitle,
+      callType: currentSession.callType,
       hostId: hostUser.id,
       hostName: hostUser.name || 'Host Colleague',
       hostAvatar: hostUser.avatarUrl,
-      departmentId: session.departmentId || undefined,
+      departmentId: currentSession.departmentId || undefined,
       targetUserIds,
       activeParticipants: new Map(),
       invitedUserIds: new Set(targetUserIds),
-      startedAt: session.startedAt.getTime(),
+      startedAt: currentSession.startedAt.getTime(),
       status: 'ACTIVE'
     };
 
