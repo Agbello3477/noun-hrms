@@ -89,6 +89,11 @@ model User {
   applicationsSubmitted    OfficialApplication[] @relation("ApplicantApplications")
   applicationsAcknowledged OfficialApplication[] @relation("AcknowledgedApplications")
 
+  // Video Conferencing & Multi-Party Calls
+  hostedCalls              CallSession[]         @relation("CallHost")
+  callParticipations       CallParticipant[]     @relation("CallUser")
+  callNotifications        CallNotification[]    @relation("CallNotificationRecipient")
+
   @@map("users")
 }
 
@@ -1364,5 +1369,108 @@ model OfficialApplication {
   @@index([createdAt])
   @@map("official_applications")
 }
+
+enum CallType {
+  ONE_TO_ONE
+  GROUP_DEPARTMENT
+  EMERGENCY_DISPATCH
+  CLINIC_CONSULT
+}
+
+enum CallSessionStatus {
+  INITIATED
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum CallParticipationStatus {
+  INVITED
+  RINGING
+  CONNECTED
+  DECLINED
+  MISSED
+  LEFT
+}
+
+enum CallParticipantRole {
+  HOST
+  CO_HOST
+  PARTICIPANT
+}
+
+enum CallNotificationType {
+  CALL_IN_PROGRESS
+  MISSED_CALL_SUMMARY
+}
+
+model CallSession {
+  id              String             @id @default(uuid())
+  roomId          String             @unique
+  title           String?
+  callType        CallType           @default(GROUP_DEPARTMENT)
+  hostId          String
+  host            User               @relation("CallHost", fields: [hostId], references: [id], onDelete: Cascade)
+  departmentId    String?
+  channelId       String?
+  status          CallSessionStatus  @default(INITIATED)
+  startedAt       DateTime           @default(now())
+  endedAt         DateTime?
+  durationSeconds Int                @default(0)
+  metadata        Json?
+
+  participants    CallParticipant[]
+  notifications   CallNotification[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([roomId])
+  @@index([hostId])
+  @@index([status])
+  @@index([departmentId])
+  @@index([createdAt])
+  @@map("call_sessions")
+}
+
+model CallParticipant {
+  id                  String                  @id @default(uuid())
+  callSessionId       String
+  callSession         CallSession             @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User                    @relation("CallUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedAt           DateTime                @default(now())
+  joinedAt            DateTime?
+  leftAt              DateTime?
+  participationStatus CallParticipationStatus @default(INVITED)
+  role                CallParticipantRole     @default(PARTICIPANT)
+
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@unique([callSessionId, userId])
+  @@index([callSessionId])
+  @@index([userId])
+  @@index([participationStatus])
+  @@map("call_participants")
+}
+
+model CallNotification {
+  id            String               @id @default(uuid())
+  recipientId   String
+  recipient     User                 @relation("CallNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  callSessionId String
+  callSession   CallSession          @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  type          CallNotificationType @default(MISSED_CALL_SUMMARY)
+  metadata      Json?
+  isRead        Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+
+  @@index([recipientId])
+  @@index([callSessionId])
+  @@index([createdAt])
+  @@map("call_notifications")
+}
+
 
 

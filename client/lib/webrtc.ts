@@ -321,3 +321,485 @@ export class VoipPeerManager {
   }
 }
 
+export interface RemotePeerState {
+  userId: string;
+  socketId?: string;
+  userName: string;
+  userRole?: string;
+  avatarUrl?: string;
+  peerConnection: RTCPeerConnection;
+  stream: MediaStream;
+  isAudioMuted: boolean;
+  isVideoMuted: boolean;
+  isSpeaking: boolean;
+  audioLevel: number;
+}
+
+export interface MeshSignalPayload {
+  type: 'offer' | 'answer' | 'candidate';
+  targetUserId: string;
+  targetSocketId?: string;
+  senderUserId: string;
+  senderSocketId?: string;
+  data: any;
+  roomId: string;
+}
+
+export class MultiPeerMeshManager {
+  private localUserId: string;
+  private roomId: string;
+  private iceServers: IceServerConfig[];
+  private localStream: MediaStream | null = null;
+  private screenStream: MediaStream | null = null;
+  private peers: Map<string, RemotePeerState> = new Map();
+  private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
+  private makingOfferMap: Map<string, boolean> = new Map();
+  private ignoreOfferMap: Map<string, boolean> = new Map();
+  
+  // Audio Analysis for speaking activity detection
+  private audioContext: AudioContext | null = null;
+  private peerAnalysers: Map<string, { analyser: AnalyserNode; intervalId: any }> = new Map();
+
+  constructor(
+    localUserId: string,
+    roomId: string,
+    iceServers: IceServerConfig[] = DEFAULT_ICE_SERVERS,
+    private onSignal?: (signal: MeshSignalPayload) => void,
+    private onPeerStreamUpdated?: (peer: RemotePeerState) => void,
+    private onPeerDisconnected?: (userId: string) => void,
+    private onSpeakingChange?: (userId: string, isSpeaking: boolean, audioLevel: number) => void
+  ) {
+    this.localUserId = localUserId;
+    this.roomId = roomId;
+    this.iceServers = iceServers;
+  }
+
+  public async initLocalStream(video: boolean = true, audio: boolean = true): Promise<MediaStream> {
+    if (this.localStream && this.localStream.active) {
+      return this.localStream;
+    }
+
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        audio: audio ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false,
+        video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false
+      });
+      return this.localStream;
+    } catch (err) {
+      console.warn('[MultiPeerMesh] Video camera failed, falling back to audio-only:', err);
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      });
+      return this.localStream;
+    }
+  }
+
+  public getLocalStream(): MediaStream | null {
+    return this.localStream;
+  }
+
+  public getPeers(): RemotePeerState[] {
+    return Array.from(this.peers.values());
+  }
+
+  public getPeer(userId: string): RemotePeerState | undefined {
+    return this.peers.get(userId);
+  }
+
+  private isPolite(remoteUserId: string): boolean {
+    // Polite peer pattern: lexicographically greater userId is polite
+    return this.localUserId > remoteUserId;
+  }
+
+  public async addPeer(
+    peerInfo: { userId: string; socketId?: string; userName?: string; userRole?: string; avatarUrl?: string },
+    isInitiator: boolean = false
+  ): Promise<RTCPeerConnection> {
+    const remoteUid = peerInfo.userId;
+    if (this.peers.has(remoteUid)) {
+      return this.peers.get(remoteUid)!.peerConnection;
+    }
+
+    const validIceServers = this.iceServers.length > 0 ? this.iceServers : DEFAULT_ICE_SERVERS;
+    const pc = new RTCPeerConnection({
+      iceServers: validIceServers,
+      iceCandidatePoolSize: 10
+    });
+
+    const remoteStream = new MediaStream();
+    const peerState: RemotePeerState = {
+      userId: remoteUid,
+      socketId: peerInfo.socketId,
+      userName: peerInfo.userName || 'Colleague',
+      userRole: peerInfo.userRole || 'Staff',
+      avatarUrl: peerInfo.avatarUrl,
+      peerConnection: pc,
+      stream: remoteStream,
+      isAudioMuted: false,
+      isVideoMuted: false,
+      isSpeaking: false,
+      audioLevel: 0
+    };
+
+    this.peers.set(remoteUid, peerState);
+    this.makingOfferMap.set(remoteUid, false);
+    this.ignoreOfferMap.set(remoteUid, false);
+
+    // Attach local tracks if available
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, this.localStream!);
+      });
+    }
+
+    // ICE Candidate Relay
+    pc.onicecandidate = (event) => {
+      if (event.candidate && this.onSignal) {
+        this.onSignal({
+          type: 'candidate',
+          targetUserId: remoteUid,
+          targetSocketId: peerInfo.socketId,
+          senderUserId: this.localUserId,
+          data: event.candidate,
+          roomId: this.roomId
+        });
+      }
+    };
+
+    // Remote Track Handling
+    pc.ontrack = (event) => {
+      console.log(`[MultiPeerMesh] Received remote track from ${remoteUid}:`, event.track.kind);
+      if (event.streams && event.streams[0]) {
+        peerState.stream = event.streams[0];
+      } else {
+        peerState.stream.addTrack(event.track);
+      }
+
+      if (event.track.kind === 'audio') {
+        this.setupAudioAnalysis(remoteUid, peerState.stream);
+      }
+
+      if (this.onPeerStreamUpdated) {
+        this.onPeerStreamUpdated(peerState);
+      }
+
+      event.track.onunmute = () => {
+        if (this.onPeerStreamUpdated) {
+          this.onPeerStreamUpdated(peerState);
+        }
+      };
+    };
+
+    // Negotiation Needed
+    pc.onnegotiationneeded = async () => {
+      try {
+        this.makingOfferMap.set(remoteUid, true);
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== 'stable') return;
+        await pc.setLocalDescription(offer);
+
+        if (this.onSignal) {
+          this.onSignal({
+            type: 'offer',
+            targetUserId: remoteUid,
+            targetSocketId: peerInfo.socketId,
+            senderUserId: this.localUserId,
+            data: pc.localDescription,
+            roomId: this.roomId
+          });
+        }
+      } catch (err) {
+        console.error(`[MultiPeerMesh] Negotiation error with ${remoteUid}:`, err);
+      } finally {
+        this.makingOfferMap.set(remoteUid, false);
+      }
+    };
+
+    // Connection state monitoring
+    pc.onconnectionstatechange = () => {
+      console.log(`[MultiPeerMesh] Connection with ${remoteUid} state:`, pc.connectionState);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this.removePeer(remoteUid);
+      }
+    };
+
+    // If initiator, trigger offer creation
+    if (isInitiator) {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        if (this.onSignal) {
+          this.onSignal({
+            type: 'offer',
+            targetUserId: remoteUid,
+            targetSocketId: peerInfo.socketId,
+            senderUserId: this.localUserId,
+            data: pc.localDescription,
+            roomId: this.roomId
+          });
+        }
+      } catch (err) {
+        console.error(`[MultiPeerMesh] Initial offer error with ${remoteUid}:`, err);
+      }
+    }
+
+    // Flush any queued candidates
+    const queued = this.pendingCandidates.get(remoteUid) || [];
+    if (queued.length > 0) {
+      queued.forEach(async (cand) => {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (e) {}
+      });
+      this.pendingCandidates.delete(remoteUid);
+    }
+
+    return pc;
+  }
+
+  public async handleRemoteOffer(
+    senderUserId: string,
+    offer: RTCSessionDescriptionInit,
+    senderSocketId?: string,
+    senderInfo?: { name?: string; role?: string; avatarUrl?: string }
+  ): Promise<void> {
+    let peerState = this.peers.get(senderUserId);
+    if (!peerState) {
+      await this.addPeer({
+        userId: senderUserId,
+        socketId: senderSocketId,
+        userName: senderInfo?.name,
+        userRole: senderInfo?.role,
+        avatarUrl: senderInfo?.avatarUrl
+      }, false);
+      peerState = this.peers.get(senderUserId);
+    }
+
+    if (!peerState) return;
+    const pc = peerState.peerConnection;
+    const polite = this.isPolite(senderUserId);
+    const readyForOffer = !this.makingOfferMap.get(senderUserId) && (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer');
+    const offerCollision = !readyForOffer;
+
+    this.ignoreOfferMap.set(senderUserId, !polite && offerCollision);
+    if (this.ignoreOfferMap.get(senderUserId)) {
+      console.warn(`[MultiPeerMesh] Glare detected. Impolite peer ignoring offer from ${senderUserId}`);
+      return;
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      if (this.onSignal) {
+        this.onSignal({
+          type: 'answer',
+          targetUserId: senderUserId,
+          targetSocketId: senderSocketId || peerState.socketId,
+          senderUserId: this.localUserId,
+          data: pc.localDescription,
+          roomId: this.roomId
+        });
+      }
+    } catch (err) {
+      console.error(`[MultiPeerMesh] Error handling offer from ${senderUserId}:`, err);
+    }
+  }
+
+  public async handleRemoteAnswer(senderUserId: string, answer: RTCSessionDescriptionInit): Promise<void> {
+    const peerState = this.peers.get(senderUserId);
+    if (!peerState) return;
+
+    try {
+      if (peerState.peerConnection.signalingState === 'have-local-offer') {
+        await peerState.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    } catch (err) {
+      console.error(`[MultiPeerMesh] Error setting remote answer from ${senderUserId}:`, err);
+    }
+  }
+
+  public async handleRemoteCandidate(senderUserId: string, candidate: RTCIceCandidateInit): Promise<void> {
+    if (!candidate || !candidate.candidate) return;
+    const peerState = this.peers.get(senderUserId);
+
+    if (peerState && peerState.peerConnection.remoteDescription) {
+      try {
+        await peerState.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        if (!this.ignoreOfferMap.get(senderUserId)) {
+          console.warn(`[MultiPeerMesh] Error adding ICE candidate from ${senderUserId}:`, err);
+        }
+      }
+    } else {
+      const list = this.pendingCandidates.get(senderUserId) || [];
+      list.push(candidate);
+      this.pendingCandidates.set(senderUserId, list);
+    }
+  }
+
+  private setupAudioAnalysis(userId: string, stream: MediaStream): void {
+    try {
+      if (typeof window === 'undefined') return;
+      if (!this.audioContext) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        this.audioContext = new AudioCtx();
+      }
+
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) return;
+
+      const source = this.audioContext.createMediaStreamSource(stream);
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let wasSpeaking = false;
+
+      const intervalId = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        const isSpeaking = avg > 15;
+
+        const peer = this.peers.get(userId);
+        if (peer) {
+          peer.audioLevel = avg;
+          peer.isSpeaking = isSpeaking;
+        }
+
+        if (isSpeaking !== wasSpeaking) {
+          wasSpeaking = isSpeaking;
+          if (this.onSpeakingChange) {
+            this.onSpeakingChange(userId, isSpeaking, avg);
+          }
+        }
+      }, 150);
+
+      this.peerAnalysers.set(userId, { analyser, intervalId });
+    } catch (e) {
+      console.warn('[MultiPeerMesh] Web Audio analysis not supported:', e);
+    }
+  }
+
+  public removePeer(userId: string): void {
+    const peer = this.peers.get(userId);
+    if (peer) {
+      stopMediaStreamTracks(peer.stream);
+      peer.peerConnection.close();
+      this.peers.delete(userId);
+    }
+
+    const analyserData = this.peerAnalysers.get(userId);
+    if (analyserData) {
+      clearInterval(analyserData.intervalId);
+      this.peerAnalysers.delete(userId);
+    }
+
+    this.pendingCandidates.delete(userId);
+    this.makingOfferMap.delete(userId);
+    this.ignoreOfferMap.delete(userId);
+
+    if (this.onPeerDisconnected) {
+      this.onPeerDisconnected(userId);
+    }
+  }
+
+  public setAudioMuted(muted: boolean): void {
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !muted;
+      });
+    }
+  }
+
+  public setVideoMuted(muted: boolean): void {
+    if (this.localStream) {
+      this.localStream.getVideoTracks().forEach((track) => {
+        track.enabled = !muted;
+      });
+    }
+  }
+
+  public async startScreenShare(): Promise<MediaStream | null> {
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false
+      });
+      this.screenStream = screenStream;
+
+      const screenTrack = screenStream.getVideoTracks()[0];
+      // Replace video track on all peer connections
+      this.peers.forEach((peer) => {
+        const senders = peer.peerConnection.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          videoSender.replaceTrack(screenTrack);
+        }
+      });
+
+      screenTrack.onended = () => {
+        this.stopScreenShare();
+      };
+
+      return screenStream;
+    } catch (err) {
+      console.error('[MultiPeerMesh] Screen share error:', err);
+      return null;
+    }
+  }
+
+  public stopScreenShare(): void {
+    if (this.screenStream) {
+      stopMediaStreamTracks(this.screenStream);
+      this.screenStream = null;
+
+      // Restore camera video track
+      if (this.localStream) {
+        const cameraTrack = this.localStream.getVideoTracks()[0];
+        if (cameraTrack) {
+          this.peers.forEach((peer) => {
+            const senders = peer.peerConnection.getSenders();
+            const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+            if (videoSender) {
+              videoSender.replaceTrack(cameraTrack);
+            }
+          });
+        }
+      }
+    }
+  }
+
+  public cleanup(): void {
+    stopMediaStreamTracks(this.localStream);
+    stopMediaStreamTracks(this.screenStream);
+
+    Array.from(this.peers.keys()).forEach((userId) => {
+      this.removePeer(userId);
+    });
+
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
+
+    this.peers.clear();
+    this.peerAnalysers.clear();
+    this.pendingCandidates.clear();
+    this.localStream = null;
+    this.screenStream = null;
+  }
+}
+
+

@@ -34,6 +34,36 @@ export interface IncomingVoipCallData {
   sdpOffer: any;
 }
 
+export interface ActiveConferenceParticipant {
+  userId: string;
+  userName: string;
+  userRole?: string;
+  avatarUrl?: string;
+}
+
+export interface ActiveConferenceRoomData {
+  roomId: string;
+  callSessionId?: string;
+  title: string;
+  callType?: string;
+  hostId: string;
+  hostName: string;
+  hostAvatar?: string | null;
+  activeCount: number;
+  activeParticipants: ActiveConferenceParticipant[];
+  startedAt: number;
+  durationSeconds?: number;
+}
+
+export interface MissedMeetingData {
+  roomId: string;
+  roomTitle: string;
+  hostName: string;
+  durationFormatted: string;
+  attendeeNames: string[];
+  missedAt: string;
+}
+
 interface SocketContextValue {
   socket: Socket | null;
   isConnected: boolean;
@@ -42,12 +72,15 @@ interface SocketContextValue {
   incomingVideoCall: IncomingVideoCallData | null;
   incomingVoipCall: IncomingVoipCallData | null;
   acceptedVoipCall: IncomingVoipCallData | null;
-  activeVideoModal: { isOpen: boolean; roomName: string; title: string } | null;
+  activeVideoModal: { isOpen: boolean; roomName: string; title: string; isLateJoin?: boolean } | null;
   isVoipDialerOpen: boolean;
   initialDialerExtension: string;
   missedCalls: MissedCallData[];
   newMissedCount: number;
   latestVoicemail: VoicemailNotificationData | null;
+  activeConferenceRooms: ActiveConferenceRoomData[];
+  missedMeetingNotifications: MissedMeetingData[];
+  liveMeetingAuditToast: MissedMeetingData | null;
   registerExtension: (ext: string) => void;
   openVoipDialer: (ext?: string) => void;
   closeVoipDialer: () => void;
@@ -63,7 +96,10 @@ interface SocketContextValue {
     targetUserIds?: string[];
     module?: string;
     targetId?: string;
+    callType?: string;
   }) => void;
+  joinActiveCallRoom: (roomId: string, title?: string) => void;
+  dismissMissedMeetingToast: () => void;
   clearNewMissedCount: () => void;
   registerActiveVoipPeer: (peer: any, callId: string) => void;
   unregisterActiveVoipPeer: () => void;
@@ -83,14 +119,20 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [incomingVoipCall, setIncomingVoipCall] = useState<IncomingVoipCallData | null>(null);
   const [acceptedVoipCall, setAcceptedVoipCall] = useState<IncomingVoipCallData | null>(null);
   
-  // Active Modals
+  // Active Modals & Video Conferencing
   const [activeVideoModal, setActiveVideoModal] = useState<{
     isOpen: boolean;
     roomName: string;
     title: string;
+    isLateJoin?: boolean;
   } | null>(null);
   const [isVoipDialerOpen, setIsVoipDialerOpen] = useState(false);
   const [initialDialerExtension, setInitialDialerExtension] = useState('');
+
+  // Enterprise Multi-Party Video & Late-Join HUD State
+  const [activeConferenceRooms, setActiveConferenceRooms] = useState<ActiveConferenceRoomData[]>([]);
+  const [missedMeetingNotifications, setMissedMeetingNotifications] = useState<MissedMeetingData[]>([]);
+  const [liveMeetingAuditToast, setLiveMeetingAuditToast] = useState<MissedMeetingData | null>(null);
 
   // Notifications
   const [missedCalls, setMissedCalls] = useState<MissedCallData[]>([]);
@@ -116,6 +158,19 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } catch (err) {
       console.warn('[SocketContext] Could not load user extension:', err);
+    }
+  }, [user]);
+
+  // Fetch initial active rooms on mount
+  const fetchInitialActiveRooms = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data } = await api.get('/api/voip/active-rooms');
+      if (data?.rooms && Array.isArray(data.rooms)) {
+        setActiveConferenceRooms(data.rooms);
+      }
+    } catch (err) {
+      console.warn('[SocketContext] Could not load initial active conference rooms:', err);
     }
   }, [user]);
 
@@ -163,6 +218,12 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
           setOnlineExtensions(new Set(exts));
         }
       });
+
+      instance.emit('GET_ACTIVE_ROOMS', (rooms: ActiveConferenceRoomData[]) => {
+        if (Array.isArray(rooms)) {
+          setActiveConferenceRooms(rooms);
+        }
+      });
     });
 
     instance.on('disconnect', () => {
@@ -170,7 +231,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       setIsConnected(false);
     });
 
-    // Real-time WhatsApp-Style Video Signaling
+    // ─── Real-Time Video Conference Signaling & Dynamic Late-Join ───────────
     instance.on('VIDEO_CALL_INCOMING', (callData: IncomingVideoCallData) => {
       console.log('[SocketContext] Received incoming video call alert:', callData);
       if (callData.callerUserId !== user.id) {
@@ -179,10 +240,37 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     instance.on('VIDEO_CALL_ENDED', (data: { roomName: string }) => {
-      setIncomingVideoCall((prev: IncomingVideoCallData | null) => (prev?.roomName === data?.roomName ? null : prev));
+      setIncomingVideoCall((prev) => (prev?.roomName === data?.roomName ? null : prev));
     });
 
-    // Real-time VoIP Call Signaling (Voice Intercom)
+    // Persistent "Call in Progress" Broadcast Event
+    instance.on('ROOM_CALL_IN_PROGRESS', (roomData: ActiveConferenceRoomData) => {
+      console.log('[SocketContext] Received ROOM_CALL_IN_PROGRESS update:', roomData);
+      setActiveConferenceRooms((prev) => {
+        const filtered = prev.filter((r) => r.roomId !== roomData.roomId);
+        if (roomData.activeCount > 0) {
+          return [roomData, ...filtered];
+        }
+        return filtered;
+      });
+    });
+
+    // Room Ended Broadcast Event
+    instance.on('ROOM_CALL_ENDED', (data: { roomId: string; durationFormatted?: string; attendeeNames?: string[] }) => {
+      console.log('[SocketContext] Received ROOM_CALL_ENDED event:', data);
+      setActiveConferenceRooms((prev) => prev.filter((r) => r.roomId !== data.roomId));
+      setIncomingVideoCall((prev) => (prev?.roomName === data?.roomId ? null : prev));
+    });
+
+    // Post-Call Missed Session Audit Notification
+    instance.on('CALL_MISSED_SUMMARY', (missedData: MissedMeetingData) => {
+      console.log('[SocketContext] Received post-call missed meeting summary:', missedData);
+      setMissedMeetingNotifications((prev) => [missedData, ...prev]);
+      setLiveMeetingAuditToast(missedData);
+      setNewMissedCount((prev) => prev + 1);
+    });
+
+    // ─── Real-Time VoIP 1-to-1 Voice Call Signaling ──────────────────────────
     instance.on('INCOMING_CALL', (data: IncomingVoipCallData) => {
       console.log('[SocketContext] Received incoming VoIP call alert:', data);
       setIncomingVoipCall(data);
@@ -200,9 +288,8 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       setIncomingVoipCall(null);
     });
 
-    // Global ICE Candidate Relay Listener (Buffered if peer is not yet created)
+    // Global ICE Candidate Relay Listener
     instance.on('ICE_CANDIDATE', (data: { candidate: any; callId?: string }) => {
-      console.log('[SocketContext] Received ICE candidate from peer for callId:', data?.callId);
       if (data?.candidate) {
         if (activePeerManagerRef.current && (!data.callId || activePeerManagerRef.current.callId === data.callId)) {
           activePeerManagerRef.current.peer.addIceCandidate(data.candidate);
@@ -229,11 +316,12 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     fetchExtension();
+    fetchInitialActiveRooms();
 
     return () => {
       // Keep socket alive across Next.js route transitions
     };
-  }, [user, fetchExtension]);
+  }, [user, fetchExtension, fetchInitialActiveRooms]);
 
   const registerExtension = useCallback((ext: string) => {
     myExtRef.current = ext;
@@ -277,6 +365,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const acceptVideoCall = useCallback((callData: IncomingVideoCallData) => {
     if (socketRef.current) {
       socketRef.current.emit('VIDEO_CALL_ACCEPTED', { roomName: callData.roomName });
+      socketRef.current.emit('JOIN_ACTIVE_ROOM', { roomId: callData.roomName });
     }
     setIncomingVideoCall(null);
     setActiveVideoModal({
@@ -299,6 +388,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   const closeActiveVideoModal = useCallback(() => {
     if (activeVideoModal && socketRef.current) {
+      socketRef.current.emit('LEAVE_ACTIVE_ROOM', { roomId: activeVideoModal.roomName });
       socketRef.current.emit('VIDEO_CALL_ENDED', { roomName: activeVideoModal.roomName });
     }
     setActiveVideoModal(null);
@@ -310,12 +400,14 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     targetUserIds?: string[];
     module?: string;
     targetId?: string;
+    callType?: string;
   }) => {
     if (!socketRef.current || !user) return;
     const title = params.title || 'Video Collaboration Call';
     socketRef.current.emit('VIDEO_CALL_INITIATE', {
       roomName: params.roomName,
       title,
+      callType: params.callType || (params.targetUserIds && params.targetUserIds.length > 1 ? 'GROUP_DEPARTMENT' : 'ONE_TO_ONE'),
       callerName: user.name || (user.email ? user.email.split('@')[0] : 'Colleague'),
       callerRole: user.role || 'Staff',
       callerAvatar: (user as any).staffProfile?.passportUrl || null,
@@ -330,6 +422,22 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     });
   }, [user]);
 
+  // Join an existing active conference room in-progress (Late-Join)
+  const joinActiveCallRoom = useCallback((roomId: string, title?: string) => {
+    if (!socketRef.current || !user) return;
+    socketRef.current.emit('JOIN_ACTIVE_ROOM', { roomId });
+    setActiveVideoModal({
+      isOpen: true,
+      roomName: roomId,
+      title: title || 'Live Video Conference Meeting',
+      isLateJoin: true
+    });
+  }, [user]);
+
+  const dismissMissedMeetingToast = useCallback(() => {
+    setLiveMeetingAuditToast(null);
+  }, []);
+
   const clearNewMissedCount = useCallback(() => {
     setNewMissedCount(0);
   }, []);
@@ -338,7 +446,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     console.log('[SocketContext] Registering active VoIP peer for callId:', callId);
     activePeerManagerRef.current = { peer, callId };
 
-    // Flush any early buffered ICE candidates for this call
     const candidates = [
       ...(queuedIceCandidatesRef.current.get(callId) || []),
       ...(queuedIceCandidatesRef.current.get('default') || [])
@@ -375,6 +482,9 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         missedCalls,
         newMissedCount,
         latestVoicemail,
+        activeConferenceRooms,
+        missedMeetingNotifications,
+        liveMeetingAuditToast,
         registerExtension,
         openVoipDialer,
         closeVoipDialer,
@@ -385,6 +495,8 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         declineVideoCall,
         closeActiveVideoModal,
         startVideoCall,
+        joinActiveCallRoom,
+        dismissMissedMeetingToast,
         clearNewMissedCount,
         registerActiveVoipPeer,
         unregisterActiveVoipPeer

@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import prisma from '../prisma';
+import conferenceRoomManager, { ConferenceParticipant } from '../services/conferenceRoomManager';
 
 interface ActiveCallSession {
   callId: string;
@@ -286,10 +287,17 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       }
     });
 
-    // ─── Real-Time WhatsApp-Style Video Conference Signaling ───────────────────
+    // ─── Real-Time Enterprise Multi-Party Video Conference Signaling ─────────
+    socket.on('GET_ACTIVE_ROOMS', (callback: (rooms: any[]) => void) => {
+      if (typeof callback === 'function') {
+        callback(conferenceRoomManager.getActiveRooms());
+      }
+    });
+
     socket.on('VIDEO_CALL_INITIATE', async (payload: {
       roomName: string;
       title?: string;
+      callType?: string;
       callerName?: string;
       callerRole?: string;
       callerAvatar?: string;
@@ -297,22 +305,49 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       module?: string;
       targetId?: string;
     }) => {
-      const { roomName, title, callerName, callerRole, callerAvatar, targetUserIds, module, targetId } = payload;
+      const { roomName, title, callType, callerName, callerRole, callerAvatar, targetUserIds = [], module, targetId } = payload;
+      const roomId = roomName;
+
+      // Create or get room in conferenceRoomManager
+      const room = await conferenceRoomManager.createOrGetRoom({
+        roomId,
+        title: title || 'Video Conference Meeting',
+        callType: callType || (targetUserIds.length > 1 ? 'GROUP_DEPARTMENT' : 'ONE_TO_ONE'),
+        hostUser: {
+          id: user.id,
+          name: callerName || user.name || 'Staff Colleague',
+          role: callerRole || user.role || 'Staff',
+          avatarUrl: callerAvatar || undefined
+        },
+        targetUserIds
+      });
+
+      // Host joins socket room
+      socket.join(`video_room_${roomId}`);
+      await conferenceRoomManager.joinRoom(roomId, {
+        id: user.id,
+        name: callerName || user.name || 'Staff Colleague',
+        role: callerRole || user.role || 'Staff',
+        avatarUrl: callerAvatar || undefined
+      }, socket.id);
+
       const callerInfo = {
         callerUserId: user.id,
         callerName: callerName || user.name || 'Staff Colleague',
         callerRole: callerRole || user.role || 'Academic Staff',
         callerAvatar: callerAvatar || null,
-        roomName,
-        title: title || 'Video Conference Meeting',
+        roomName: roomId,
+        roomId,
+        callSessionId: room.callSessionId,
+        title: room.title,
         module: module || 'research',
         targetId: targetId || null,
         timestamp: new Date().toISOString()
       };
 
-      console.log(`[Video Call Signaling] ${callerInfo.callerName} initiated video call in room ${roomName}`);
+      console.log(`[Video Call Signaling] ${callerInfo.callerName} initiated video room ${roomId} (Session: ${room.callSessionId})`);
 
-      // 1. Emit to all targeted user socket rooms
+      // 1. Emit to all targeted user personal socket rooms
       if (Array.isArray(targetUserIds) && targetUserIds.length > 0) {
         targetUserIds.forEach((targetUid) => {
           if (targetUid !== user.id) {
@@ -328,6 +363,207 @@ export const setupVoipSocket = (io: SocketIOServer) => {
 
       // 3. Global broadcast to all connected dashboard peers (excluding caller)
       socket.broadcast.emit('VIDEO_CALL_INCOMING', callerInfo);
+
+      // 4. Broadcast live "Call in Progress" HUD update to all connected users
+      io.emit('ROOM_CALL_IN_PROGRESS', {
+        roomId,
+        callSessionId: room.callSessionId,
+        title: room.title,
+        hostId: user.id,
+        hostName: callerInfo.callerName,
+        hostAvatar: callerAvatar || null,
+        activeCount: room.activeParticipants.size,
+        activeParticipants: Array.from(room.activeParticipants.values()).map((p: ConferenceParticipant) => ({
+          userId: p.userId,
+          userName: p.userName,
+          userRole: p.userRole,
+          avatarUrl: p.avatarUrl
+        })),
+        startedAt: room.startedAt
+      });
+    });
+
+    // Dynamic Late-Join: Join an active video room in-progress
+    socket.on('JOIN_ACTIVE_ROOM', async (data: { roomId: string; roomName?: string }) => {
+      const roomId = data.roomId || data.roomName;
+      if (!roomId) return;
+
+      socket.join(`video_room_${roomId}`);
+
+      const { room, isLateJoin, participant } = await conferenceRoomManager.joinRoom(
+        roomId,
+        {
+          id: user.id,
+          name: user.name || 'Staff Colleague',
+          role: user.role || 'Staff',
+          avatarUrl: (user as any).staffProfile?.passportUrl
+        },
+        socket.id
+      );
+
+      console.log(`[Video Call Signaling] User ${user.id} (${user.name}) ${isLateJoin ? 'LATE-JOINED' : 'joined'} room ${roomId}`);
+
+      // Respond to joining socket with room state & existing active peers
+      socket.emit('ROOM_JOIN_SUCCESS', {
+        roomId,
+        callSessionId: room.callSessionId,
+        title: room.title,
+        hostId: room.hostId,
+        hostName: room.hostName,
+        participants: Array.from(room.activeParticipants.values()),
+        activeCount: room.activeParticipants.size
+      });
+
+      // Notify existing peers in room that a new peer joined
+      socket.to(`video_room_${roomId}`).emit('PEER_JOINED_ROOM', {
+        roomId,
+        participant,
+        isLateJoin,
+        activeCount: room.activeParticipants.size
+      });
+
+      // Broadcast updated banner HUD state to all connected dashboard clients
+      io.emit('ROOM_CALL_IN_PROGRESS', {
+        roomId,
+        callSessionId: room.callSessionId,
+        title: room.title,
+        hostId: room.hostId,
+        hostName: room.hostName,
+        hostAvatar: room.hostAvatar,
+        activeCount: room.activeParticipants.size,
+        activeParticipants: Array.from(room.activeParticipants.values()).map((p: ConferenceParticipant) => ({
+          userId: p.userId,
+          userName: p.userName,
+          userRole: p.userRole,
+          avatarUrl: p.avatarUrl
+        })),
+        startedAt: room.startedAt
+      });
+    });
+
+    // Leave active room
+    socket.on('LEAVE_ACTIVE_ROOM', async (data: { roomId: string; roomName?: string }) => {
+      const roomId = data.roomId || data.roomName;
+      if (!roomId) return;
+
+      socket.leave(`video_room_${roomId}`);
+      const { room, wasLastParticipant, leftParticipant } = await conferenceRoomManager.leaveRoom(roomId, user.id);
+
+      console.log(`[Video Call Signaling] User ${user.id} (${user.name}) left room ${roomId}. Remaining: ${room?.activeParticipants.size || 0}`);
+
+      if (leftParticipant) {
+        socket.to(`video_room_${roomId}`).emit('PEER_LEFT_ROOM', {
+          roomId,
+          userId: user.id,
+          userName: user.name || 'Staff Colleague',
+          activeCount: room?.activeParticipants.size || 0
+        });
+      }
+
+      if (wasLastParticipant) {
+        const auditResult = await conferenceRoomManager.endRoom(roomId, user.id);
+        if (auditResult) {
+          console.log(`[Video Call Audit] Room ${roomId} terminated. Duration: ${auditResult.durationFormatted}. Missed: ${auditResult.missedUserIds.length}`);
+          
+          io.emit('ROOM_CALL_ENDED', {
+            roomId,
+            durationFormatted: auditResult.durationFormatted,
+            attendeeNames: auditResult.attendeeNames
+          });
+
+          // Dispatch real-time notification events to missed participants
+          auditResult.missedUserIds.forEach((mUid: string) => {
+            io.to(`voip_user_${mUid}`).emit('CALL_MISSED_SUMMARY', {
+              roomId,
+              roomTitle: auditResult.roomTitle,
+              hostName: auditResult.hostName,
+              durationFormatted: auditResult.durationFormatted,
+              attendeeNames: auditResult.attendeeNames,
+              missedAt: new Date().toISOString()
+            });
+          });
+        }
+      } else if (room) {
+        io.emit('ROOM_CALL_IN_PROGRESS', {
+          roomId,
+          callSessionId: room.callSessionId,
+          title: room.title,
+          hostId: room.hostId,
+          hostName: room.hostName,
+          hostAvatar: room.hostAvatar,
+          activeCount: room.activeParticipants.size,
+          activeParticipants: Array.from(room.activeParticipants.values()).map((p: ConferenceParticipant) => ({
+            userId: p.userId,
+            userName: p.userName,
+            userRole: p.userRole,
+            avatarUrl: p.avatarUrl
+          })),
+          startedAt: room.startedAt
+        });
+      }
+    });
+
+    // Multi-Peer WebRTC Mesh Signaling Relays
+    socket.on('ROOM_SIGNAL_OFFER', (data: {
+      roomId: string;
+      targetUserId: string;
+      targetSocketId?: string;
+      sdpOffer: any;
+    }) => {
+      const payload = {
+        roomId: data.roomId,
+        sdpOffer: data.sdpOffer,
+        senderUserId: user.id,
+        senderSocketId: socket.id,
+        senderName: user.name || 'Staff Colleague',
+        senderRole: user.role || 'Staff'
+      };
+
+      if (data.targetSocketId) {
+        io.to(data.targetSocketId).emit('ROOM_SIGNAL_OFFER', payload);
+      } else {
+        io.to(`voip_user_${data.targetUserId}`).emit('ROOM_SIGNAL_OFFER', payload);
+      }
+    });
+
+    socket.on('ROOM_SIGNAL_ANSWER', (data: {
+      roomId: string;
+      targetUserId: string;
+      targetSocketId?: string;
+      sdpAnswer: any;
+    }) => {
+      const payload = {
+        roomId: data.roomId,
+        sdpAnswer: data.sdpAnswer,
+        senderUserId: user.id,
+        senderSocketId: socket.id
+      };
+
+      if (data.targetSocketId) {
+        io.to(data.targetSocketId).emit('ROOM_SIGNAL_ANSWER', payload);
+      } else {
+        io.to(`voip_user_${data.targetUserId}`).emit('ROOM_SIGNAL_ANSWER', payload);
+      }
+    });
+
+    socket.on('ROOM_SIGNAL_ICE_CANDIDATE', (data: {
+      roomId: string;
+      targetUserId: string;
+      targetSocketId?: string;
+      candidate: any;
+    }) => {
+      const payload = {
+        roomId: data.roomId,
+        candidate: data.candidate,
+        senderUserId: user.id,
+        senderSocketId: socket.id
+      };
+
+      if (data.targetSocketId) {
+        io.to(data.targetSocketId).emit('ROOM_SIGNAL_ICE_CANDIDATE', payload);
+      } else {
+        io.to(`voip_user_${data.targetUserId}`).emit('ROOM_SIGNAL_ICE_CANDIDATE', payload);
+      }
     });
 
     socket.on('VIDEO_CALL_ACCEPTED', (data: { roomName: string }) => {
@@ -351,11 +587,41 @@ export const setupVoipSocket = (io: SocketIOServer) => {
     });
 
     socket.on('VIDEO_CALL_ENDED', async (data: { roomName: string; targetUserIds?: string[]; title?: string; callerName?: string }) => {
-      console.log(`[Video Call Signaling] Video call ended in room ${data?.roomName}`);
+      const roomId = data?.roomName;
+      console.log(`[Video Call Signaling] Video call explicitly ended for room ${roomId} by user ${user.id}`);
+      
+      const auditResult = await conferenceRoomManager.endRoom(roomId, user.id);
+
+      io.to(`video_room_${roomId}`).emit('ROOM_TERMINATED', {
+        roomId,
+        reason: 'Meeting ended by host',
+        durationFormatted: auditResult?.durationFormatted || '0 secs',
+        attendeeNames: auditResult?.attendeeNames || []
+      });
+
       socket.broadcast.emit('VIDEO_CALL_ENDED', {
-        roomName: data?.roomName,
+        roomName: roomId,
         userId: user.id
       });
+
+      io.emit('ROOM_CALL_ENDED', {
+        roomId,
+        durationFormatted: auditResult?.durationFormatted || '0 secs',
+        attendeeNames: auditResult?.attendeeNames || []
+      });
+
+      if (auditResult && auditResult.missedUserIds.length > 0) {
+        auditResult.missedUserIds.forEach((mUid: string) => {
+          io.to(`voip_user_${mUid}`).emit('CALL_MISSED_SUMMARY', {
+            roomId,
+            roomTitle: auditResult.roomTitle,
+            hostName: auditResult.hostName,
+            durationFormatted: auditResult.durationFormatted,
+            attendeeNames: auditResult.attendeeNames,
+            missedAt: new Date().toISOString()
+          });
+        });
+      }
     });
 
     // ─── Real-Time Voicemail Notification Relay ─────────────────────────────────
@@ -392,7 +658,8 @@ export const setupVoipSocket = (io: SocketIOServer) => {
       });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
+      // Clean up 1-to-1 VoIP call if active
       const activeCallId = userActiveCall.get(user.id);
       if (activeCallId) {
         const session = activeCalls.get(activeCallId);
@@ -403,6 +670,43 @@ export const setupVoipSocket = (io: SocketIOServer) => {
           activeCalls.delete(activeCallId);
         }
         userActiveCall.delete(user.id);
+      }
+
+      // Clean up any conference rooms user was participating in
+      try {
+        const leftRooms = await conferenceRoomManager.handleSocketDisconnect(socket.id, user.id);
+        for (const lr of leftRooms) {
+          socket.to(`video_room_${lr.roomId}`).emit('PEER_LEFT_ROOM', {
+            roomId: lr.roomId,
+            userId: user.id,
+            userName: user.name || 'Staff Colleague',
+            activeCount: lr.wasLastParticipant ? 0 : 1
+          });
+
+          if (lr.wasLastParticipant) {
+            const auditResult = await conferenceRoomManager.endRoom(lr.roomId, user.id);
+            if (auditResult) {
+              io.emit('ROOM_CALL_ENDED', {
+                roomId: lr.roomId,
+                durationFormatted: auditResult.durationFormatted,
+                attendeeNames: auditResult.attendeeNames
+              });
+
+              auditResult.missedUserIds.forEach((mUid: string) => {
+                io.to(`voip_user_${mUid}`).emit('CALL_MISSED_SUMMARY', {
+                  roomId: lr.roomId,
+                  roomTitle: auditResult.roomTitle,
+                  hostName: auditResult.hostName,
+                  durationFormatted: auditResult.durationFormatted,
+                  attendeeNames: auditResult.attendeeNames,
+                  missedAt: new Date().toISOString()
+                });
+              });
+            }
+          }
+        }
+      } catch (discErr) {
+        console.error('[VoIP Socket] Error handling conference disconnect:', discErr);
       }
     });
   });

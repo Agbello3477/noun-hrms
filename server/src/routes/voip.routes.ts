@@ -8,7 +8,10 @@ import {
   saveVoicemail,
   getVoicemails,
   markVoicemailListened,
-  deleteVoicemail
+  deleteVoicemail,
+  getActiveConferenceRooms,
+  getCallNotifications,
+  getCallHistory
 } from '../controllers/voip.controller';
 import multer from 'multer';
 import path from 'path';
@@ -43,6 +46,11 @@ router.get('/directory', getVoipDirectory);
 router.get('/lookup/:extension', lookupExtension);
 router.get('/ice-servers', getIceServers);
 router.get('/v1/webrtc/ice-servers', getIceServers);
+
+// Enterprise Multi-Party Video & Late-Join
+router.get('/active-rooms', getActiveConferenceRooms);
+router.get('/call-notifications', getCallNotifications);
+router.get('/call-history', getCallHistory);
 
 // Phase 17: Voicemail & Voice Notes
 router.post('/voicemail', audioUpload.single('audio'), saveVoicemail);

@@ -472,3 +472,120 @@ export const deleteVoicemail = async (req: any, res: Response) => {
     return res.status(500).json({ error: true, message: 'Failed to delete voicemail' });
   }
 };
+
+// ─── Multi-Party Video Conferencing & Late-Join Endpoints ────────────────────
+
+// GET /api/voip/active-rooms - Returns all live active video rooms
+export const getActiveConferenceRooms = async (req: Request, res: Response) => {
+  try {
+    const { conferenceRoomManager } = await import('../services/conferenceRoomManager');
+    const activeRooms = conferenceRoomManager.getActiveRooms();
+    return res.status(200).json({
+      success: true,
+      count: activeRooms.length,
+      rooms: activeRooms
+    });
+  } catch (error: any) {
+    console.error('Error fetching active conference rooms:', error);
+    return res.status(500).json({ error: true, message: 'Failed to fetch active rooms' });
+  }
+};
+
+// GET /api/voip/call-notifications - Get missed call audit notifications
+export const getCallNotifications = async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: true, message: 'Authentication required' });
+    }
+
+    const notifications = await prisma.callNotification.findMany({
+      where: { recipientId: user.id },
+      include: {
+        callSession: {
+          select: {
+            id: true,
+            roomId: true,
+            title: true,
+            callType: true,
+            durationSeconds: true,
+            startedAt: true,
+            endedAt: true,
+            host: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                staffProfile: { select: { passportUrl: true, rank: true } }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    return res.status(200).json({
+      success: true,
+      notifications
+    });
+  } catch (error: any) {
+    console.error('Error fetching call notifications:', error);
+    return res.status(500).json({ error: true, message: 'Failed to fetch call notifications' });
+  }
+};
+
+// GET /api/voip/call-history - Get call sessions participated in or hosted
+export const getCallHistory = async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: true, message: 'Authentication required' });
+    }
+
+    const participations = await prisma.callParticipant.findMany({
+      where: { userId: user.id },
+      include: {
+        callSession: {
+          include: {
+            host: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                staffProfile: { select: { passportUrl: true, rank: true } }
+              }
+            },
+            participants: {
+              include: {
+                user: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30
+    });
+
+    return res.status(200).json({
+      success: true,
+      history: participations.map((p) => ({
+        id: p.id,
+        participationStatus: p.participationStatus,
+        role: p.role,
+        invitedAt: p.invitedAt,
+        joinedAt: p.joinedAt,
+        leftAt: p.leftAt,
+        session: p.callSession
+      }))
+    });
+  } catch (error: any) {
+    console.error('Error fetching call history:', error);
+    return res.status(500).json({ error: true, message: 'Failed to fetch call history' });
+  }
+};
+

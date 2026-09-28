@@ -31,7 +31,7 @@ export const cacheMiddleware = (ttlSeconds: number = 60) => {
             const originalJson = res.json.bind(res);
             res.json = (body: any) => {
                 if (res.statusCode === 200) {
-                    redisService.set(cacheKey, body, ttlSeconds).catch(err => {
+                    redisService.set(cacheKey, body, ttlSeconds).catch((err: any) => {
                         logger.error('Failed to write API response to Redis cache', {
                             key: cacheKey,
                             error: err.message

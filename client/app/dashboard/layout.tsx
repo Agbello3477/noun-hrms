@@ -28,6 +28,10 @@ const ExtensionPromptModal = dynamic(() => import('@/components/ui/ExtensionProm
     ssr: false
 });
 
+const ActiveCallBanner = dynamic(() => import('@/components/ui/ActiveCallBanner'), {
+    ssr: false
+});
+
 function ForcedPasswordChangeModal({ refreshUser }: { refreshUser: () => Promise<void> }) {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -295,6 +299,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     
                     <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                         <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+                        {mounted && <ActiveCallBanner />}
 
                         <main className="flex-1 overflow-auto p-4 md:p-8">
                             <Suspense fallback={<ShellContentSkeleton />}>
