@@ -93,6 +93,9 @@ export const createApplication = async (req: Request, res: Response) => {
         const applicantUnit = customUnit || profile?.unit?.name || profile?.studyCenter?.name || 'Department / Unit';
         const applicantRole = user.role;
         const unitId = profile?.unitId || null;
+        const targetSlaHours = (urgency === 'HIGH_PRIORITY' || urgency === 'URGENT') ? 24 : 48;
+        const submittedAt = new Date();
+        const expectedResolutionAt = new Date(submittedAt.getTime() + targetSlaHours * 3600000);
 
         const application = await prisma.officialApplication.create({
             data: {
@@ -111,7 +114,9 @@ export const createApplication = async (req: Request, res: Response) => {
                 urgency,
                 attachmentUrl,
                 attachmentName,
-                status: OfficialApplicationStatus.PENDING_ACKNOWLEDGMENT
+                status: OfficialApplicationStatus.PENDING_ACKNOWLEDGMENT,
+                submittedAt,
+                expectedResolutionAt
             }
         });
 
@@ -372,12 +377,19 @@ export const acknowledgeApplication = async (req: Request, res: Response) => {
         const registryStampNumber = existing.registryStampNumber || generateStampNumber();
         const registryOfficerName = officer?.name || 'Registry Officer';
 
+        const submittedAt = existing.submittedAt || existing.createdAt;
+        const turnaroundTimeHours = (acknowledgedAt.getTime() - submittedAt.getTime()) / (1000 * 60 * 60);
+        const slaBreach = existing.expectedResolutionAt ? acknowledgedAt > existing.expectedResolutionAt : false;
+
         const updated = await prisma.officialApplication.update({
             where: { id },
             data: {
                 status: OfficialApplicationStatus.ACKNOWLEDGED,
                 acknowledgedById: officerId,
                 acknowledgedAt,
+                resolvedAt: acknowledgedAt,
+                turnaroundTimeHours,
+                slaBreach,
                 registryStampNumber,
                 registryRemarks,
                 registryOfficerName,
@@ -436,7 +448,7 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
         const { id } = req.params;
         // @ts-ignore
         const role = req.user?.role;
-        if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(role)) {
+        if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(role)) {
             return res.status(403).json({ message: 'Access denied.' });
         }
 
@@ -445,10 +457,21 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Valid status is required.' });
         }
 
+        const existing = await prisma.officialApplication.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ message: 'Application not found' });
+
+        const resolvedAt = new Date();
+        const submittedAt = existing.submittedAt || existing.createdAt;
+        const turnaroundTimeHours = (resolvedAt.getTime() - submittedAt.getTime()) / (1000 * 60 * 60);
+        const slaBreach = existing.expectedResolutionAt ? resolvedAt > existing.expectedResolutionAt : false;
+
         const updated = await prisma.officialApplication.update({
             where: { id },
             data: {
                 status,
+                resolvedAt: (status === 'APPROVED' || status === 'REJECTED') ? resolvedAt : existing.resolvedAt,
+                turnaroundTimeHours: (status === 'APPROVED' || status === 'REJECTED') ? turnaroundTimeHours : existing.turnaroundTimeHours,
+                slaBreach: (status === 'APPROVED' || status === 'REJECTED') ? slaBreach : existing.slaBreach,
                 ...(remarks ? { registryRemarks: remarks } : {})
             }
         });

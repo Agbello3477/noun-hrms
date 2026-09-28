@@ -2,13 +2,14 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { StorageService } from '../services/storage.service';
 import { sendPushNotification } from '../services/fcm.service';
+import { Role } from '@prisma/client';
 
 const formatMemoSenderName = (memo: any) => {
     if (!memo || !memo.sender) return memo;
     const role = memo.sender.role;
     const profile = memo.sender.staffProfile;
 
-    if (['SUPER_USER', 'HR_ADMIN', 'ADMIN'].includes(role)) {
+    if (['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'REGISTRAR'].includes(role)) {
         memo.sender.name = 'Human Resource Registry';
     } else if (profile) {
         if (profile.studyCenter?.name) {
@@ -20,10 +21,91 @@ const formatMemoSenderName = (memo: any) => {
     return memo;
 };
 
+/**
+ * Resolves audience user IDs given targetAudience identifier
+ */
+async function resolveAudienceUserIds(targetAudience: string): Promise<string[]> {
+    if (targetAudience === 'ALL_STAFF') {
+        const users = await prisma.user.findMany({
+            where: { isActive: true },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    if (targetAudience === 'DIRECTORS_ONLY') {
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                OR: [
+                    { staffProfile: { rank: { contains: 'Director', mode: 'insensitive' } } },
+                    { role: Role.UNIT_HEAD, staffProfile: { unit: { type: 'DIRECTORATE' } } }
+                ]
+            },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    if (targetAudience === 'DEANS_ONLY') {
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                OR: [
+                    { staffProfile: { rank: { contains: 'Dean', mode: 'insensitive' } } },
+                    { role: Role.UNIT_HEAD, staffProfile: { unit: { type: 'FACULTY' } } }
+                ]
+            },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    if (targetAudience === 'DIRECTORS_AND_DEANS') {
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                OR: [
+                    { staffProfile: { rank: { contains: 'Director', mode: 'insensitive' } } },
+                    { staffProfile: { rank: { contains: 'Dean', mode: 'insensitive' } } },
+                    { role: Role.UNIT_HEAD, staffProfile: { unit: { type: { in: ['DIRECTORATE', 'FACULTY'] } } } }
+                ]
+            },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    if (targetAudience === 'HEADS_OF_DEPARTMENT_ONLY') {
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                role: Role.UNIT_HEAD,
+                staffProfile: { unit: { type: 'DEPARTMENT' } }
+            },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    if (targetAudience === 'STUDY_CENTER_DIRECTORS_ALL') {
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                role: Role.STUDY_CENTER_MANAGER
+            },
+            select: { id: true }
+        });
+        return users.map(u => u.id);
+    }
+
+    return [];
+}
+
 // Create a new general or targeted memo
 export const createMemo = async (req: Request, res: Response) => {
     try {
-        const { title, content, recipientId, recipientIds } = req.body;
+        const { title, content, recipientId, recipientIds, targetAudience } = req.body;
         // @ts-ignore
         const senderId = req.user?.id;
 
@@ -31,13 +113,11 @@ export const createMemo = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Title and content are required' });
         }
 
-        // Parse allowResponses which could be string in multipart form-data
         let allowResponses = true;
         if (req.body.allowResponses !== undefined) {
             allowResponses = req.body.allowResponses === 'true' || req.body.allowResponses === true;
         }
 
-        // Handle attachment file
         const file = req.file;
         let attachmentUrl = null;
         let attachmentName = null;
@@ -46,9 +126,10 @@ export const createMemo = async (req: Request, res: Response) => {
             attachmentName = file.originalname;
         }
 
-        // Parse recipientIds which could be string/array in multipart form-data
         let parsedRecipientIds: string[] = [];
-        if (recipientIds) {
+        if (targetAudience && targetAudience !== 'CUSTOM_RECIPIENTS' && targetAudience !== 'ALL_STAFF') {
+            parsedRecipientIds = await resolveAudienceUserIds(targetAudience);
+        } else if (recipientIds) {
             if (Array.isArray(recipientIds)) {
                 parsedRecipientIds = recipientIds.map(s => String(s).trim()).filter(Boolean);
             } else if (typeof recipientIds === 'string') {
@@ -69,10 +150,9 @@ export const createMemo = async (req: Request, res: Response) => {
             parsedRecipientIds = [recipientId.trim()];
         }
 
-        // Check if sender is a Unit Manager (not HR/Admin)
         // @ts-ignore
         const senderRole = req.user?.role;
-        const isHR = ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR'].includes(senderRole);
+        const isHR = ['SUPER_USER', 'HR_ADMIN', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR'].includes(senderRole);
 
         let managerProfile = null;
         if (!isHR) {
@@ -84,15 +164,13 @@ export const createMemo = async (req: Request, res: Response) => {
             }
         }
 
-        const isUnivBroadcast = req.body.isUniversityBroadcast === 'true' || req.body.isUniversityBroadcast === true;
+        const isUnivBroadcast = req.body.isUniversityBroadcast === 'true' || req.body.isUniversityBroadcast === true || targetAudience === 'ALL_STAFF';
 
         // Enforce boundary checks for Unit Managers
         if (!isHR && managerProfile) {
             if (isUnivBroadcast) {
-                // University broadcast mode - bypass local unit staff filtering
                 parsedRecipientIds = [];
             } else if (parsedRecipientIds.length > 0) {
-                // Validate multiple selected recipients
                 const recipientsProfiles = await prisma.staffProfile.findMany({
                     where: {
                         userId: { in: parsedRecipientIds }
@@ -108,7 +186,7 @@ export const createMemo = async (req: Request, res: Response) => {
                 const invalidRecipient = recipientsProfiles.find(p => {
                     const sameUnit = managerProfile.unitId && p.unitId === managerProfile.unitId;
                     const sameCenter = managerProfile.centerId && p.centerId === managerProfile.centerId;
-                    const isManagerOrAdmin = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(p.user.role);
+                    const isManagerOrAdmin = ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR'].includes(p.user.role);
                     return !sameUnit && !sameCenter && !isManagerOrAdmin;
                 });
 
@@ -116,7 +194,6 @@ export const createMemo = async (req: Request, res: Response) => {
                     return res.status(403).json({ message: 'Unauthorized: You can only send memos to staff in your own unit/center or to university managers' });
                 }
             } else {
-                // Broadcast mode: fetch all active users in manager's unit/center
                 const unitStaffProfiles = await prisma.staffProfile.findMany({
                     where: {
                         OR: [
@@ -130,7 +207,7 @@ export const createMemo = async (req: Request, res: Response) => {
 
                 const recipientUserIds = unitStaffProfiles
                     .map(p => p.userId)
-                    .filter(id => id !== senderId); // Exclude the sender
+                    .filter(id => id !== senderId);
 
                 if (recipientUserIds.length === 0) {
                     return res.status(400).json({ message: 'No staff members found in your unit/center to send the memo to' });
@@ -140,7 +217,7 @@ export const createMemo = async (req: Request, res: Response) => {
             }
         }
 
-        // Handle multiple selected staff recipients
+        // Handle targeted recipient dispatch
         if (parsedRecipientIds.length > 0) {
             const validRecipients = await prisma.user.findMany({
                 where: {
@@ -150,49 +227,48 @@ export const createMemo = async (req: Request, res: Response) => {
                 select: { id: true }
             });
 
-            if (validRecipients.length !== parsedRecipientIds.length) {
-                return res.status(404).json({ message: 'One or more selected recipients are not found or inactive' });
-            }
-
-            // Create memos for each recipient
-            const createdMemos = await prisma.$transaction(
-                parsedRecipientIds.map(rId =>
-                    prisma.memo.create({
-                        data: {
-                            title,
-                            content,
-                            allowResponses: allowResponses,
-                            senderId,
-                            recipientId: rId,
-                            attachmentUrl,
-                            attachmentName
-                        }
-                    })
-                )
-            );
-
-            // Create notifications for each recipient
-            await prisma.notification.createMany({
-                data: createdMemos.map(memo => ({
-                    userId: memo.recipientId!,
-                    title: 'New Private Memo',
-                    message: title,
-                    type: 'INFO',
-                    link: `/dashboard/memos?id=${memo.id}`
-                }))
+            const memo = await prisma.memo.create({
+                data: {
+                    title,
+                    content,
+                    allowResponses: allowResponses,
+                    senderId,
+                    recipientId: parsedRecipientIds.length === 1 ? parsedRecipientIds[0] : null,
+                    targetAudience: targetAudience || 'CUSTOM_RECIPIENTS',
+                    attachmentUrl,
+                    attachmentName
+                }
             });
 
+            // Create in-app notifications for each recipient
+            const notificationsData = validRecipients.map(u => ({
+                userId: u.id,
+                title: targetAudience ? `Official Registry Memo: ${title}` : 'New Private Memo',
+                message: title,
+                type: 'INFO',
+                link: `/dashboard/memos?id=${memo.id}`
+            }));
+
+            if (notificationsData.length > 0) {
+                const chunkSize = 100;
+                for (let i = 0; i < notificationsData.length; i += chunkSize) {
+                    await prisma.notification.createMany({
+                        data: notificationsData.slice(i, i + chunkSize)
+                    });
+                }
+            }
+
             sendPushNotification(
-                createdMemos.map(m => m.recipientId!),
-                'New Private Memo',
+                validRecipients.map(u => u.id),
+                'New Official Memo',
                 title,
-                `/dashboard/memos?id=${createdMemos[0].id}`
+                `/dashboard/memos?id=${memo.id}`
             ).catch(err => console.error('FCM push failed:', err));
 
-            return res.status(201).json(createdMemos[0]);
+            return res.status(201).json(memo);
         }
 
-        // Create the broadcast memo in DB
+        // General Broadcast Memo
         const memo = await prisma.memo.create({
             data: {
                 title,
@@ -200,12 +276,12 @@ export const createMemo = async (req: Request, res: Response) => {
                 allowResponses: allowResponses,
                 senderId,
                 recipientId: null,
+                targetAudience: 'ALL_STAFF',
                 attachmentUrl,
                 attachmentName
             }
         });
 
-        // Fetch all active users to notify for general broadcast
         const activeUsers = await prisma.user.findMany({
             where: { isActive: true },
             select: { id: true }
@@ -220,9 +296,12 @@ export const createMemo = async (req: Request, res: Response) => {
                 link: `/dashboard/memos?id=${memo.id}`
             }));
 
-            await prisma.notification.createMany({
-                data: notificationsData
-            });
+            const chunkSize = 100;
+            for (let i = 0; i < notificationsData.length; i += chunkSize) {
+                await prisma.notification.createMany({
+                    data: notificationsData.slice(i, i + chunkSize)
+                });
+            }
 
             sendPushNotification(
                 activeUsers.map(u => u.id),
@@ -239,7 +318,7 @@ export const createMemo = async (req: Request, res: Response) => {
     }
 };
 
-// Get list of memos (strictly filtered to recipient, sender, or general broadcast)
+// Get list of memos
 export const getMemos = async (req: Request, res: Response) => {
     try {
         // @ts-ignore
@@ -251,7 +330,6 @@ export const getMemos = async (req: Request, res: Response) => {
         const limitNum = Math.min(parseInt(String(req.query.limit || 25)), 25);
         const skip = (pageNum - 1) * limitNum;
 
-        // Strict privacy where clause: only broadcasts (recipientId null), memos addressed to current user, or memos sent by current user
         const whereClause: any = {
             OR: [
                 { recipientId: null },
@@ -272,6 +350,7 @@ export const getMemos = async (req: Request, res: Response) => {
                     title: true,
                     content: true,
                     allowResponses: true,
+                    targetAudience: true,
                     attachmentUrl: true,
                     attachmentName: true,
                     createdAt: true,
@@ -327,9 +406,8 @@ export const getMemoById = async (req: Request, res: Response) => {
         const userId = req.user?.id;
         // @ts-ignore
         const role = req.user?.role;
-        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role);
+        const isHR = ['HR_ADMIN', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR'].includes(role);
 
-        // Fetch memo first to check sender/recipient
         const memoCheck = await prisma.memo.findUnique({
             where: { id },
             select: { senderId: true, recipientId: true }
@@ -343,13 +421,11 @@ export const getMemoById = async (req: Request, res: Response) => {
         const isRecipient = memoCheck.recipientId === userId;
         const isBroadcast = memoCheck.recipientId === null;
 
-        // Access check: only sender, recipient, or if broadcast
-        if (!isSender && !isRecipient && !isBroadcast) {
+        if (!isSender && !isRecipient && !isBroadcast && !isHR) {
             return res.status(403).json({ message: 'Access denied to this memo' });
         }
 
         if (isHR || isSender) {
-            // HR/Sender sees full memo and all responses
             const memo = await prisma.memo.findUnique({
                 where: { id },
                 include: {
@@ -403,7 +479,6 @@ export const getMemoById = async (req: Request, res: Response) => {
 
             res.json(formatMemoSenderName(memo));
         } else {
-            // Staff sees memo + their own response (if any)
             const memo = await prisma.memo.findUnique({
                 where: { id },
                 include: {
@@ -465,7 +540,6 @@ export const respondToMemo = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Memo not found' });
         }
 
-        // Access check: only broadcast or addressed to them
         if (memo.recipientId && memo.recipientId !== userId) {
             return res.status(403).json({ message: 'Access denied to respond to this memo' });
         }
@@ -474,7 +548,6 @@ export const respondToMemo = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Responses are not allowed for this memo' });
         }
 
-        // Check if user already responded
         const existingResponse = await prisma.memoResponse.findFirst({
             where: { memoId: id, staffId: userId }
         });

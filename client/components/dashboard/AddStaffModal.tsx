@@ -30,6 +30,23 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
         phone: '',
         gender: 'Male', // Default
         nin: '', // 11-digit National Identification Number
+        dateOfBirth: '',
+
+        // Workforce Category & Diversified Onboarding
+        employmentCategory: 'PERMANENT',
+        contractStartDate: '',
+        contractEndDate: '',
+        contractRenewalTerms: '',
+        callUpNumber: '',
+        stateCode: '',
+        primaryAssignmentDepartment: '',
+        serviceYearBatch: '',
+        nyscPPAAllowance: '',
+        passOutDate: '',
+        volunteerProgramName: '',
+        honorariumAmount: '',
+        engagementDurationMonths: '',
+        mouReferenceNumber: '',
 
         // Bursary & Banking Details
         bankName: '',
@@ -171,6 +188,47 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
             ruleDescription
         };
     }, [formData.lastPromotionDate, formData.dateOfFirstAppointment, formData.cadreAppraisalRule, formData.cadre, formData.cadreType]);
+
+    // Live Statutory Retirement Calculation
+    const computedStatutoryRetirement = useMemo(() => {
+        if (!formData.dateOfBirth) return null;
+        const dob = new Date(formData.dateOfBirth);
+        if (isNaN(dob.getTime())) return null;
+
+        const isProfessorOrReader = (formData.cadre === 'ACADEMIC' || formData.cadreType === 'ACADEMIC') &&
+            (formData.level?.includes('7') || formData.level?.includes('6') || formData.role === 'PROFESSOR');
+        const ageLimit = isProfessorOrReader ? 75 : 65;
+        const serviceLimit = 35;
+
+        // Age based retirement
+        const ageRetirementDate = new Date(dob);
+        ageRetirementDate.setFullYear(ageRetirementDate.getFullYear() + ageLimit);
+
+        // Service based retirement
+        let serviceRetirementDate: Date | null = null;
+        if (formData.dateOfFirstAppointment) {
+            const appt = new Date(formData.dateOfFirstAppointment);
+            if (!isNaN(appt.getTime())) {
+                serviceRetirementDate = new Date(appt);
+                serviceRetirementDate.setFullYear(serviceRetirementDate.getFullYear() + serviceLimit);
+            }
+        }
+
+        let retirementDate = ageRetirementDate;
+        let basis = isProfessorOrReader ? 'By Age (75 Years - Professor/Reader Substantive Cadre)' : 'By Age (65 Years Limit)';
+
+        if (serviceRetirementDate && !isProfessorOrReader && serviceRetirementDate < ageRetirementDate) {
+            retirementDate = serviceRetirementDate;
+            basis = 'By Length of Pensionable Service (35 Years Limit)';
+        }
+
+        return {
+            formattedDate: retirementDate.toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' }),
+            isoDate: retirementDate.toISOString().split('T')[0],
+            basis,
+            ageLimit
+        };
+    }, [formData.dateOfBirth, formData.dateOfFirstAppointment, formData.cadre, formData.cadreType, formData.level, formData.role]);
 
     // Synchronize auto-calculated promotion year & target date when inputs change unless manually overridden
     useEffect(() => {
@@ -597,6 +655,16 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     <option value="Female">Female</option>
                                 </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700">Date of Birth</label>
+                                <input
+                                    type="date"
+                                    name="dateOfBirth"
+                                    className="mt-1 w-full border rounded p-2 text-black"
+                                    value={formData.dateOfBirth}
+                                    onChange={handleChange}
+                                />
+                            </div>
                         </div>
 
                         <div>
@@ -636,6 +704,176 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                     </div>
 
                     <hr />
+
+                    {/* Section 1b: Workforce Category & Diversified Onboarding */}
+                    <div className="bg-purple-50/70 p-4 rounded-xl border border-purple-200 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Building2 className="text-purple-700" size={18} />
+                            <div>
+                                <h4 className="font-bold text-purple-950 text-sm">Employment Category &amp; Workforce Classification</h4>
+                                <p className="text-[11px] text-purple-700">Select workforce engagement type (Permanent, Contract, NYSC, or Volunteer).</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="block text-xs font-bold text-purple-900 mb-1">Employment Category *</label>
+                                <select
+                                    name="employmentCategory"
+                                    required
+                                    className="w-full border border-purple-300 rounded-lg p-2 bg-white text-xs text-gray-900 font-semibold focus:ring-2 focus:ring-purple-500"
+                                    value={formData.employmentCategory}
+                                    onChange={handleChange}
+                                >
+                                    <option value="PERMANENT">Permanent Pensionable Staff</option>
+                                    <option value="CONTRACT">Contract Staff / Adjunct</option>
+                                    <option value="NYSC_CORPERS">NYSC Corps Member</option>
+                                    <option value="VOLUNTEER">Volunteer / Special Engagement</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Contract Staff Specific Fields */}
+                        {formData.employmentCategory === 'CONTRACT' && (
+                            <div className="bg-white p-3.5 rounded-lg border border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Contract Start Date *</label>
+                                    <input
+                                        type="date"
+                                        name="contractStartDate"
+                                        required
+                                        value={formData.contractStartDate}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Contract End Date *</label>
+                                    <input
+                                        type="date"
+                                        name="contractEndDate"
+                                        required
+                                        value={formData.contractEndDate}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Contract Renewal &amp; Gratuity Terms</label>
+                                    <input
+                                        type="text"
+                                        name="contractRenewalTerms"
+                                        placeholder="e.g. Fixed 2-year tenure with quarterly performance reviews"
+                                        value={formData.contractRenewalTerms}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* NYSC Corpers Specific Fields */}
+                        {formData.employmentCategory === 'NYSC_CORPERS' && (
+                            <div className="bg-white p-3.5 rounded-lg border border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">NYSC Call-Up Number *</label>
+                                    <input
+                                        type="text"
+                                        name="callUpNumber"
+                                        required
+                                        placeholder="e.g. NYSC/NOUN/2026/12345"
+                                        value={formData.callUpNumber}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50 font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">NYSC State Code *</label>
+                                    <input
+                                        type="text"
+                                        name="stateCode"
+                                        required
+                                        placeholder="e.g. FC/26A/1234"
+                                        value={formData.stateCode}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50 font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Service Batch &amp; Stream</label>
+                                    <input
+                                        type="text"
+                                        name="serviceYearBatch"
+                                        placeholder="e.g. 2026 Batch A Stream 1"
+                                        value={formData.serviceYearBatch}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Monthly PPA Allowance (₦)</label>
+                                    <input
+                                        type="number"
+                                        name="nyscPPAAllowance"
+                                        placeholder="e.g. 25000"
+                                        value={formData.nyscPPAAllowance}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Volunteer Specific Fields */}
+                        {formData.employmentCategory === 'VOLUNTEER' && (
+                            <div className="bg-white p-3.5 rounded-lg border border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Volunteer Initiative / Program Name</label>
+                                    <input
+                                        type="text"
+                                        name="volunteerProgramName"
+                                        placeholder="e.g. Academic Support Fellowship"
+                                        value={formData.volunteerProgramName}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Monthly Stipend / Honorarium (₦)</label>
+                                    <input
+                                        type="number"
+                                        name="honorariumAmount"
+                                        placeholder="e.g. 50000"
+                                        value={formData.honorariumAmount}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Duration (Months)</label>
+                                    <input
+                                        type="number"
+                                        name="engagementDurationMonths"
+                                        placeholder="e.g. 6"
+                                        value={formData.engagementDurationMonths}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">MoU / Sponsorship Reference</label>
+                                    <input
+                                        type="text"
+                                        name="mouReferenceNumber"
+                                        placeholder="e.g. MOU-NOUN-2026-VOL-01"
+                                        value={formData.mouReferenceNumber}
+                                        onChange={handleChange}
+                                        className="w-full border p-1.5 rounded text-xs bg-slate-50 font-mono"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Section 2: Organization & Career */}
                     <div className="space-y-4">
@@ -739,6 +977,19 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                 onChange={handleChange}
                             />
                         </div>
+
+                        {/* Statutory Retirement Forecast Preview */}
+                        {computedStatutoryRetirement && (
+                            <div className="p-3 bg-amber-50/80 rounded-lg border border-amber-200 text-xs space-y-1">
+                                <div className="font-bold text-amber-950 flex items-center justify-between">
+                                    <span>Statutory Retirement Forecast:</span>
+                                    <span className="font-mono text-sm text-amber-900">{computedStatutoryRetirement.formattedDate}</span>
+                                </div>
+                                <div className="text-[11px] text-amber-800 font-medium">
+                                    Basis: {computedStatutoryRetirement.basis}
+                                </div>
+                            </div>
+                        )}
 
                         {isHrAdmin ? (
                             <div>

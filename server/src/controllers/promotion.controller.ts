@@ -2,17 +2,20 @@ import { Request, Response } from 'express';
 import { PromotionService } from '../services/promotion.service';
 import { calculatePromotionMaturity } from '../utils/promotionCalculator';
 import prisma from '../prisma';
+import { Role } from '@prisma/client';
 
 /**
  * PATCH /api/v1/registry/promotions/:staffId/due-date
  * Updates or overrides promotion due date, intervals, and status for a staff profile.
- * RBAC: HR_ADMIN, VICE_CHANCELLOR, SUPER_USER, ADMIN
+ * RBAC: HR_ADMIN, REGISTRAR, VICE_CHANCELLOR, SUPER_USER, ADMIN
  */
 export const updatePromotionDueDate = async (req: Request, res: Response) => {
     try {
         const { staffId } = req.params;
         // @ts-ignore
         const actorId = req.user?.id as string;
+        // @ts-ignore
+        const actorRole = req.user?.role as string;
 
         const {
             lastPromotionDate,
@@ -30,7 +33,6 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
             isDueImmediately
         } = req.body;
 
-        // Resolve staffProfileId (support UUID id or institutional staffId)
         let profile = await prisma.staffProfile.findUnique({
             where: { id: staffId },
             select: { id: true }
@@ -52,6 +54,7 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
         const result = await PromotionService.updateStaffPromotionSchedule({
             staffProfileId: profile.id,
             actorId,
+            actorRole,
             lastPromotionDate,
             cadreType,
             currentGradeLevel,
@@ -67,7 +70,7 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
         });
 
         res.json({
-            message: 'Promotion schedule updated and audited successfully.',
+            message: 'Promotion schedule updated successfully.',
             profile: result.profile,
             auditLog: result.auditLog
         });
@@ -78,8 +81,108 @@ export const updatePromotionDueDate = async (req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/v1/registry/promotions/pending-overrides
+ * Returns all promotion overrides awaiting Registrar approval.
+ */
+export const getPendingPromotionOverrides = async (req: Request, res: Response) => {
+    try {
+        const pending = await prisma.staffProfile.findMany({
+            where: {
+                promotionOverrideStatus: 'PENDING_REGISTRAR_OVERRIDE',
+                isDeleted: false
+            },
+            include: {
+                user: { select: { name: true, email: true } },
+                unit: { select: { name: true } }
+            },
+            orderBy: { promotionOverrideRequestedAt: 'desc' }
+        });
+
+        res.json(pending);
+    } catch (error: any) {
+        console.error('Error fetching pending promotion overrides:', error);
+        res.status(500).json({ message: 'Failed to fetch pending overrides' });
+    }
+};
+
+/**
+ * POST /api/v1/registry/promotions/:staffId/authorize-override
+ * Registrar authorizes a staged promotion due year override.
+ */
+export const authorizePromotionOverride = async (req: Request, res: Response) => {
+    try {
+        const { staffId } = req.params;
+        const { remarks } = req.body;
+        // @ts-ignore
+        const actorId = req.user?.id as string;
+        // @ts-ignore
+        const actorRole = req.user?.role as string;
+
+        if (actorRole !== Role.REGISTRAR && actorRole !== Role.SUPER_USER && actorRole !== Role.VICE_CHANCELLOR) {
+            return res.status(403).json({ message: 'Forbidden: Only the Registrar or Super User can authorize promotion overrides.' });
+        }
+
+        let profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [{ id: staffId }, { staffId }, { userId: staffId }]
+            },
+            select: { id: true }
+        });
+
+        if (!profile) return res.status(404).json({ message: 'Staff profile not found' });
+
+        const result = await PromotionService.authorizePromotionOverride(profile.id, actorId, remarks);
+
+        res.json({
+            message: 'Promotion override successfully authorized by Registrar.',
+            result
+        });
+    } catch (error: any) {
+        console.error('authorizePromotionOverride error:', error);
+        res.status(400).json({ message: error.message || 'Failed to authorize promotion override' });
+    }
+};
+
+/**
+ * POST /api/v1/registry/promotions/:staffId/reject-override
+ * Registrar rejects a staged promotion due year override.
+ */
+export const rejectPromotionOverride = async (req: Request, res: Response) => {
+    try {
+        const { staffId } = req.params;
+        const { reason } = req.body;
+        // @ts-ignore
+        const actorId = req.user?.id as string;
+        // @ts-ignore
+        const actorRole = req.user?.role as string;
+
+        if (actorRole !== Role.REGISTRAR && actorRole !== Role.SUPER_USER && actorRole !== Role.VICE_CHANCELLOR) {
+            return res.status(403).json({ message: 'Forbidden: Only the Registrar or Super User can reject promotion overrides.' });
+        }
+
+        let profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [{ id: staffId }, { staffId }, { userId: staffId }]
+            },
+            select: { id: true }
+        });
+
+        if (!profile) return res.status(404).json({ message: 'Staff profile not found' });
+
+        const result = await PromotionService.rejectPromotionOverride(profile.id, actorId, reason);
+
+        res.json({
+            message: 'Promotion override rejected by Registrar.',
+            result
+        });
+    } catch (error: any) {
+        console.error('rejectPromotionOverride error:', error);
+        res.status(400).json({ message: error.message || 'Failed to reject promotion override' });
+    }
+};
+
+/**
  * GET /api/v1/registry/promotions/due-list & GET /api/v1/registry/promotions/candidates
- * Filtered, paginated promotion due list with summary metrics and CSV export.
  */
 export const getPromotionDueList = async (req: Request, res: Response) => {
     try {
@@ -104,7 +207,6 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
             limit: exportFormat === 'csv' ? 1000 : (limit ? parseInt(String(limit), 10) : 15)
         });
 
-        // Handle CSV Export
         if (exportFormat === 'csv') {
             const headers = [
                 'Staff ID',
@@ -118,6 +220,7 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
                 'Next Due Date',
                 'Eligibility Status',
                 'Registry Override',
+                'Disciplinary Hold',
                 'Override Justification'
             ];
 
@@ -139,6 +242,7 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
                     `"${nextDate}"`,
                     `"${p.eligibilityStatus || ''}"`,
                     `"${p.registryOverride ? 'YES' : 'NO'}"`,
+                    `"${p.hasDisciplinaryHold ? 'BLOCKED' : 'CLEAR'}"`,
                     `"${(p.overrideReason || '').replace(/"/g, '""')}"`
                 ].join(',');
             });
@@ -158,10 +262,6 @@ export const getPromotionDueList = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * POST /api/v1/registry/promotions/evaluate-cycle
- * On-demand evaluation trigger for the annual promotion maturity engine.
- */
 export const evaluatePromotionCycle = async (req: Request, res: Response) => {
     try {
         const { cycleYear } = req.body;
@@ -181,10 +281,6 @@ export const evaluatePromotionCycle = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * POST /api/v1/registry/promotions/batch-action
- * Executes batch status updates or docket staging on multiple candidate profiles.
- */
 export const batchActionPromotions = async (req: Request, res: Response) => {
     try {
         const { staffProfileIds, action, status, reason } = req.body;
@@ -209,10 +305,6 @@ export const batchActionPromotions = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * GET /api/v1/registry/promotions/audit-logs/:staffId
- * Retrieves immutable audit logs for a staff profile's promotion schedule.
- */
 export const getPromotionAuditLogs = async (req: Request, res: Response) => {
     try {
         const { staffId } = req.params;
@@ -241,10 +333,6 @@ export const getPromotionAuditLogs = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * POST /api/v1/registry/promotions/sync-candidates
- * Manual trigger endpoint allowing Registry admins to run an on-demand sync that moves any staff with nextPromotionDueYear <= currentYear into DUE_FOR_REVIEW status.
- */
 export const syncPromotionCandidates = async (req: Request, res: Response) => {
     try {
         const { cycleYear } = req.body;
@@ -264,16 +352,8 @@ export const syncPromotionCandidates = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * GET /api/v1/registry/promotions/candidates
- * Alias for getPromotionDueList
- */
 export const getPromotionCandidates = getPromotionDueList;
 
-/**
- * GET /api/v1/registry/promotions/calculate
- * Helper endpoint that calculates cadre maturity given input parameters without persisting.
- */
 export const calculateMaturityPreview = async (req: Request, res: Response) => {
     try {
         const { lastPromotionDate, cadre, gradeLevel } = req.query;
@@ -289,4 +369,3 @@ export const calculateMaturityPreview = async (req: Request, res: Response) => {
         res.status(400).json({ message: error.message || 'Failed to calculate maturity preview' });
     }
 };
-

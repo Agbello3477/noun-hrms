@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { QueryStatus, Role } from '@prisma/client';
+import { QueryStatus, Role, DisciplinaryActionType, PromotionEligibilityStatus } from '@prisma/client';
 import { StorageService } from '../services/storage.service';
 import { notifyUser } from './notification.controller';
 import prisma from '../prisma';
@@ -8,10 +8,19 @@ interface AuthRequest extends Request {
     user?: { id: string; role: string };
 }
 
-// Issue Query (HR -> Staff & Unit Managers)
+// Issue Query or Warning (Unified Disciplinary Dispatch)
 export const issueQuery = async (req: AuthRequest, res: Response) => {
     try {
-        const { staffId, title, content, copyHR } = req.body;
+        const {
+            staffId,
+            title,
+            content,
+            copyHR,
+            actionType = 'QUERY',
+            stipulatedHours = 48,
+            source: customSource
+        } = req.body;
+
         const issuerId = req.user?.id;
         const issuerRole = req.user?.role;
 
@@ -31,7 +40,7 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
         }
 
         // 2. Boundary check for non-global managers
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(issuerRole as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(issuerRole as any);
         if (!isHQAdmin) {
             if ([Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN].includes(issuerRole as any)) {
                 const issuerProfile = await prisma.staffProfile.findUnique({
@@ -44,7 +53,6 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
                     ((issuerRole === Role.UNIT_HEAD || issuerRole === Role.UNIT_ADMIN) && issuerProfile?.unitId && staff.unitId === issuerProfile.unitId)
                 );
 
-                // Fallback check: check if the issuer is assigned as head of the staff's unit directly
                 if (!matchesPlacement && issuerRole === Role.UNIT_HEAD && staff.unitId) {
                     const headUnit = await prisma.unit.findFirst({ where: { id: staff.unitId, headId: issuerId } });
                     if (headUnit) matchesPlacement = true;
@@ -58,32 +66,66 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
             }
         }
 
-        // 3. Create StaffQuery using verified staff.id
+        const isWarningAction = actionType === 'OFFICIAL_WARNING';
+        const hours = isWarningAction ? 0 : Number(stipulatedHours || 48);
+        const responseDeadline = isWarningAction ? null : new Date(Date.now() + hours * 3600000);
+        const source = customSource || (isHQAdmin ? 'REGISTRY' : 'UNIT_HEAD');
+
+        // 3. Create StaffQuery / Warning
         const query = await prisma.staffQuery.create({
             data: {
                 staffId: staff.id,
                 issuedById: issuerId!,
                 title,
                 content: content || '',
-                status: QueryStatus.OPEN,
-                copyHR: copyHR !== undefined ? Boolean(copyHR) : true
+                actionType: isWarningAction ? DisciplinaryActionType.OFFICIAL_WARNING : DisciplinaryActionType.QUERY,
+                isQuery: !isWarningAction,
+                isWarning: isWarningAction,
+                stipulatedHours: hours,
+                responseDeadline,
+                source,
+                status: isWarningAction ? QueryStatus.CLOSED : QueryStatus.OPEN,
+                resolutionStatus: isWarningAction ? 'ABSORBED' : 'PENDING',
+                copyHR: copyHR !== undefined ? Boolean(copyHR) : true,
+                breachLoggedToFolio: isWarningAction
             }
         });
 
-        // 4. Notify Staff
+        // 4. Update Staff Profile with Disciplinary Integrity Hold if originating from Registry
+        if (!isWarningAction && (source === 'REGISTRY' || copyHR)) {
+            await prisma.staffProfile.update({
+                where: { id: staff.id },
+                data: {
+                    hasActiveDisciplinaryBlock: true,
+                    disciplinaryBlockReason: `Pending Query: "${title}" (${hours}h defense window)`
+                }
+            });
+        }
+
+        // 5. Notify Staff
         const issuerLabel = isHQAdmin ? 'Registry' : ([Role.STUDY_CENTER_MANAGER].includes(issuerRole as any) ? 'Study Center Director' : 'Unit Head');
-        await notifyUser(
-            staff.userId,
-            'New Query Received',
-            `You have received a pending query from ${issuerLabel}: "${title}". Please respond immediately.`,
-            'WARNING',
-            '/dashboard/queries'
-        );
+        if (isWarningAction) {
+            await notifyUser(
+                staff.userId,
+                '⚠️ Official Warning / Admonition Issued',
+                `You have been issued an official warning/admonition by ${issuerLabel}: "${title}". This caution has been entered into your personnel folio.`,
+                'WARNING',
+                '/dashboard/queries'
+            );
+        } else {
+            await notifyUser(
+                staff.userId,
+                '🚨 Official Query Issued (Defense Required)',
+                `You have received a formal disciplinary query from ${issuerLabel}: "${title}". A formal defense is required within ${hours} hours.`,
+                'ERROR',
+                '/dashboard/queries'
+            );
+        }
 
         res.status(201).json(query);
     } catch (error) {
-        console.error('Error issuing query:', error);
-        res.status(500).json({ message: 'Error issuing query', error: String(error) });
+        console.error('Error issuing disciplinary action:', error);
+        res.status(500).json({ message: 'Error issuing disciplinary action', error: String(error) });
     }
 };
 
@@ -93,7 +135,7 @@ export const respondToQuery = async (req: AuthRequest, res: Response) => {
         const { queryId, responseText, content } = req.body;
         const replyText = responseText || content;
         const responderId = req.user?.id;
-        const file = req.file; // Attachment
+        const file = req.file;
 
         if (!queryId) return res.status(400).json({ message: 'Query ID is required' });
         if (!replyText || replyText.trim().length === 0) {
@@ -107,9 +149,8 @@ export const respondToQuery = async (req: AuthRequest, res: Response) => {
 
         if (!query) return res.status(404).json({ message: 'Query not found' });
 
-        // Ensure responder is the target staff or authorized HR Admin
         const isTargetUser = query.staff.userId === responderId || query.staff.id === responderId;
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(req.user?.role as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(req.user?.role as any);
 
         if (!isTargetUser && !isHQAdmin) {
             return res.status(403).json({ message: 'Unauthorized: You can only respond to queries issued to your staff account.' });
@@ -120,26 +161,30 @@ export const respondToQuery = async (req: AuthRequest, res: Response) => {
             attachmentUrl = await StorageService.uploadFile(file);
         }
 
+        const now = new Date();
+        const isBreached = query.responseDeadline ? now > query.responseDeadline : false;
+
         const updatedQuery = await prisma.staffQuery.update({
             where: { id: queryId },
             data: {
                 response: replyText,
                 responseAttachmentUrl: attachmentUrl,
-                status: QueryStatus.RESPONDED
+                status: QueryStatus.RESPONDED,
+                slaBreached: isBreached || query.slaBreached,
+                slaBreachedAt: isBreached ? now : query.slaBreachedAt
             }
         });
 
         // Notify Issuer (HR / Unit Head)
         await notifyUser(
             query.issuedById,
-            'Query Response Received',
-            `Staff ${query.staff.surname || ''} has responded to query "${query.title}".`,
+            'Query Defense Received',
+            `Staff ${query.staff.surname || ''} has submitted their defense for query "${query.title}".`,
             'INFO',
             `/dashboard/queries`
         );
 
         res.json(updatedQuery);
-
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error responding to query' });
@@ -155,7 +200,7 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
 
         let whereClause: any = {};
 
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(role as any);
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(role as any);
         if (isHQAdmin) {
             whereClause.OR = [
                 { copyHR: true },
@@ -191,7 +236,6 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
                 managerFilter.push({ staff: { unitId: headProfile.unitId } });
             }
 
-            // Fallback for unit head matching unit.headId
             if (role === Role.UNIT_HEAD) {
                 const headUnits = await prisma.unit.findMany({ where: { headId: userId }, select: { id: true } });
                 const unitIds = headUnits.map(u => u.id);
@@ -211,7 +255,6 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
                 };
             }
         } else {
-            // Regular staff: only see queries issued to them
             const profile = await prisma.staffProfile.findUnique({ where: { userId } });
             if (!profile) return res.json([]);
             whereClause.staffId = profile.id;
@@ -220,7 +263,17 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
         const queries = await prisma.staffQuery.findMany({
             where: whereClause,
             include: {
-                staff: { select: { user: { select: { name: true, email: true } }, surname: true, otherNames: true, staffId: true } },
+                staff: {
+                    select: {
+                        id: true,
+                        surname: true,
+                        otherNames: true,
+                        staffId: true,
+                        rank: true,
+                        unit: { select: { name: true } },
+                        user: { select: { name: true, email: true } }
+                    }
+                },
                 issuedBy: {
                     select: {
                         name: true,
@@ -238,7 +291,6 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
         });
 
         res.json(queries);
-
     } catch (error) {
         console.error('Error fetching queries:', error);
         res.status(500).json({ message: 'Error fetching queries' });
@@ -249,7 +301,13 @@ export const getQueries = async (req: AuthRequest, res: Response) => {
 export const resolveQuery = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { status } = req.body; // Expect 'CLOSED' or 'ESCALATED'
+        const {
+            status = 'CLOSED',
+            resolutionStatus = 'SATISFACTORY', // SATISFACTORY, UNSATISFACTORY, EXONERATED, COMMITTEE_REFERRAL
+            disciplinaryCommitteeRef,
+            remarks
+        } = req.body;
+
         const userId = req.user?.id;
         const role = req.user?.role;
 
@@ -260,49 +318,49 @@ export const resolveQuery = async (req: AuthRequest, res: Response) => {
 
         if (!existingQuery) return res.status(404).json({ message: 'Query not found' });
 
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(role as any);
-        if (isHQAdmin) {
-            if (!existingQuery.copyHR && existingQuery.issuedById !== userId) {
-                return res.status(403).json({ message: 'Unauthorized: This is an internal-only query and you did not issue it.' });
-            }
-        } else {
-            if ([Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.UNIT_ADMIN].includes(role as any)) {
-                const headProfile = await prisma.staffProfile.findUnique({
-                    where: { userId },
-                    select: { unitId: true, centerId: true }
-                });
-
-                let matchesPlacement = (
-                    (role === Role.STUDY_CENTER_MANAGER && headProfile?.centerId && existingQuery.staff.centerId === headProfile.centerId) ||
-                    ((role === Role.UNIT_HEAD || role === Role.UNIT_ADMIN) && headProfile?.unitId && existingQuery.staff.unitId === headProfile.unitId) ||
-                    existingQuery.issuedById === userId
-                );
-
-                if (!matchesPlacement && role === Role.UNIT_HEAD && existingQuery.staff.unitId) {
-                    const headUnit = await prisma.unit.findFirst({ where: { id: existingQuery.staff.unitId, headId: userId } });
-                    if (headUnit) matchesPlacement = true;
-                }
-
-                if (!matchesPlacement) {
-                    return res.status(403).json({ message: 'Unauthorized: Staff is not in your center/unit and you did not issue this query' });
-                }
-            } else {
-                return res.status(403).json({ message: 'Unauthorized to resolve queries' });
-            }
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(role as any);
+        if (!isHQAdmin && existingQuery.issuedById !== userId) {
+            return res.status(403).json({ message: 'Unauthorized to resolve this query.' });
         }
 
         const query = await prisma.staffQuery.update({
             where: { id },
-            data: { status },
+            data: {
+                status: status as QueryStatus,
+                resolutionStatus,
+                disciplinaryCommitteeRef: disciplinaryCommitteeRef || existingQuery.disciplinaryCommitteeRef
+            },
             include: { staff: true }
         });
+
+        // If resolution is SATISFACTORY or EXONERATED, check if staff has any other unresolved queries
+        if (resolutionStatus === 'SATISFACTORY' || resolutionStatus === 'EXONERATED') {
+            const otherOpenQueries = await prisma.staffQuery.count({
+                where: {
+                    staffId: existingQuery.staffId,
+                    id: { not: id },
+                    status: { in: ['OPEN', 'DEFAULTED_UNANSWERED'] }
+                }
+            });
+
+            if (otherOpenQueries === 0) {
+                await prisma.staffProfile.update({
+                    where: { id: existingQuery.staffId },
+                    data: {
+                        hasActiveDisciplinaryBlock: false,
+                        disciplinaryBlockReason: null,
+                        promotionEligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW
+                    }
+                });
+            }
+        }
 
         // Notify Staff
         await notifyUser(
             query.staff.userId,
-            'Query Updated',
-            `Your query "${query.title}" has been marked as ${status}.`,
-            status === 'CLOSED' ? 'SUCCESS' : 'WARNING',
+            'Disciplinary Query Resolution',
+            `Your query "${query.title}" has been resolved with verdict: ${resolutionStatus}. Status: ${status}.`,
+            resolutionStatus === 'SATISFACTORY' || resolutionStatus === 'EXONERATED' ? 'SUCCESS' : 'WARNING',
             '/dashboard/queries'
         );
 

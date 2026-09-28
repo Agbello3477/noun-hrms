@@ -35,6 +35,7 @@ interface Memo {
     title: string;
     content: string;
     allowResponses: boolean;
+    targetAudience?: string | null;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
     createdAt: string;
@@ -73,7 +74,7 @@ export default function RegistryMemosPage() {
     const [content, setContent] = useState('');
     const [allowResponses, setAllowResponses] = useState(true);
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-    const [recipientType, setRecipientType] = useState<'broadcast' | 'selected'>('broadcast');
+    const [targetAudience, setTargetAudience] = useState<string>('ALL_STAFF');
     const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [staffList, setStaffList] = useState<any[]>([]);
@@ -135,7 +136,7 @@ export default function RegistryMemosPage() {
         setIsSubmitting(true);
         setErrorMessage('');
 
-        if (recipientType === 'selected' && selectedRecipientIds.length === 0) {
+        if (targetAudience === 'CUSTOM_RECIPIENTS' && selectedRecipientIds.length === 0) {
             setErrorMessage('Please select at least one recipient staff member');
             setIsSubmitting(false);
             return;
@@ -146,7 +147,9 @@ export default function RegistryMemosPage() {
             formData.append('title', title);
             formData.append('content', content);
             formData.append('allowResponses', String(allowResponses));
-            if (recipientType === 'selected') {
+            formData.append('targetAudience', targetAudience);
+            
+            if (targetAudience === 'CUSTOM_RECIPIENTS') {
                 formData.append('recipientIds', JSON.stringify(selectedRecipientIds));
             }
             if (attachmentFile) {
@@ -164,13 +167,13 @@ export default function RegistryMemosPage() {
             setContent('');
             setAllowResponses(true);
             setAttachmentFile(null);
-            setRecipientType('broadcast');
+            setTargetAudience('ALL_STAFF');
             setSelectedRecipientIds([]);
             setSearchQuery('');
 
             // Refresh memos
             await fetchMemos();
-            alert(recipientType === 'selected' ? `Memo sent successfully to ${selectedRecipientIds.length} staff member(s)` : 'Memo Broadcasted Successfully to all staff');
+            alert('Memo published and routed successfully.');
         } catch (error: any) {
             console.error(error);
             setErrorMessage(error.response?.data?.message || 'Failed to send memo.');
@@ -182,6 +185,16 @@ export default function RegistryMemosPage() {
     const handleViewClick = (memo: Memo) => {
         setViewMemo(memo);
         fetchMemoDetails(memo.id);
+    };
+
+    const getAudienceLabel = (memo: Memo) => {
+        if (memo.targetAudience === 'DIRECTORS_ONLY') return 'Directors Only';
+        if (memo.targetAudience === 'DEANS_ONLY') return 'Deans Only';
+        if (memo.targetAudience === 'DIRECTORS_AND_DEANS') return 'Directors & Deans';
+        if (memo.targetAudience === 'HEADS_OF_DEPARTMENT_ONLY') return 'HODs Only';
+        if (memo.targetAudience === 'STUDY_CENTER_DIRECTORS_ALL') return 'Study Center Directors';
+        if (memo.targetAudience === 'CUSTOM_RECIPIENTS' || memo.recipient) return 'Targeted Staff';
+        return 'All Staff Broadcast';
     };
 
     return (
@@ -236,18 +249,16 @@ export default function RegistryMemosPage() {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-semibold text-gray-900 line-clamp-1">{memo.title}</span>
-                                            {memo.recipient ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                                    Direct Memo
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                    Broadcast
-                                                </span>
-                                            )}
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                memo.targetAudience === 'ALL_STAFF' || !memo.targetAudience
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                                    : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                            }`}>
+                                                {getAudienceLabel(memo)}
+                                            </span>
                                         </div>
                                         <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">
-                                            {memo.recipient ? `To: ${memo.recipient.name || 'Unknown Staff'} (${memo.recipient.staffProfile?.staffId || 'No ID'})` : 'To: All Staff'}
+                                            {memo.recipient ? `To: ${memo.recipient.name || 'Unknown Staff'} (${memo.recipient.staffProfile?.staffId || 'No ID'})` : `Audience: ${getAudienceLabel(memo)}`}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
@@ -459,38 +470,29 @@ export default function RegistryMemosPage() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Recipient Type</label>
-                                <div className="flex gap-4 p-1">
-                                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="recipientType"
-                                            value="broadcast"
-                                            checked={recipientType === 'broadcast'}
-                                            onChange={() => {
-                                                setRecipientType('broadcast');
-                                                setSelectedRecipientIds([]);
-                                                setSearchQuery('');
-                                            }}
-                                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
-                                        />
-                                        Broadcast to All Staff
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="recipientType"
-                                            value="selected"
-                                            checked={recipientType === 'selected'}
-                                            onChange={() => setRecipientType('selected')}
-                                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
-                                        />
-                                        Send to Selected Staff
-                                    </label>
-                                </div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Target Audience / Recipient Scope</label>
+                                <select
+                                    value={targetAudience}
+                                    onChange={(e) => {
+                                        setTargetAudience(e.target.value);
+                                        if (e.target.value !== 'CUSTOM_RECIPIENTS') {
+                                            setSelectedRecipientIds([]);
+                                            setSearchQuery('');
+                                        }
+                                    }}
+                                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition bg-white"
+                                >
+                                    <option value="ALL_STAFF">📢 All Staff (University-wide Broadcast)</option>
+                                    <option value="DIRECTORS_ONLY">👔 Directors Only (Directorate Heads)</option>
+                                    <option value="DEANS_ONLY">🎓 Deans Only (Faculty Heads)</option>
+                                    <option value="DIRECTORS_AND_DEANS">🏛️ Directors & Deans Combined</option>
+                                    <option value="HEADS_OF_DEPARTMENT_ONLY">📑 Heads of Department (HODs Only)</option>
+                                    <option value="STUDY_CENTER_DIRECTORS_ALL">📍 Study Center Directors (All Centers)</option>
+                                    <option value="CUSTOM_RECIPIENTS">🎯 Custom Selected Staff Members</option>
+                                </select>
                             </div>
 
-                            {recipientType === 'selected' && (
+                            {targetAudience === 'CUSTOM_RECIPIENTS' && (
                                 <div className="space-y-2">
                                     <label className="block text-sm font-semibold text-gray-700">Select Staff Members</label>
                                     <input
@@ -655,7 +657,7 @@ export default function RegistryMemosPage() {
                                             Sending...
                                         </>
                                     ) : (
-                                        recipientType === 'selected' ? 'Send Memo' : 'Broadcast Memo'
+                                        targetAudience === 'CUSTOM_RECIPIENTS' ? 'Send Targeted Memo' : 'Dispatch Official Memo'
                                     )}
                                 </button>
                             </div>

@@ -38,7 +38,9 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
         toCenterId: '',
         toUnitId: '',
         reason: '',
-        effectiveDate: new Date().toISOString().split('T')[0]
+        effectiveDate: new Date().toISOString().split('T')[0],
+        relocationAllowance: false,
+        relocationAllowanceAmount: 0
     });
 
     // Batch State
@@ -112,7 +114,9 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
                     toCenterId: formData.targetType === 'CENTER' ? formData.toCenterId : undefined,
                     toUnitId: formData.targetType === 'UNIT' ? formData.toUnitId : undefined,
                     reason: formData.reason,
-                    effectiveDate: formData.effectiveDate
+                    effectiveDate: formData.effectiveDate,
+                    relocationAllowance: formData.relocationAllowance,
+                    relocationAllowanceAmount: formData.relocationAllowance ? Number(formData.relocationAllowanceAmount) : 0
                 };
                 await api.post('/api/registry/transfer', payload);
             } else {
@@ -154,7 +158,9 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
             toCenterId: '',
             toUnitId: '',
             reason: '',
-            effectiveDate: new Date().toISOString().split('T')[0]
+            effectiveDate: new Date().toISOString().split('T')[0],
+            relocationAllowance: false,
+            relocationAllowanceAmount: 0
         });
         onClose();
     };
@@ -351,6 +357,41 @@ export default function TransferStaffModal({ onClose, onSuccess }: TransferStaff
                                     value={formData.effectiveDate}
                                     onChange={handleChange}
                                 />
+                            </div>
+
+                            {/* Relocation Allowance */}
+                            <div className="bg-emerald-50/60 p-3.5 rounded-lg border border-emerald-200 space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="relocationAllowance"
+                                        checked={formData.relocationAllowance}
+                                        onChange={e => setFormData(prev => ({ ...prev, relocationAllowance: e.target.checked }))}
+                                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-semibold text-emerald-950">Approve Relocation / Disturbance Allowance</span>
+                                </label>
+
+                                {formData.relocationAllowance && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-emerald-900 mb-1">Relocation Allowance Amount (₦)</label>
+                                        <input
+                                            type="number"
+                                            name="relocationAllowanceAmount"
+                                            min="0"
+                                            value={formData.relocationAllowanceAmount}
+                                            onChange={e => setFormData(prev => ({ ...prev, relocationAllowanceAmount: Number(e.target.value) }))}
+                                            placeholder="Enter approved allowance amount"
+                                            className="w-full border border-emerald-300 rounded p-2 text-sm focus:ring-emerald-500 bg-white"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Dual Control Maker-Checker Notice */}
+                            <div className="bg-blue-50/80 p-3 rounded-lg border border-blue-200 text-xs text-blue-900 flex items-start gap-2">
+                                <span className="font-bold text-blue-700 uppercase tracking-wide">Maker-Checker Notice:</span>
+                                <span>This transfer will be imputed as <strong>PENDING_REGISTRAR_AUTHORIZATION</strong>. The Registrar will review and execute the dual-control posting seal.</span>
                             </div>
                         </>
                     ) : (

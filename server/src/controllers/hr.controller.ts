@@ -1,12 +1,13 @@
-
 import { Request, Response } from 'express';
-import { Role, User, Cadre, Department } from '@prisma/client';
+import { Role, User, Cadre, CadreType, EmploymentCategory, PromotionEligibilityStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { StorageService } from '../services/storage.service';
 import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
 import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
+import { calculateStatutoryRetirementDate } from '../utils/retirement';
+import { notifyUser } from './notification.controller';
 
 // Helper to generate next Staff ID
 const generateStaffId = async (): Promise<string> => {
@@ -22,10 +23,6 @@ const generateStaffId = async (): Promise<string> => {
             });
         }
 
-        // Format: NOUN/01000 (padding to 5 digits as per requirement "start from 01000")
-        // Requirement said "start issuing staff Id from 01000". 
-        // We start at 1000. 
-        // Padding logic: String(seq.current).padStart(5, '0') -> "01000"
         return `NOUN/${String(seq.current).padStart(5, '0')}`;
     });
 };
@@ -33,13 +30,13 @@ const generateStaffId = async (): Promise<string> => {
 export const createStaffFile = async (req: Request, res: Response) => {
     try {
         const {
-            email, name, password, // User basics
+            email, name, password,
             surname, otherNames, title, phone, gender,
             stateOfOrigin, lga, address,
             highestQualification,
             bankName, accountNumber, accountName,
             nin, passportUrl,
-            role, cadre, level, step,
+            role, cadre, level, step, rank,
             centerId, unitId,
             programmeId, facilitatorInfo,
             dateOfBirth, dateOfFirstAppointment,
@@ -47,10 +44,18 @@ export const createStaffFile = async (req: Request, res: Response) => {
             nextPromotionDueYear,
             nextPromotionDueDate,
             isDueImmediately,
-            overrideReason
+            overrideReason,
+            // Diversified Onboarding Fields
+            employmentCategory = EmploymentCategory.PERMANENT,
+            contractStartDate, contractEndDate, contractRenewalTerms, specialAllowanceStructure,
+            callUpNumber, stateCode, primaryAssignmentDepartment, serviceYearBatch, nyscPPAAllowance, passOutDate,
+            volunteerProgramName, honorariumAmount, engagementDurationMonths, mouReferenceNumber
         } = req.body;
 
-        const existing = await prisma.user.findUnique({ where: { email } });
+        if (!email) return res.status(400).json({ message: 'Email is required' });
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existing) return res.status(400).json({ message: 'Staff file with this email already exists. To recreate it, the existing file must first be deleted by HR.' });
 
         if (!stateOfOrigin || !lga) {
@@ -95,6 +100,15 @@ export const createStaffFile = async (req: Request, res: Response) => {
         const apptDate = parseDate(dateOfFirstAppointment);
         const lastPromoDate = parseDate(lastPromotionDate);
 
+        // Calculate statutory retirement date and trigger factor
+        let statutoryRetirementDate: Date | null = null;
+        let statutoryRetirementReason: string | null = null;
+        if (dob) {
+            const retResult = calculateStatutoryRetirementDate(dob, apptDate, rank, resolvedCadre);
+            statutoryRetirementDate = retResult.retirementDate;
+            statutoryRetirementReason = retResult.reason;
+        }
+
         // Calculate statutory next promotion maturity
         const maturity = calculateNextPromotionMaturity({
             cadre: resolvedCadre,
@@ -112,18 +126,25 @@ export const createStaffFile = async (req: Request, res: Response) => {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
         }
 
+        const resolvedEmploymentCategory = Object.values(EmploymentCategory).includes(employmentCategory as any)
+            ? (employmentCategory as EmploymentCategory)
+            : EmploymentCategory.PERMANENT;
+
+        const now = new Date();
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
-                    email,
+                    email: normalizedEmail,
                     password: hashedPassword,
-                    name,
+                    name: name || `${surname} ${otherNames}`.trim(),
                     role: resolvedRole,
+                    isActive: false, // Inactive until Registrar clearance!
                     mustChangePassword: true,
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
-                            staffId,
+                            staffId, rank,
                             highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
@@ -134,6 +155,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
+                            statutoryRetirementDate,
+                            statutoryRetirementReason,
                             lastPromotionDate: maturity.lastPromotionDate,
                             nextPromotionDueYear: maturity.nextDueYear,
                             nextDueYear: maturity.nextDueYear,
@@ -146,7 +169,27 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,
                             facilitatorInfo: facilitatorInfo || undefined,
-                            createdById: currentUserId // Link Creator
+                            createdById: currentUserId,
+                            // Maker-Checker Clearance Gate
+                            accountStatus: 'PENDING_REGISTRAR_CLEARANCE',
+                            isActivated: false,
+                            clearanceSubmittedAt: now,
+                            // Diversified Onboarding Fields
+                            employmentCategory: resolvedEmploymentCategory,
+                            contractStartDate: parseDate(contractStartDate),
+                            contractEndDate: parseDate(contractEndDate),
+                            contractRenewalTerms: contractRenewalTerms || null,
+                            specialAllowanceStructure: specialAllowanceStructure || undefined,
+                            callUpNumber: callUpNumber || null,
+                            stateCode: stateCode || null,
+                            primaryAssignmentDepartment: primaryAssignmentDepartment || null,
+                            serviceYearBatch: serviceYearBatch || null,
+                            nyscPPAAllowance: nyscPPAAllowance ? Number(nyscPPAAllowance) : null,
+                            passOutDate: parseDate(passOutDate),
+                            volunteerProgramName: volunteerProgramName || null,
+                            honorariumAmount: honorariumAmount ? Number(honorariumAmount) : null,
+                            engagementDurationMonths: engagementDurationMonths ? Number(engagementDurationMonths) : null,
+                            mouReferenceNumber: mouReferenceNumber || null
                         }
                     }
                 }
@@ -155,23 +198,40 @@ export const createStaffFile = async (req: Request, res: Response) => {
             await tx.auditLog.create({
                 data: {
                     userId: currentUserId,
-                    action: 'CREATE_FILE',
+                    action: 'CREATE_FILE_STAGED_FOR_CLEARANCE',
                     resource: 'STAFF',
-                    details: JSON.stringify({ newStaffId: staffId, name: user.name }),
+                    details: JSON.stringify({ newStaffId: staffId, name: user.name, employmentCategory: resolvedEmploymentCategory }),
                     ipAddress: req.ip
                 }
             });
         });
 
-        // Send Notification asynchronously
-        sendAccountCreatedNotification(email, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
-            console.error('Failed to send account creation notification:', err);
+        // Notify Registrar of pending clearance
+        const registrars = await prisma.user.findMany({
+            where: { role: { in: [Role.REGISTRAR, Role.SUPER_USER] }, isActive: true },
+            select: { id: true }
         });
 
-        res.status(201).json({ message: 'Staff file created successfully', staffId });
-    } catch (error) {
+        for (const reg of registrars) {
+            await prisma.notification.create({
+                data: {
+                    userId: reg.id,
+                    title: '👤 New Staff File Awaiting Clearance',
+                    message: `New staff profile created for ${surname} ${otherNames} (${staffId}) [${resolvedEmploymentCategory}]. Requires Registrar clearance before account activation.`,
+                    type: 'INFO',
+                    link: '/dashboard/registry/files'
+                }
+            });
+        }
+
+        res.status(201).json({
+            message: 'Staff file created and staged for official Registrar clearance.',
+            staffId,
+            accountStatus: 'PENDING_REGISTRAR_CLEARANCE'
+        });
+    } catch (error: any) {
         console.error('Create Staff File Error', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: 'Internal server error creating staff file', error: error.message });
     }
 };
 
@@ -184,7 +244,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
             highestQualification,
             bankName, accountNumber, accountName,
             nin, passportUrl,
-            role, cadre, level, step,
+            role, cadre, level, step, rank,
             centerId, unitId,
             programmeId, facilitatorInfo,
             manualStaffId,
@@ -193,7 +253,12 @@ export const addExistingFile = async (req: Request, res: Response) => {
             nextPromotionDueYear,
             nextPromotionDueDate,
             isDueImmediately,
-            overrideReason
+            overrideReason,
+            // Diversified Onboarding Fields
+            employmentCategory = EmploymentCategory.PERMANENT,
+            contractStartDate, contractEndDate, contractRenewalTerms,
+            callUpNumber, stateCode, primaryAssignmentDepartment, serviceYearBatch, nyscPPAAllowance, passOutDate,
+            volunteerProgramName, honorariumAmount, engagementDurationMonths, mouReferenceNumber
         } = req.body;
 
         if (!email) return res.status(400).json({ message: 'Email is required' });
@@ -211,25 +276,13 @@ export const addExistingFile = async (req: Request, res: Response) => {
             staffId = await generateStaffId();
         } else {
             const checkId = await prisma.staffProfile.findUnique({ where: { staffId } });
-            if (checkId) return res.status(400).json({ message: 'Staff file with this Staff ID already exists. To recreate it, the existing file must first be deleted by HR.' });
+            if (checkId) return res.status(400).json({ message: 'Staff file with this Staff ID already exists.' });
         }
 
         if (phone) {
             const existingPhone = await prisma.staffProfile.findFirst({ where: { phone } });
             if (existingPhone) {
-                return res.status(400).json({ message: 'Staff file with this phone number already exists. To recreate it, the existing file must first be deleted by HR.' });
-            }
-        }
-
-        if (surname && otherNames) {
-            const existingName = await prisma.staffProfile.findFirst({
-                where: {
-                    surname: { equals: surname.trim(), mode: 'insensitive' },
-                    otherNames: { equals: otherNames.trim(), mode: 'insensitive' }
-                }
-            });
-            if (existingName) {
-                return res.status(400).json({ message: 'Staff file with this name already exists. To recreate it, the existing file must first be deleted by HR.' });
+                return res.status(400).json({ message: 'Staff file with this phone number already exists.' });
             }
         }
 
@@ -250,7 +303,14 @@ export const addExistingFile = async (req: Request, res: Response) => {
         const apptDate = parseDate(dateOfFirstAppointment);
         const lastPromoDate = parseDate(lastPromotionDate);
 
-        // Calculate statutory next promotion maturity
+        let statutoryRetirementDate: Date | null = null;
+        let statutoryRetirementReason: string | null = null;
+        if (dob) {
+            const retResult = calculateStatutoryRetirementDate(dob, apptDate, rank, resolvedCadre);
+            statutoryRetirementDate = retResult.retirementDate;
+            statutoryRetirementReason = retResult.reason;
+        }
+
         const maturity = calculateNextPromotionMaturity({
             cadre: resolvedCadre,
             level,
@@ -267,18 +327,25 @@ export const addExistingFile = async (req: Request, res: Response) => {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
         }
 
+        const resolvedEmploymentCategory = Object.values(EmploymentCategory).includes(employmentCategory as any)
+            ? (employmentCategory as EmploymentCategory)
+            : EmploymentCategory.PERMANENT;
+
+        const now = new Date();
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
                     email: normalizedEmail,
                     password: hashedPassword,
-                    name,
+                    name: name || `${surname} ${otherNames}`.trim(),
                     role: resolvedRole,
+                    isActive: false, // Staged for clearance
                     mustChangePassword: true,
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
-                            staffId,
+                            staffId, rank,
                             highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
@@ -289,6 +356,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             level, step, cadre: resolvedCadre,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
+                            statutoryRetirementDate,
+                            statutoryRetirementReason,
                             lastPromotionDate: maturity.lastPromotionDate,
                             nextPromotionDueYear: maturity.nextDueYear,
                             nextDueYear: maturity.nextDueYear,
@@ -301,7 +370,24 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             unitId: unitId || undefined,
                             programmeId: programmeId || undefined,
                             facilitatorInfo: facilitatorInfo || undefined,
-                            createdById: currentUserId
+                            createdById: currentUserId,
+                            accountStatus: 'PENDING_REGISTRAR_CLEARANCE',
+                            isActivated: false,
+                            clearanceSubmittedAt: now,
+                            employmentCategory: resolvedEmploymentCategory,
+                            contractStartDate: parseDate(contractStartDate),
+                            contractEndDate: parseDate(contractEndDate),
+                            contractRenewalTerms: contractRenewalTerms || null,
+                            callUpNumber: callUpNumber || null,
+                            stateCode: stateCode || null,
+                            primaryAssignmentDepartment: primaryAssignmentDepartment || null,
+                            serviceYearBatch: serviceYearBatch || null,
+                            nyscPPAAllowance: nyscPPAAllowance ? Number(nyscPPAAllowance) : null,
+                            passOutDate: parseDate(passOutDate),
+                            volunteerProgramName: volunteerProgramName || null,
+                            honorariumAmount: honorariumAmount ? Number(honorariumAmount) : null,
+                            engagementDurationMonths: engagementDurationMonths ? Number(engagementDurationMonths) : null,
+                            mouReferenceNumber: mouReferenceNumber || null
                         }
                     }
                 }
@@ -310,7 +396,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
             await tx.auditLog.create({
                 data: {
                     userId: currentUserId,
-                    action: 'ADD_EXISTING_FILE',
+                    action: 'ADD_EXISTING_FILE_STAGED_FOR_CLEARANCE',
                     resource: 'STAFF',
                     details: JSON.stringify({ staffId, name: user.name }),
                     ipAddress: req.ip
@@ -318,15 +404,178 @@ export const addExistingFile = async (req: Request, res: Response) => {
             });
         });
 
-        // Send Notification asynchronously
-        sendAccountCreatedNotification(normalizedEmail, phone || null, name || `${surname} ${otherNames}`, staffId).catch(err => {
-            console.error('Failed to send account creation notification:', err);
+        res.status(201).json({ message: 'Existing staff file staged for Registrar clearance', staffId, accountStatus: 'PENDING_REGISTRAR_CLEARANCE' });
+    } catch (error: any) {
+        console.error('Add Existing File Error', error);
+        res.status(500).json({ message: 'Internal server error adding existing file', error: error.message });
+    }
+};
+
+/**
+ * GET /api/v1/registry/files/pending-clearance
+ * Returns all staff files pending Registrar clearance & activation
+ */
+export const getPendingClearanceFiles = async (req: Request, res: Response) => {
+    try {
+        const files = await prisma.staffProfile.findMany({
+            where: {
+                accountStatus: 'PENDING_REGISTRAR_CLEARANCE',
+                isDeleted: false
+            },
+            include: {
+                user: { select: { id: true, name: true, email: true, role: true } },
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+                createdBy: { select: { id: true, name: true, email: true } }
+            },
+            orderBy: { clearanceSubmittedAt: 'desc' }
         });
 
-        res.status(201).json({ message: 'Existing staff file added', staffId });
-    } catch (error) {
-        console.error('Add Existing File Error', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.json(files);
+    } catch (error: any) {
+        console.error('Error fetching pending clearance files:', error);
+        res.status(500).json({ message: 'Failed to fetch files pending clearance' });
+    }
+};
+
+/**
+ * POST /api/v1/registry/files/:id/clear
+ * Registrar authorizes and clears the staff file. Activates User account and triggers onboarding email.
+ */
+export const clearStaffFile = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { remarks } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+        // @ts-ignore
+        const authorizerRole = req.user?.role;
+
+        if (authorizerRole !== Role.REGISTRAR && authorizerRole !== Role.SUPER_USER && authorizerRole !== Role.VICE_CHANCELLOR) {
+            return res.status(403).json({ message: 'Unauthorized: Only the Registrar can grant official staff file clearance.' });
+        }
+
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [{ id }, { userId: id }, { staffId: id }],
+                isDeleted: false
+            },
+            include: { user: true, createdBy: true }
+        });
+
+        if (!profile) {
+            return res.status(404).json({ message: 'Staff file not found' });
+        }
+
+        const now = new Date();
+
+        await prisma.$transaction(async (tx) => {
+            await tx.staffProfile.update({
+                where: { id: profile.id },
+                data: {
+                    accountStatus: 'CLEARED_ACTIVE',
+                    isActivated: true,
+                    clearedAt: now,
+                    clearedById: authorizerId,
+                    clearanceRemarks: remarks || 'Officially cleared by Registrar'
+                }
+            });
+
+            await tx.user.update({
+                where: { id: profile.userId },
+                data: {
+                    isActive: true
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    userId: authorizerId,
+                    action: 'CLEAR_STAFF_FILE',
+                    resource: 'STAFF_PROFILE',
+                    details: JSON.stringify({ staffProfileId: profile.id, staffId: profile.staffId, remarks }),
+                    ipAddress: req.ip
+                }
+            });
+        });
+
+        // Send activation email with default credentials
+        const staffName = profile.user.name || `${profile.surname || ''} ${profile.otherNames || ''}`.trim() || 'Staff';
+        sendAccountCreatedNotification(profile.user.email, profile.phone || null, staffName, profile.staffId || 'N/A').catch(err => {
+            console.error('Failed to send account creation notification on clearance:', err);
+        });
+
+        // Notify Imputer (creating HR Admin)
+        if (profile.createdById) {
+            await notifyUser(
+                profile.createdById,
+                '✅ Staff File Cleared by Registrar',
+                `Staff file for ${staffName} (${profile.staffId}) has been cleared and activated.`,
+                'SUCCESS',
+                '/dashboard/hr/files'
+            );
+        }
+
+        await Promise.all([
+            redisService.clearPattern('staff:*'),
+            redisService.clearPattern('analytics:*')
+        ]);
+
+        res.json({ message: 'Staff file cleared and account activated successfully.', clearedAt: now });
+    } catch (error: any) {
+        console.error('Error clearing staff file:', error);
+        res.status(500).json({ message: 'Internal server error clearing staff file', error: error.message });
+    }
+};
+
+/**
+ * POST /api/v1/registry/files/:id/reject
+ * Registrar rejects a staff file clearance request
+ */
+export const rejectStaffFile = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+        // @ts-ignore
+        const authorizerRole = req.user?.role;
+
+        if (authorizerRole !== Role.REGISTRAR && authorizerRole !== Role.SUPER_USER && authorizerRole !== Role.VICE_CHANCELLOR) {
+            return res.status(403).json({ message: 'Unauthorized: Only the Registrar can reject staff file clearance.' });
+        }
+
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [{ id }, { userId: id }, { staffId: id }]
+            },
+            include: { user: true }
+        });
+
+        if (!profile) return res.status(404).json({ message: 'Staff file not found' });
+
+        await prisma.staffProfile.update({
+            where: { id: profile.id },
+            data: {
+                accountStatus: 'REJECTED',
+                clearanceRemarks: reason || 'Staff file rejected during clearance review'
+            }
+        });
+
+        if (profile.createdById) {
+            await notifyUser(
+                profile.createdById,
+                '❌ Staff File Clearance Rejected',
+                `Staff file for ${profile.user.name} was rejected by the Registrar. Reason: ${reason || 'Not specified'}`,
+                'ERROR',
+                '/dashboard/hr/files'
+            );
+        }
+
+        res.json({ message: 'Staff file clearance rejected successfully.' });
+    } catch (error: any) {
+        console.error('Error rejecting staff file clearance:', error);
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
 
@@ -349,7 +598,7 @@ export const getJobFiles = async (req: Request, res: Response) => {
             include: {
                 staffProfile: {
                     include: {
-                        createdBy: { select: { name: true, email: true } }, // Fetch Creator Name
+                        createdBy: { select: { name: true, email: true } },
                         unit: true,
                         studyCenter: true,
                         queries: {
@@ -372,14 +621,12 @@ export const getJobFiles = async (req: Request, res: Response) => {
         console.error('Get Job Files Error', error);
         res.status(500).json({ message: 'Error fetching files' });
     }
-}
+};
 
-// Get Single Staff File
 export const getStaffFile = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params; // Staff Profile ID or StaffID String? Let's check both
+        const { id } = req.params;
 
-        // Attempt to find by Profile ID (UUID), User ID (UUID), or Staff ID String
         const profile = await prisma.staffProfile.findFirst({
             where: {
                 OR: [
@@ -399,9 +646,8 @@ export const getStaffFile = async (req: Request, res: Response) => {
 
         if (!profile) return res.status(404).json({ message: 'Staff file not found' });
 
-        // Flatten for frontend consistency if needed, or return as is
         res.json({
-            id: profile.id, // Profile ID
+            id: profile.id,
             userId: profile.userId,
             name: profile.user.name,
             email: profile.user.email,
@@ -416,29 +662,39 @@ export const getStaffFile = async (req: Request, res: Response) => {
             cadre: profile.cadre,
             level: profile.level,
             step: profile.step,
+            rank: profile.rank,
             role: profile.user.role,
             unit: profile.unit,
             studyCenter: profile.studyCenter,
             dateOfBirth: profile.dateOfBirth,
             dateOfFirstAppointment: profile.dateOfFirstAppointment,
+            statutoryRetirementDate: profile.statutoryRetirementDate,
+            statutoryRetirementReason: profile.statutoryRetirementReason,
             lastPromotionDate: profile.lastPromotionDate || profile.dateOfLastPromotion,
             nextPromotionDueYear: profile.nextPromotionDueYear || profile.nextDueYear,
             nextPromotionDueDate: profile.nextPromotionDueDate || profile.nextDueDate,
             promotionEligibilityStatus: profile.promotionEligibilityStatus || profile.eligibilityStatus,
+            accountStatus: profile.accountStatus,
+            isActivated: profile.isActivated,
+            employmentCategory: profile.employmentCategory,
+            contractStartDate: profile.contractStartDate,
+            contractEndDate: profile.contractEndDate,
+            callUpNumber: profile.callUpNumber,
+            stateCode: profile.stateCode,
+            serviceYearBatch: profile.serviceYearBatch,
+            volunteerProgramName: profile.volunteerProgramName,
             createdAt: profile.createdAt,
             createdBy: profile.createdBy
         });
-
     } catch (error) {
         console.error('Get Staff File Error', error);
         res.status(500).json({ message: 'Error fetching staff file' });
     }
 };
 
-// Delete Staff File (Soft Delete with Password Verification)
 export const deleteStaffFile = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params; // Staff Profile ID or Staff ID
+        const { id } = req.params;
         const { password } = req.body;
         // @ts-ignore
         const requesterId = req.user?.id;
@@ -447,7 +703,6 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Password is required to confirm deletion' });
         }
 
-        // Fetch requester to verify password
         const requester = await prisma.user.findUnique({
             where: { id: requesterId }
         });
@@ -456,7 +711,6 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Requester account not found' });
         }
 
-        // Verify password
         const isPasswordCorrect = await bcrypt.compare(password, requester.password);
         if (!isPasswordCorrect) {
             return res.status(401).json({ message: 'Incorrect password. Deletion cancelled.' });
@@ -473,7 +727,6 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
 
         if (!profile) return res.status(404).json({ message: 'Staff file not found' });
 
-        // Perform soft delete
         await prisma.$transaction(async (tx) => {
             await tx.staffProfile.update({
                 where: { id: profile!.id },
@@ -499,7 +752,6 @@ export const deleteStaffFile = async (req: Request, res: Response) => {
     }
 };
 
-// Get Archived Files (HR / Super Users only)
 export const getArchivedFiles = async (req: Request, res: Response) => {
     try {
         const securityCode = req.headers['x-archive-code'] || req.query.code;
@@ -524,7 +776,6 @@ export const getArchivedFiles = async (req: Request, res: Response) => {
     }
 };
 
-// Restore Staff File
 export const restoreStaffFile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;

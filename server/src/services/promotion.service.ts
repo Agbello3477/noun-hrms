@@ -33,6 +33,7 @@ export function normalizeToCadre(cadre?: string | null): Cadre | null {
 export interface UpdateScheduleParams {
     staffProfileId: string;
     actorId: string;
+    actorRole?: string;
     lastPromotionDate?: Date | string | null;
     cadreType?: CadreType | string | null;
     currentGradeLevel?: string | null;
@@ -60,11 +61,13 @@ export interface PromotionFilterParams {
 export class PromotionService {
     /**
      * Updates or overrides a staff member's promotion maturity schedule and records an immutable audit log.
+     * Integrates Disciplinary Integrity Gate and Maker-Checker for Promotion Overrides.
      */
     static async updateStaffPromotionSchedule(params: UpdateScheduleParams) {
         const {
             staffProfileId,
             actorId,
+            actorRole,
             lastPromotionDate,
             cadreType,
             currentGradeLevel,
@@ -83,12 +86,26 @@ export class PromotionService {
             where: { id: staffProfileId },
             include: {
                 user: { select: { id: true, email: true, name: true, role: true } },
-                unit: { select: { name: true } }
+                unit: { select: { name: true } },
+                queries: {
+                    where: {
+                        OR: [
+                            { source: 'REGISTRY', resolutionStatus: { in: ['PENDING', 'UNSATISFACTORY'] } },
+                            { status: { in: ['OPEN', 'DEFAULTED_UNANSWERED'] } }
+                        ]
+                    }
+                }
             }
         });
 
         if (!profile) {
             throw new Error('Staff profile not found');
+        }
+
+        // 1. Disciplinary Integrity Gate
+        const hasDisciplinaryHold = profile.hasActiveDisciplinaryBlock || profile.queries.length > 0;
+        if (hasDisciplinaryHold && (isDueImmediately || eligibilityStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || eligibilityStatus === PromotionEligibilityStatus.APPROVED)) {
+            throw new Error(`Cannot clear or approve promotion: Staff candidate is blocked due to unresolved disciplinary matter (${profile.disciplinaryBlockReason || 'Open Registry Query'}).`);
         }
 
         const effectiveDueYearInput = nextPromotionDueYear !== undefined && nextPromotionDueYear !== null ? nextPromotionDueYear : nextDueYear;
@@ -100,7 +117,6 @@ export class PromotionService {
             }
         }
 
-        // Determine candidate promotion date
         const effectiveLastPromo = lastPromotionDate !== undefined
             ? (lastPromotionDate ? new Date(lastPromotionDate) : null)
             : (profile.lastPromotionDate || profile.dateOfLastPromotion || null);
@@ -109,7 +125,6 @@ export class PromotionService {
         const effectiveCadre = normalizeToCadre(cadreType) || normalizeToCadre(profile.cadreType) || normalizeToCadre(profile.cadre) || null;
         const effectiveLevel = currentGradeLevel !== undefined ? currentGradeLevel : (profile.currentGradeLevel || profile.level);
 
-        // Calculate auto-computed defaults if not explicitly overridden
         const computed = calculatePromotionMaturity(effectiveLastPromo, effectiveCadreType, effectiveLevel);
 
         const computedDueYear = effectiveDueYearInput !== undefined && effectiveDueYearInput !== null
@@ -131,30 +146,57 @@ export class PromotionService {
             effectiveStatus = PromotionEligibilityStatus.DUE_FOR_REVIEW;
         }
 
+        if (hasDisciplinaryHold) {
+            effectiveStatus = PromotionEligibilityStatus.DISQUALIFIED_DISCIPLINARY;
+        }
+
+        const isRegistrarOrSuper = actorRole === Role.REGISTRAR || actorRole === Role.SUPER_USER || actorRole === Role.VICE_CHANCELLOR;
+        const requiresRegistrarClearance = isManualOverride && !isRegistrarOrSuper;
+
         const prevDueYear = profile.nextPromotionDueYear || profile.nextDueYear;
         const prevStatus = profile.promotionEligibilityStatus || profile.eligibilityStatus;
 
         // Execute transaction: update profile + append audit log
         const [updatedProfile, auditLog] = await prisma.$transaction(async (tx) => {
+            const updatePayload: any = {
+                lastPromotionDate: effectiveLastPromo,
+                dateOfLastPromotion: effectiveLastPromo,
+                cadreType: effectiveCadreType,
+                cadre: effectiveCadre,
+                currentGradeLevel: effectiveLevel,
+                legacyDataBackfilled: true
+            };
+
+            if (requiresRegistrarClearance) {
+                // Stage override for Registrar review
+                updatePayload.promotionOverrideStatus = 'PENDING_REGISTRAR_OVERRIDE';
+                updatePayload.requestedPromotionDueYear = computedDueYear;
+                updatePayload.promotionOverrideJustification = overrideReason?.trim();
+                updatePayload.promotionOverrideRequestedById = actorId;
+                updatePayload.promotionOverrideRequestedAt = new Date();
+                updatePayload.promotionEligibilityStatus = PromotionEligibilityStatus.PENDING_REGISTRAR_OVERRIDE;
+                updatePayload.eligibilityStatus = PromotionEligibilityStatus.PENDING_REGISTRAR_OVERRIDE;
+            } else {
+                // Apply directly (Registrar or Standard Cadre Calculation)
+                updatePayload.nextDueYear = computedDueYear;
+                updatePayload.nextPromotionDueYear = computedDueYear;
+                updatePayload.nextDueDate = computedDueDate;
+                updatePayload.nextPromotionDueDate = computedDueDate;
+                updatePayload.eligibilityStatus = effectiveStatus;
+                updatePayload.promotionEligibilityStatus = effectiveStatus;
+                updatePayload.registryOverride = isManualOverride;
+                updatePayload.overrideReason = isManualOverride ? overrideReason?.trim() : profile.overrideReason;
+                updatePayload.isDueForPromotion = isDueImmediately || effectiveStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || effectiveStatus === PromotionEligibilityStatus.UNDER_EVALUATION;
+                if (isManualOverride && isRegistrarOrSuper) {
+                    updatePayload.promotionOverrideStatus = 'APPROVED';
+                    updatePayload.promotionOverrideApprovedById = actorId;
+                    updatePayload.promotionOverrideApprovedAt = new Date();
+                }
+            }
+
             const updated = await tx.staffProfile.update({
                 where: { id: staffProfileId },
-                data: {
-                    lastPromotionDate: effectiveLastPromo,
-                    dateOfLastPromotion: effectiveLastPromo, // sync legacy field
-                    cadreType: effectiveCadreType,
-                    cadre: effectiveCadre, // sync legacy cadre field
-                    currentGradeLevel: effectiveLevel,
-                    nextDueYear: computedDueYear,
-                    nextPromotionDueYear: computedDueYear,
-                    nextDueDate: computedDueDate,
-                    nextPromotionDueDate: computedDueDate,
-                    eligibilityStatus: effectiveStatus,
-                    promotionEligibilityStatus: effectiveStatus,
-                    legacyDataBackfilled: true,
-                    registryOverride: isManualOverride,
-                    overrideReason: isManualOverride ? overrideReason?.trim() : profile.overrideReason,
-                    isDueForPromotion: isDueImmediately || effectiveStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || effectiveStatus === PromotionEligibilityStatus.UNDER_EVALUATION
-                },
+                data: updatePayload,
                 include: {
                     user: { select: { id: true, email: true, name: true, role: true } },
                     unit: { select: { name: true } },
@@ -166,17 +208,18 @@ export class PromotionService {
                 data: {
                     staffProfileId,
                     actorId,
-                    action: isManualOverride ? 'MANUAL_OVERRIDE' : 'SCHEDULE_CONFIG',
+                    action: requiresRegistrarClearance ? 'PENDING_REGISTRAR_OVERRIDE' : (isManualOverride ? 'MANUAL_OVERRIDE' : 'SCHEDULE_CONFIG'),
                     previousDueYear: prevDueYear,
                     newDueYear: computedDueYear,
                     previousStatus: prevStatus,
-                    newStatus: effectiveStatus,
+                    newStatus: updatePayload.eligibilityStatus,
                     reason: overrideReason?.trim() || `Configured schedule based on ${computed.cadreRuleApplied}`,
                     metadata: {
                         intervalYears: computed.intervalYears,
                         cadreRuleApplied: computed.cadreRuleApplied,
                         gradeLevel: effectiveLevel,
-                        lastPromotionDate: effectiveLastPromo
+                        lastPromotionDate: effectiveLastPromo,
+                        requiresRegistrarClearance
                     }
                 },
                 include: {
@@ -187,7 +230,135 @@ export class PromotionService {
             return [updated, log];
         });
 
+        // Notify Registrar if pending clearance
+        if (requiresRegistrarClearance) {
+            const registrars = await prisma.user.findMany({
+                where: { role: { in: [Role.REGISTRAR, Role.SUPER_USER] }, isActive: true },
+                select: { id: true }
+            });
+            const staffName = `${profile.surname || ''} ${profile.otherNames || ''}`.trim() || profile.user?.name || 'Staff';
+            for (const r of registrars) {
+                await prisma.notification.create({
+                    data: {
+                        userId: r.id,
+                        title: '📑 Promotion Override Awaiting Approval',
+                        message: `A promotion due year override to ${computedDueYear} for ${staffName} (${profile.staffId}) requires Registrar authorization.`,
+                        type: 'WARNING',
+                        link: '/dashboard/registry/due-for-promotion'
+                    }
+                }).catch(() => {});
+            }
+        }
+
         return { profile: updatedProfile, auditLog };
+    }
+
+    /**
+     * Authorize promotion override (Registrar / Super User).
+     */
+    static async authorizePromotionOverride(staffProfileId: string, actorId: string, remarks?: string) {
+        const profile = await prisma.staffProfile.findUnique({
+            where: { id: staffProfileId },
+            include: { user: true }
+        });
+
+        if (!profile) throw new Error('Staff profile not found');
+        if (profile.promotionOverrideStatus !== 'PENDING_REGISTRAR_OVERRIDE') {
+            throw new Error('No pending promotion override request for this staff member.');
+        }
+
+        const newDueYear = profile.requestedPromotionDueYear || new Date().getFullYear();
+        const now = new Date();
+
+        const [updated, auditLog] = await prisma.$transaction(async (tx) => {
+            const prof = await tx.staffProfile.update({
+                where: { id: staffProfileId },
+                data: {
+                    nextPromotionDueYear: newDueYear,
+                    nextDueYear: newDueYear,
+                    promotionOverrideStatus: 'APPROVED',
+                    promotionOverrideApprovedById: actorId,
+                    promotionOverrideApprovedAt: now,
+                    promotionEligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                    eligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                    isDueForPromotion: true,
+                    registryOverride: true,
+                    overrideReason: remarks || profile.promotionOverrideJustification || 'Authorized by Registrar'
+                }
+            });
+
+            const log = await tx.promotionAuditLog.create({
+                data: {
+                    staffProfileId,
+                    actorId,
+                    action: 'REGISTRAR_OVERRIDE_APPROVED',
+                    previousDueYear: profile.nextPromotionDueYear,
+                    newDueYear,
+                    previousStatus: PromotionEligibilityStatus.PENDING_REGISTRAR_OVERRIDE,
+                    newStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
+                    reason: remarks || 'Registrar authorized promotion milestone override.'
+                }
+            });
+
+            return [prof, log];
+        });
+
+        // Notify Staff & Initiator
+        if (profile.userId) {
+            await prisma.notification.create({
+                data: {
+                    userId: profile.userId,
+                    title: '⭐ Promotion Schedule Authorized',
+                    message: `The Registrar has authorized your promotion due milestone for ${newDueYear}.`,
+                    type: 'SUCCESS',
+                    link: '/dashboard/profile'
+                }
+            }).catch(() => {});
+        }
+
+        return { profile: updated, auditLog };
+    }
+
+    /**
+     * Reject promotion override (Registrar / Super User).
+     */
+    static async rejectPromotionOverride(staffProfileId: string, actorId: string, reason?: string) {
+        const profile = await prisma.staffProfile.findUnique({
+            where: { id: staffProfileId }
+        });
+
+        if (!profile) throw new Error('Staff profile not found');
+
+        const now = new Date();
+
+        const [updated, auditLog] = await prisma.$transaction(async (tx) => {
+            const prof = await tx.staffProfile.update({
+                where: { id: staffProfileId },
+                data: {
+                    promotionOverrideStatus: 'REJECTED',
+                    promotionOverrideApprovedById: actorId,
+                    promotionOverrideApprovedAt: now,
+                    promotionEligibilityStatus: PromotionEligibilityStatus.PENDING_MATURITY,
+                    eligibilityStatus: PromotionEligibilityStatus.PENDING_MATURITY,
+                    requestedPromotionDueYear: null
+                }
+            });
+
+            const log = await tx.promotionAuditLog.create({
+                data: {
+                    staffProfileId,
+                    actorId,
+                    action: 'REGISTRAR_OVERRIDE_REJECTED',
+                    previousStatus: PromotionEligibilityStatus.PENDING_REGISTRAR_OVERRIDE,
+                    newStatus: PromotionEligibilityStatus.PENDING_MATURITY,
+                    reason: reason || 'Promotion override rejected by Registrar.'
+                }
+            });
+
+            return [prof, log];
+        });
+
+        return { profile: updated, auditLog };
     }
 
     /**
@@ -213,7 +384,6 @@ export class PromotionService {
             status: 'ACTIVE'
         };
 
-        // Tab & Year filtering logic
         if (tab === 'DUE_THIS_CYCLE') {
             where.OR = [
                 { nextPromotionDueYear: targetYear },
@@ -238,7 +408,7 @@ export class PromotionService {
                 { nextDueYear: { gt: targetYear } }
             ];
         } else if (tab === 'ALL') {
-            // No year constraint on 'ALL' tab
+            // All configured
         } else if (year) {
             where.OR = [
                 { nextPromotionDueYear: targetYear },
@@ -252,18 +422,13 @@ export class PromotionService {
             ];
         }
 
-        // Cadre filter
         if (cadre && cadre !== 'ALL') {
             const targetCadreType = normalizeToCadreType(cadre);
             const targetCadre = normalizeToCadre(cadre);
 
             const orConditions: any[] = [];
-            if (targetCadreType) {
-                orConditions.push({ cadreType: targetCadreType });
-            }
-            if (targetCadre) {
-                orConditions.push({ cadre: targetCadre });
-            }
+            if (targetCadreType) orConditions.push({ cadreType: targetCadreType });
+            if (targetCadre) orConditions.push({ cadre: targetCadre });
 
             if (orConditions.length > 0) {
                 where.AND = where.AND || [];
@@ -271,12 +436,10 @@ export class PromotionService {
             }
         }
 
-        // Status filter
         if (status && status !== 'ALL') {
             where.eligibilityStatus = status as PromotionEligibilityStatus;
         }
 
-        // Search filter (staff ID, name, rank, unit/department)
         if (search.trim()) {
             const q = search.trim();
             const searchClause = {
@@ -311,6 +474,10 @@ export class PromotionService {
                     user: { select: { id: true, email: true, name: true } },
                     unit: { select: { id: true, name: true, headId: true } },
                     studyCenter: { select: { id: true, name: true } },
+                    queries: {
+                        where: { status: { in: ['OPEN', 'DEFAULTED_UNANSWERED'] } },
+                        select: { id: true, title: true, status: true, source: true }
+                    },
                     promotionAuditLogs: {
                         orderBy: { createdAt: 'desc' },
                         take: 1,
@@ -381,6 +548,8 @@ export class PromotionService {
             UNDER_EVALUATION: 0,
             APPROVED: 0,
             DEFERRED: 0,
+            DISQUALIFIED_DISCIPLINARY: 0,
+            PENDING_REGISTRAR_OVERRIDE: 0,
             TOTAL: total
         };
 
@@ -390,12 +559,12 @@ export class PromotionService {
             }
         });
 
-        // Format and enrich profiles
         const enrichedData = profiles.map(p => {
             const fullName = `${p.title ? p.title + ' ' : ''}${p.surname || ''} ${p.otherNames || ''}`.trim() || p.user?.name || 'Staff Member';
             const effectiveDueYear = p.nextPromotionDueYear || p.nextDueYear;
             const effectiveDueDate = p.nextPromotionDueDate || p.nextDueDate;
             const effectiveStatus = p.promotionEligibilityStatus || p.eligibilityStatus;
+            const hasDisciplinaryHold = p.hasActiveDisciplinaryBlock || p.queries.length > 0;
 
             return {
                 ...p,
@@ -405,7 +574,9 @@ export class PromotionService {
                 nextPromotionDueDate: effectiveDueDate,
                 nextDueDate: effectiveDueDate,
                 promotionEligibilityStatus: effectiveStatus,
-                eligibilityStatus: effectiveStatus
+                eligibilityStatus: effectiveStatus,
+                hasDisciplinaryHold,
+                openQueriesCount: p.queries.length
             };
         });
 
@@ -426,42 +597,8 @@ export class PromotionService {
     }
 
     /**
-     * Runs an on-demand docket synchronization to stage candidates whose maturity year <= currentYear into DUE_FOR_REVIEW.
-     */
-    static async syncCandidates(cycleYear: number = new Date().getFullYear(), actorId?: string) {
-        // 1. Evaluate annual cycle engine
-        const evalResult = await this.evaluateMaturityCycle(cycleYear, actorId, 'MANUAL');
-
-        // 2. Fast-track update any pending staff with nextPromotionDueYear <= cycleYear into DUE_FOR_REVIEW
-        const updateResult = await prisma.staffProfile.updateMany({
-            where: {
-                isDeleted: false,
-                status: 'ACTIVE',
-                OR: [
-                    { nextPromotionDueYear: { lte: cycleYear } },
-                    { nextDueYear: { lte: cycleYear } },
-                    { isDueForPromotion: true }
-                ],
-                eligibilityStatus: PromotionEligibilityStatus.PENDING_MATURITY
-            },
-            data: {
-                promotionEligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
-                eligibilityStatus: PromotionEligibilityStatus.DUE_FOR_REVIEW,
-                isDueForPromotion: true
-            }
-        });
-
-        return {
-            cycleYear,
-            evalResult,
-            stagedCount: updateResult.count
-        };
-    }
-
-
-    /**
      * Executes the Automated Annual Maturity Evaluation Engine (Step A - Step D).
-     * Screens active staff, verifies integrity/queries, transitions status, builds docket, and dispatches multi-tier notifications.
+     * Integrates Disciplinary Integrity Gate.
      */
     static async evaluateMaturityCycle(
         targetCycleYear: number = new Date().getFullYear(),
@@ -480,13 +617,13 @@ export class PromotionService {
         let skippedCount = 0;
 
         try {
-            // Step A: Query active staff where nextDueYear <= targetCycleYear OR legacy flagged
             const candidates = await prisma.staffProfile.findMany({
                 where: {
                     isDeleted: false,
                     status: 'ACTIVE',
                     OR: [
                         { nextDueYear: { lte: targetCycleYear } },
+                        { nextPromotionDueYear: { lte: targetCycleYear } },
                         { isDueForPromotion: true }
                     ]
                 },
@@ -495,8 +632,13 @@ export class PromotionService {
                     unit: { select: { id: true, name: true, headId: true } },
                     studyCenter: { select: { id: true, name: true } },
                     queries: {
-                        where: { status: 'OPEN' },
-                        select: { id: true, title: true, createdAt: true }
+                        where: {
+                            OR: [
+                                { source: 'REGISTRY', resolutionStatus: { in: ['PENDING', 'UNSATISFACTORY'] } },
+                                { status: { in: ['OPEN', 'DEFAULTED_UNANSWERED'] } }
+                            ]
+                        },
+                        select: { id: true, title: true, createdAt: true, status: true, source: true }
                     }
                 }
             });
@@ -515,7 +657,6 @@ export class PromotionService {
                 };
             }
 
-            // Step C Prep: Upsert Annual Promotion Batch Docket
             const batch = await prisma.promotionBatch.upsert({
                 where: { cycleYear: targetCycleYear },
                 create: {
@@ -532,10 +673,8 @@ export class PromotionService {
             const unitCandidateTally: Record<string, { unitName: string; headId?: string | null; count: number }> = {};
 
             for (const profile of candidates) {
-                // Idempotency: Skip if already evaluated for this cycle year and already DUE_FOR_REVIEW / UNDER_EVALUATION
                 if (profile.evaluatedForYear === targetCycleYear && profile.eligibilityStatus !== PromotionEligibilityStatus.PENDING_MATURITY) {
                     skippedCount++;
-                    log.push(`[SKIP] Staff ${profile.staffId || profile.id} already staged for cycle ${targetCycleYear}.`);
                     continue;
                 }
 
@@ -544,14 +683,18 @@ export class PromotionService {
                     const staffId = profile.staffId || 'N/A';
                     const unitName = profile.unit?.name || profile.studyCenter?.name || profile.department || 'Registry Directorate';
 
-                    // Step B: Disciplinary & Integrity screening
-                    const hasOpenQueries = profile.queries.length > 0;
+                    // Disciplinary Integrity Gate Check
+                    const hasUnresolvedQueries = profile.queries.length > 0;
                     const isSuspended = profile.status === 'SUSPENDED';
-                    const integrityClear = !hasOpenQueries && !isSuspended;
+                    const hasDisciplinaryBlock = profile.hasActiveDisciplinaryBlock || hasUnresolvedQueries;
+                    const integrityClear = !hasDisciplinaryBlock && !isSuspended;
 
                     let disqualificationReason: string | null = null;
-                    if (hasOpenQueries) {
-                        disqualificationReason = `Pending Integrity Review: Candidate has ${profile.queries.length} unresolved official quer${profile.queries.length > 1 ? 'ies' : 'y'}.`;
+                    if (hasUnresolvedQueries) {
+                        disqualificationReason = `Disciplinary Hold: Candidate has ${profile.queries.length} unresolved official disciplinary quer${profile.queries.length > 1 ? 'ies' : 'y'}.`;
+                        integrityHoldsCount++;
+                    } else if (profile.hasActiveDisciplinaryBlock) {
+                        disqualificationReason = `Disciplinary Block: ${profile.disciplinaryBlockReason || 'Active Registry disciplinary block'}`;
                         integrityHoldsCount++;
                     } else if (isSuspended) {
                         disqualificationReason = 'Suspended: Staff profile currently under administrative suspension.';
@@ -560,11 +703,9 @@ export class PromotionService {
 
                     const targetStatus = integrityClear
                         ? PromotionEligibilityStatus.DUE_FOR_REVIEW
-                        : PromotionEligibilityStatus.PENDING_MATURITY;
+                        : PromotionEligibilityStatus.DISQUALIFIED_DISCIPLINARY;
 
-                    // Step C: Persist candidate record & audit trail inside transaction
                     await prisma.$transaction(async (tx) => {
-                        // Upsert batch candidate
                         await tx.promotionBatchCandidate.upsert({
                             where: {
                                 batchId_staffProfileId: {
@@ -591,14 +732,13 @@ export class PromotionService {
                             }
                         });
 
-                        // Create legacy PromotionLog record for backward compatibility
                         await tx.promotionLog.create({
                             data: {
                                 staffProfileId: profile.id,
                                 snapshotRank: profile.rank || profile.currentRank || null,
                                 snapshotLevel: profile.level ? `${profile.level}${profile.step ? '/' + profile.step : ''}` : null,
                                 snapshotUnit: unitName,
-                                status: integrityClear ? 'DUE_FOR_PROMOTION' : 'INTEGRITY_HOLD',
+                                status: integrityClear ? 'DUE_FOR_PROMOTION' : 'INTEGRITY_DISQUALIFIED',
                                 calendarYear: targetCycleYear,
                                 triggeredBy,
                                 cronExecutedAt: new Date(),
@@ -606,43 +746,16 @@ export class PromotionService {
                             }
                         });
 
-                        // Update StaffProfile
                         await tx.staffProfile.update({
                             where: { id: profile.id },
                             data: {
                                 eligibilityStatus: targetStatus,
+                                promotionEligibilityStatus: targetStatus,
                                 isDueForPromotion: integrityClear,
                                 evaluatedForYear: targetCycleYear,
                                 promotionFlaggedAt: new Date()
                             }
                         });
-
-                        // Append immutable PromotionAuditLog
-                        if (actorId || triggeredBy === 'CRON') {
-                            const systemActor = actorId ? await tx.user.findUnique({ where: { id: actorId }, select: { id: true } }) : null;
-                            const effectiveActorId = systemActor?.id || profile.user?.id || profile.id;
-
-                            await tx.promotionAuditLog.create({
-                                data: {
-                                    staffProfileId: profile.id,
-                                    actorId: effectiveActorId,
-                                    action: 'CRON_EVALUATED',
-                                    previousDueYear: profile.nextDueYear,
-                                    newDueYear: profile.nextDueYear || targetCycleYear,
-                                    previousStatus: profile.eligibilityStatus,
-                                    newStatus: targetStatus,
-                                    reason: integrityClear
-                                        ? `Automated Annual Maturity Review: Profile matured for ${targetCycleYear} Promotion Exercise.`
-                                        : `Automated Review Integrity Hold: ${disqualificationReason}`,
-                                    metadata: {
-                                        cycleYear: targetCycleYear,
-                                        triggeredBy,
-                                        integrityClear,
-                                        openQueriesCount: profile.queries.length
-                                    }
-                                }
-                            });
-                        }
                     });
 
                     if (integrityClear) {
@@ -656,7 +769,6 @@ export class PromotionService {
                             unitName
                         });
 
-                        // Aggregate by unit
                         if (profile.unit?.id) {
                             if (!unitCandidateTally[profile.unit.id]) {
                                 unitCandidateTally[profile.unit.id] = {
@@ -670,95 +782,38 @@ export class PromotionService {
                     }
 
                     processed++;
-                    log.push(`[PROCESSED] ${staffName} (${staffId}) -> ${targetStatus} (Clear=${integrityClear})`);
-
                 } catch (candErr: any) {
                     const msg = `[ERROR] Failed processing candidate ${profile.id}: ${candErr.message}`;
                     errors.push(msg);
                     log.push(msg);
-                    console.error(msg, candErr);
                 }
             }
 
-            // Update batch total count
             await prisma.promotionBatch.update({
                 where: { id: batch.id },
                 data: { candidateCount: maturedCount }
             });
 
-            // Step D: Dispatch Multi-Tier Notifications
-            log.push(`[NOTIFY] Dispatching notifications for ${maturedStaffToNotify.length} matured candidates...`);
-
-            // 1. Staff notifications
+            // Dispatch Notifications
             for (const s of maturedStaffToNotify) {
                 if (s.id) {
                     await prisma.notification.create({
                         data: {
                             userId: s.id,
                             title: `⭐ ${targetCycleYear} Promotion Exercise Eligibility Notice`,
-                            message: `Your profile has matured for the ${targetCycleYear} Annual Promotion Exercise. The Registry Appraisal Committee has staged your dossier for evaluation.`,
+                            message: `Your profile has matured for the ${targetCycleYear} Annual Promotion Exercise. Dossier staged for Appraisal Committee evaluation.`,
                             type: 'SUCCESS',
                             link: '/dashboard/profile'
                         }
                     }).catch(() => {});
-
-                    sendPushNotification(
-                        [s.id],
-                        `⭐ ${targetCycleYear} Promotion Exercise Notice`,
-                        `Your profile has matured for the ${targetCycleYear} Annual Promotion Exercise.`,
-                        '/dashboard/profile'
-                    ).catch(() => {});
-                }
-
-                if (s.email) {
-                    sendPromotionNotificationEmail(s.email, s.name, s.staffId).catch(err => console.error('Email alert failed:', err));
                 }
             }
 
-            // 2. Unit Heads / Faculty Deans notifications
-            for (const unitId of Object.keys(unitCandidateTally)) {
-                const info = unitCandidateTally[unitId];
-                if (info.headId) {
-                    await prisma.notification.create({
-                        data: {
-                            userId: info.headId,
-                            title: `📋 ${targetCycleYear} Promotion Candidates (${info.unitName})`,
-                            message: `${info.count} staff candidate${info.count > 1 ? 's' : ''} in your unit have matured for the ${targetCycleYear} Promotion Exercise.`,
-                            type: 'INFO',
-                            link: '/dashboard/unit/staff'
-                        }
-                    }).catch(() => {});
-                }
-            }
-
-            // 3. Central Registry / Appraisal Committee oversight alerts
-            const registryAdmins = await prisma.user.findMany({
-                where: {
-                    role: { in: [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.ADMIN] },
-                    isActive: true
-                },
-                select: { id: true }
-            });
-
-            if (registryAdmins.length > 0) {
-                await prisma.notification.createMany({
-                    data: registryAdmins.map(admin => ({
-                        userId: admin.id,
-                        title: `📑 ${targetCycleYear} Annual Promotion Docket Compiled`,
-                        message: `The ${targetCycleYear} Promotion Evaluation Engine has compiled ${maturedCount} eligible candidate(s) with ${integrityHoldsCount} integrity hold(s).`,
-                        type: 'INFO',
-                        link: '/dashboard/registry/due-for-promotion'
-                    }))
-                }).catch(() => {});
-            }
-
-            log.push(`[COMPLETE] Evaluated ${processed} candidates. Matured: ${maturedCount}, Holds: ${integrityHoldsCount}, Skipped: ${skippedCount}.`);
-
+            log.push(`[COMPLETE] Evaluated ${processed} candidates. Matured: ${maturedCount}, Disciplinary Holds: ${integrityHoldsCount}, Skipped: ${skippedCount}.`);
         } catch (fatalErr: any) {
             const msg = `[FATAL] Maturity engine crashed: ${fatalErr.message}`;
             errors.push(msg);
             log.push(msg);
-            console.error(msg, fatalErr);
         }
 
         return {
@@ -772,9 +827,10 @@ export class PromotionService {
         };
     }
 
-    /**
-     * Batch actions on candidates (e.g. Approve for Docket, Defer, Status Update).
-     */
+    static async syncCandidates(cycleYear: number = new Date().getFullYear(), actorId?: string) {
+        return await this.evaluateMaturityCycle(cycleYear, actorId, 'MANUAL');
+    }
+
     static async batchActionCandidates(params: {
         staffProfileIds: string[];
         action: 'APPROVE_FOR_DOCKET' | 'DEFER' | 'SET_STATUS';
@@ -783,14 +839,6 @@ export class PromotionService {
         actorId: string;
     }) {
         const { staffProfileIds, action, status, reason, actorId } = params;
-
-        if (!staffProfileIds || staffProfileIds.length === 0) {
-            throw new Error('No staff candidates specified.');
-        }
-
-        if (!reason || reason.trim().length < 5) {
-            throw new Error('A valid administrative reason (minimum 5 characters) is required for batch promotion actions.');
-        }
 
         let targetStatus: PromotionEligibilityStatus = PromotionEligibilityStatus.DUE_FOR_REVIEW;
         if (action === 'APPROVE_FOR_DOCKET') {
@@ -806,12 +854,12 @@ export class PromotionService {
                 where: { id: { in: staffProfileIds } },
                 data: {
                     eligibilityStatus: targetStatus,
-                    isDueForPromotion: targetStatus !== PromotionEligibilityStatus.DEFERRED && targetStatus !== PromotionEligibilityStatus.PENDING_MATURITY,
+                    promotionEligibilityStatus: targetStatus,
+                    isDueForPromotion: targetStatus !== PromotionEligibilityStatus.DEFERRED && targetStatus !== PromotionEligibilityStatus.PENDING_MATURITY && targetStatus !== PromotionEligibilityStatus.DISQUALIFIED_DISCIPLINARY,
                     overrideReason: reason.trim()
                 }
             });
 
-            // Insert audit logs for each profile
             await tx.promotionAuditLog.createMany({
                 data: staffProfileIds.map(profileId => ({
                     staffProfileId: profileId,
@@ -829,17 +877,12 @@ export class PromotionService {
         return { success: true, updatedCount, targetStatus };
     }
 
-    /**
-     * Retrieves the audit log history for a specific staff profile.
-     */
     static async getStaffPromotionAuditLogs(staffProfileId: string) {
         return prisma.promotionAuditLog.findMany({
             where: { staffProfileId },
             orderBy: { createdAt: 'desc' },
             include: {
-                actor: {
-                    select: { id: true, name: true, email: true, role: true }
-                }
+                actor: { select: { id: true, name: true, email: true, role: true } }
             }
         });
     }

@@ -94,6 +94,9 @@ model User {
   callParticipations       CallParticipant[]     @relation("CallUser")
   callNotifications        CallNotification[]    @relation("CallNotificationRecipient")
 
+  // Transfers Authorization (Registrar / Imputer-Authorizer)
+  transfersAuthorized      TransferLog[]         @relation("TransferAuthorizer")
+
   @@map("users")
 }
 
@@ -116,6 +119,7 @@ model Notification {
 enum Role {
   SUPER_USER    // System Owner
   HR_ADMIN      // Registry HQ (Global Oversight)
+  REGISTRAR     // Registrar / Principal Officer (Authorizer)
   UNIT_HEAD     // Director / Dean / HOD (Approver)
   UNIT_ADMIN    // Unit Admin (Recommender)
   BURSARY       // Finance
@@ -152,12 +156,34 @@ enum CadreType {
   SECURITY
 }
 
+enum EmploymentCategory {
+  PERMANENT
+  CONTRACT
+  NYSC_CORPERS
+  VOLUNTEER
+}
+
+enum TransferStatus {
+  DRAFT
+  PENDING_REGISTRAR_AUTHORIZATION
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum DisciplinaryActionType {
+  QUERY
+  OFFICIAL_WARNING
+}
+
 enum PromotionEligibilityStatus {
   PENDING_MATURITY
   DUE_FOR_REVIEW
   UNDER_EVALUATION
   APPROVED
   DEFERRED
+  DISQUALIFIED_DISCIPLINARY
+  PENDING_REGISTRAR_OVERRIDE
 }
 
 enum UnitType {
@@ -178,6 +204,8 @@ model Unit {
   
   staff                StaffProfile[]
   officialApplications OfficialApplication[]
+  oldTransfers         TransferLog[]         @relation("TransferOldUnit")
+  newTransfers         TransferLog[]         @relation("TransferNewUnit")
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -237,6 +265,31 @@ model StaffProfile {
   centerId    String?
   studyCenter StudyCenter? @relation(fields: [centerId], references: [id])
   
+  // Diversified Onboarding (Permanent, Contract, NYSC, Volunteer)
+  employmentCategory           EmploymentCategory @default(PERMANENT)
+  contractStartDate            DateTime?
+  contractEndDate              DateTime?
+  contractRenewalTerms         String?            @db.Text
+  specialAllowanceStructure    Json?
+  callUpNumber                 String?
+  stateCode                    String?
+  primaryAssignmentDepartment  String?
+  serviceYearBatch             String?
+  nyscPPAAllowance             Float?
+  passOutDate                  DateTime?
+  volunteerProgramName         String?
+  honorariumAmount             Float?
+  engagementDurationMonths     Int?
+  mouReferenceNumber           String?
+
+  // Maker-Checker Account Clearance Gate
+  accountStatus                String             @default("ACTIVE") // PENDING_REGISTRAR_CLEARANCE, CLEARED_ACTIVE, REJECTED
+  isActivated                  Boolean            @default(true)
+  clearanceSubmittedAt         DateTime?
+  clearedAt                    DateTime?
+  clearedById                  String?
+  clearanceRemarks             String?            @db.Text
+
   // Workflow
   leaves      LeaveRequest[]
   
@@ -282,6 +335,17 @@ model StaffProfile {
   overrideReason        String?   @db.Text
   evaluatedForYear      Int?
 
+  // Registrar Authorization for Promotion Overrides & Disciplinary Hold
+  promotionOverrideStatus           String?   // PENDING_REGISTRAR_OVERRIDE, APPROVED, REJECTED
+  requestedPromotionDueYear         Int?
+  promotionOverrideJustification    String?   @db.Text
+  promotionOverrideRequestedById    String?
+  promotionOverrideRequestedAt      DateTime?
+  promotionOverrideApprovedById     String?
+  promotionOverrideApprovedAt       DateTime?
+  hasActiveDisciplinaryBlock        Boolean   @default(false)
+  disciplinaryBlockReason           String?
+
   currentRank           String?   // Current rank/grade at time of flagging
   isDueForPromotion     Boolean   @default(false) // Registry-toggled flag
   promotionFlaggedAt    DateTime? // When Registry flagged this staff
@@ -290,9 +354,11 @@ model StaffProfile {
   promotionAuditLogs    PromotionAuditLog[]
   promotionCandidates   PromotionBatchCandidate[]
 
-  // Retirement Tracking
+  // Statutory Retirement Tracking
   dateOfBirth              DateTime?
   dateOfFirstAppointment   DateTime?
+  statutoryRetirementDate  DateTime?
+  statutoryRetirementReason String? // AGE_LIMIT, YEARS_OF_SERVICE
   retirementAlertSentAt    DateTime? // Last time retirement alert was dispatched by cron
   retirementLogs           RetirementLog[]
 
@@ -327,6 +393,11 @@ model StaffProfile {
   @@index([eligibilityStatus])
   @@index([promotionEligibilityStatus])
   @@index([cadreType])
+  @@index([employmentCategory])
+  @@index([employmentCategory, status])
+  @@index([statutoryRetirementDate])
+  @@index([accountStatus])
+  @@index([cadreType, rank, dateOfBirth])
 }
 
 model AcademicProgramme {
@@ -495,9 +566,27 @@ model TransferLog {
   
   oldCenterId   String?
   newCenterId   String?
+
+  oldUnitId     String?
+  oldUnit       Unit?     @relation("TransferOldUnit", fields: [oldUnitId], references: [id])
+  newUnitId     String?
+  newUnit       Unit?     @relation("TransferNewUnit", fields: [newUnitId], references: [id])
+
+  status        TransferStatus @default(PENDING_REGISTRAR_AUTHORIZATION)
+  relocationAllowance Boolean @default(false)
+  relocationAllowanceAmount Float?
+  isEffective   Boolean   @default(false)
   
   initiatedById String
   initiatedBy   User      @relation("TransferInitiator", fields: [initiatedById], references: [id])
+
+  authorizedById String?
+  authorizedBy   User?    @relation("TransferAuthorizer", fields: [authorizedById], references: [id])
+  authorizedAt   DateTime?
+  authorizationRemarks String? @db.Text
+  rejectionReason String? @db.Text
+  digitalSignatureRef String?
+  transferLetterUrl   String?
   
   reason        String?
   effectiveDate DateTime  @default(now())
@@ -507,6 +596,7 @@ model TransferLog {
   @@map("transfer_logs")
   @@index([createdAt])
   @@index([staffId])
+  @@index([status])
 }
 
 // ... HR Modules ...
@@ -552,6 +642,13 @@ model LeaveRequest {
   
   rejectionReason String?
   
+  // SLA & KPI Tracking
+  submittedAt          DateTime    @default(now())
+  expectedResolutionAt DateTime?
+  resolvedAt           DateTime?
+  turnaroundTimeHours  Float?
+  slaBreach            Boolean     @default(false)
+
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -559,6 +656,7 @@ model LeaveRequest {
   @@index([staffId])
   @@index([status])
   @@index([endDate])
+  @@index([slaBreach])
 }
 
 model Attendance {
@@ -678,6 +776,13 @@ model FileRequest {
   transferredById String?
   transferredBy  User?        @relation("TransferredFiles", fields: [transferredById], references: [id])
   
+  // SLA & KPI Tracking
+  submittedAt          DateTime    @default(now())
+  expectedResolutionAt DateTime?
+  resolvedAt           DateTime?
+  turnaroundTimeHours  Float?
+  slaBreach            Boolean     @default(false)
+
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -685,12 +790,15 @@ model FileRequest {
   @@index([staffId])
   @@index([status])
   @@index([requesterId])
+  @@index([slaBreach])
 }
 
 enum QueryStatus {
   OPEN
   RESPONDED
   CLOSED
+  DEFAULTED_UNANSWERED
+  REFERRED_TO_COMMITTEE
 }
 
 model StaffQuery {
@@ -704,6 +812,21 @@ model StaffQuery {
   
   title       String
   content     String      @db.Text
+
+  // Unified Disciplinary Dispatch: Query vs Official Warning
+  actionType           DisciplinaryActionType @default(QUERY)
+  isQuery              Boolean                @default(true)
+  isWarning            Boolean                @default(false)
+  stipulatedHours      Int                    @default(48)
+  responseDeadline     DateTime?
+  slaBreached          Boolean                @default(false)
+  slaBreachedAt        DateTime?
+  source               String                 @default("REGISTRY") // REGISTRY, UNIT_HEAD, MANAGEMENT
+  resolutionStatus     String                 @default("PENDING")  // PENDING, SATISFACTORY, UNSATISFACTORY, ABSORBED, EXONERATED, COMMITTEE_REFERRAL
+  warningAcknowledged  Boolean                @default(false)
+  warningAcknowledgedAt DateTime?
+  disciplinaryCommitteeRef String?
+  breachLoggedToFolio  Boolean                @default(false)
   
   response    String?     @db.Text
   responseAttachmentUrl String?
@@ -718,6 +841,9 @@ model StaffQuery {
   @@index([staffId])
   @@index([status])
   @@index([copyHR])
+  @@index([actionType])
+  @@index([status, responseDeadline])
+  @@index([source, resolutionStatus])
 }
 
 model SystemSequence {
@@ -739,6 +865,11 @@ model AperSession {
   endDate   DateTime
   isActive  Boolean  @default(false)
   
+  // Automated Deadline Reminder Tracking
+  reminder7DaysSentAt      DateTime?
+  reminderClosingDaySentAt DateTime?
+  reminder2HoursSentAt     DateTime?
+
   forms     AperForm[]
   
   createdAt DateTime @default(now())
@@ -791,6 +922,11 @@ model Memo {
   responses      MemoResponse[]
   attachmentUrl  String?
   attachmentName String?
+
+  // Granular Routing & Target Audience Extension
+  targetAudience String?        // ALL_STAFF, DIRECTORS_ONLY, DEANS_ONLY, DIRECTORS_AND_DEANS, HEADS_OF_DEPARTMENT_ONLY, STUDY_CENTER_DIRECTORS_ALL, CUSTOM_RECIPIENTS
+  audienceRoles  Json?
+
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -798,6 +934,7 @@ model Memo {
   @@index([senderId])
   @@index([recipientId])
   @@index([createdAt])
+  @@index([targetAudience])
 }
 
 model MemoResponse {
@@ -1348,7 +1485,12 @@ model OfficialApplication {
   attachmentUrl      String?
   attachmentName     String?
   status             OfficialApplicationStatus @default(PENDING_ACKNOWLEDGMENT)
+  // SLA & KPI Tracking
   submittedAt        DateTime                  @default(now())
+  expectedResolutionAt DateTime?
+  resolvedAt         DateTime?
+  turnaroundTimeHours Float?
+  slaBreach          Boolean                   @default(false)
 
   // Stamping & Acknowledgment by Registry
   acknowledgedById            String?
@@ -1367,6 +1509,7 @@ model OfficialApplication {
   @@index([status])
   @@index([category])
   @@index([createdAt])
+  @@index([slaBreach])
   @@map("official_applications")
 }
 

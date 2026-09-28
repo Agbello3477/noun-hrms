@@ -15,15 +15,25 @@ import {
     Filter, 
     RotateCcw,
     CheckCircle2,
-    Clock
+    Clock,
+    Download,
+    XCircle,
+    ShieldCheck,
+    AlertTriangle,
+    FileText,
+    Banknote
 } from 'lucide-react';
 import TransferStaffModal from '../../../../components/dashboard/TransferStaffModal';
+import Button from '../../../../components/ui/Button';
 
 export default function TransferHistoryPage() {
     const { user } = useAuth();
     const [transfers, setTransfers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+
+    // Active View Tab: 'ALL' or 'PENDING_REGISTRAR'
+    const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING_REGISTRAR'>('ALL');
 
     // Filter, Search, Sort, Pagination States
     const [search, setSearch] = useState('');
@@ -33,10 +43,18 @@ export default function TransferHistoryPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
 
+    // Action State (Authorize / Reject)
+    const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+    const [rejectModalOpen, setRejectModalOpen] = useState(false);
+    const [rejectTransferId, setRejectTransferId] = useState<string | null>(null);
+    const [rejectionReason, setRejectionReason] = useState('');
+
+    const isRegistrarOrAdmin = user && ['REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(user.role);
+
     const fetchHistory = async () => {
         try {
             const { data } = await api.get('/api/registry/transfers');
-            setTransfers(data);
+            setTransfers(data || []);
         } catch (error) {
             console.error('Failed to fetch transfers', error);
         } finally {
@@ -51,42 +69,107 @@ export default function TransferHistoryPage() {
     // Reset to page 1 on filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [search, filterStatus, filterLocation, sortBy]);
+    }, [search, filterStatus, filterLocation, sortBy, activeTab]);
+
+    const handleAuthorize = async (transferId: string) => {
+        if (!confirm('Are you sure you want to authorize and execute this staff posting order? This will atomically update the staff placement, generate their posting order with digital seal, and notify all parties.')) return;
+
+        setActionLoadingId(transferId);
+        try {
+            await api.post(`/api/registry/transfers/${transferId}/authorize`, {});
+            alert('Transfer authorization complete. Posting order sealed and activated.');
+            await fetchHistory();
+        } catch (error: any) {
+            console.error('Authorization failed:', error);
+            alert('Failed to authorize transfer: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleRejectSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!rejectTransferId || !rejectionReason.trim()) return;
+
+        setActionLoadingId(rejectTransferId);
+        try {
+            await api.post(`/api/registry/transfers/${rejectTransferId}/reject`, { reason: rejectionReason });
+            alert('Transfer posting request rejected.');
+            setRejectModalOpen(false);
+            setRejectTransferId(null);
+            setRejectionReason('');
+            await fetchHistory();
+        } catch (error: any) {
+            console.error('Rejection failed:', error);
+            alert('Failed to reject transfer: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleDownloadLetter = async (transferId: string, staffName: string) => {
+        try {
+            const response = await api.get(`/api/registry/transfers/${transferId}/letter`, {
+                responseType: 'blob'
+            });
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Posting-Order-${staffName.replace(/\s+/g, '_')}-${transferId.substring(0, 8)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error: any) {
+            console.error('Failed to download posting letter:', error);
+            alert('Failed to download posting order letter.');
+        }
+    };
 
     if (isLoading) return <div className="p-8 text-center text-gray-500">Loading transfer history...</div>;
 
     // Derived unique locations list
     const uniqueLocations = Array.from(
         new Set(
-            transfers.flatMap(t => [t.oldCenterId, t.newCenterId]).filter(Boolean)
+            transfers.flatMap(t => [t.oldCenterId, t.newCenterId, t.oldUnit?.name, t.newUnit?.name]).filter(Boolean)
         )
     ).sort();
+
+    const pendingRegistrarCount = transfers.filter(t => t.status === 'PENDING_REGISTRAR_AUTHORIZATION').length;
 
     // Filtered & Sorted Transfers list
     const filteredTransfers = transfers
         .filter(t => {
+            if (activeTab === 'PENDING_REGISTRAR') {
+                if (t.status !== 'PENDING_REGISTRAR_AUTHORIZATION') return false;
+            }
+
             const matchesSearch = 
                 (t.staff?.name || '').toLowerCase().includes(search.toLowerCase()) ||
                 (t.staff?.email || '').toLowerCase().includes(search.toLowerCase()) ||
-                (t.reason || '').toLowerCase().includes(search.toLowerCase());
+                (t.reason || '').toLowerCase().includes(search.toLowerCase()) ||
+                (t.postingOrderRefNumber || '').toLowerCase().includes(search.toLowerCase());
             
             const matchesStatus = 
                 filterStatus === 'ALL' ? true :
-                filterStatus === 'APPLIED' ? t.applied === true :
-                filterStatus === 'PENDING' ? t.applied === false : true;
+                filterStatus === 'APPROVED' ? t.status === 'APPROVED' || t.applied === true :
+                filterStatus === 'PENDING_REGISTRAR' ? t.status === 'PENDING_REGISTRAR_AUTHORIZATION' :
+                filterStatus === 'REJECTED' ? t.status === 'REJECTED' : true;
             
             const matchesLocation = 
                 !filterLocation ? true :
-                t.oldCenterId === filterLocation || t.newCenterId === filterLocation;
+                t.oldCenterId === filterLocation || t.newCenterId === filterLocation ||
+                t.oldUnit?.name === filterLocation || t.newUnit?.name === filterLocation;
 
             return matchesSearch && matchesStatus && matchesLocation;
         })
         .sort((a, b) => {
             if (sortBy === 'date_desc') {
-                return new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime();
+                return new Date(b.effectiveDate || b.createdAt).getTime() - new Date(a.effectiveDate || a.createdAt).getTime();
             }
             if (sortBy === 'date_asc') {
-                return new Date(a.effectiveDate).getTime() - new Date(b.effectiveDate).getTime();
+                return new Date(a.effectiveDate || a.createdAt).getTime() - new Date(b.effectiveDate || b.createdAt).getTime();
             }
             if (sortBy === 'name_asc') {
                 return (a.staff?.name || '').localeCompare(b.staff?.name || '');
@@ -116,36 +199,66 @@ export default function TransferHistoryPage() {
     const isFiltersActive = search || filterStatus !== 'ALL' || filterLocation || sortBy !== 'date_desc';
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6">
+        <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 pb-12">
             {/* Page Header */}
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-gradient-to-r from-blue-900 to-indigo-950 p-6 rounded-2xl text-white shadow-lg">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-950 flex items-center gap-2">
-                        <History size={24} className="text-blue-700" />
-                        Transfer & Postings Log
+                    <h1 className="text-2xl font-bold flex items-center gap-2">
+                        <History size={24} className="text-blue-300" />
+                        Staff Postings & Transfers
                     </h1>
-                    <p className="text-sm text-gray-500">
-                        View, search, and manage staff postings, study center relocations, and transfer timelines.
+                    <p className="text-sm text-blue-100 mt-1">
+                        Maker-Checker (Imputer-Authorizer) dual-control workflow for institutional redeployments and postings.
                     </p>
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-all hover:shadow-md"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 text-sm font-semibold shadow-md transition-all hover:scale-105 active:scale-95"
                 >
                     <Plus size={18} />
-                    New Staff Transfer
+                    Impute New Staff Transfer
                 </button>
             </div>
 
-            {/* Premium Controls / Filters Bar */}
-            <div className="bg-white rounded-2xl border border-gray-150 p-4 shadow-sm space-y-4">
+            {/* Tab Navigation */}
+            <div className="flex gap-2 border-b border-gray-200 bg-white rounded-t-xl px-4 pt-3 shadow-sm">
+                <button
+                    onClick={() => setActiveTab('ALL')}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+                        activeTab === 'ALL'
+                            ? 'border-blue-600 text-blue-600 bg-blue-50/50 rounded-t-lg'
+                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}
+                >
+                    <History size={16} /> All Postings & History ({transfers.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('PENDING_REGISTRAR')}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+                        activeTab === 'PENDING_REGISTRAR'
+                            ? 'border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-lg'
+                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}
+                >
+                    <Clock size={16} className="text-amber-500" />
+                    Pending Registrar Authorization
+                    {pendingRegistrarCount > 0 && (
+                        <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                            {pendingRegistrarCount}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* Controls / Filters Bar */}
+            <div className="bg-white rounded-b-2xl border border-gray-150 p-4 shadow-sm space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {/* Search Bar */}
                     <div className="relative">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input
                             type="text"
-                            placeholder="Search by staff, email, reason..."
+                            placeholder="Search staff, email, reason, posting ref..."
                             className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-gray-50/50 focus:bg-white transition-all outline-none focus:ring-2 focus:ring-blue-100 text-sm text-black"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
@@ -154,27 +267,26 @@ export default function TransferHistoryPage() {
 
                     {/* Filter by Status */}
                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden xl:inline">Status:</span>
                         <select
                             className="w-full p-2.5 border rounded-xl text-sm bg-gray-50/50 text-black outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
                             value={filterStatus}
                             onChange={(e) => setFilterStatus(e.target.value)}
                         >
-                            <option value="ALL">All Statuses</option>
-                            <option value="APPLIED">Applied / Complete</option>
-                            <option value="PENDING">Pending Activation</option>
+                            <option value="ALL">All Authorization Statuses</option>
+                            <option value="APPROVED">Authorized & Active</option>
+                            <option value="PENDING_REGISTRAR">Pending Registrar Authorization</option>
+                            <option value="REJECTED">Rejected by Registrar</option>
                         </select>
                     </div>
 
                     {/* Filter by Location */}
                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden xl:inline">Location:</span>
                         <select
                             className="w-full p-2.5 border rounded-xl text-sm bg-gray-50/50 text-black outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
                             value={filterLocation}
                             onChange={(e) => setFilterLocation(e.target.value)}
                         >
-                            <option value="">All Locations</option>
+                            <option value="">All Origins & Destinations</option>
                             {uniqueLocations.map(loc => (
                                 <option key={loc} value={loc}>{loc}</option>
                             ))}
@@ -183,7 +295,6 @@ export default function TransferHistoryPage() {
 
                     {/* Sort Order */}
                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden xl:inline">Sort:</span>
                         <select
                             className="w-full p-2.5 border rounded-xl text-sm bg-gray-50/50 text-black outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
                             value={sortBy}
@@ -197,7 +308,6 @@ export default function TransferHistoryPage() {
                     </div>
                 </div>
 
-                {/* Reset Filters Option */}
                 {isFiltersActive && (
                     <div className="flex justify-end pt-1">
                         <button
@@ -214,161 +324,242 @@ export default function TransferHistoryPage() {
             {/* Table Card */}
             <div className="bg-white rounded-2xl border border-gray-150 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
                         <thead className="bg-gray-50/70">
                             <tr>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Effective Date
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Staff Details
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Placement Relocation
                                 </th>
-                                <th scope="col" className="px-6 py-4 scope-col text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
-                                    Reason / Description
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Dual-Control Audit
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
-                                    Initiated By
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Status
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-550 uppercase tracking-wider">
-                                    Transfer Status
+                                <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Actions
                                 </th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-150">
                             {paginatedTransfers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-450 text-sm">
+                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
                                         <History size={40} className="mx-auto mb-2 text-gray-300" />
                                         No transfer records found matching the criteria.
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedTransfers.map((log) => (
-                                    <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                                        {/* Date */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
-                                            <div className="flex items-center gap-2">
-                                                <Calendar size={15} className="text-gray-400" />
-                                                {new Date(log.effectiveDate).toLocaleDateString(undefined, {
-                                                    year: 'numeric',
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                })}
-                                            </div>
-                                        </td>
+                                paginatedTransfers.map((log) => {
+                                    const originName = log.oldUnit?.name || log.oldCenterId || 'Unassigned';
+                                    const destName = log.newUnit?.name || log.newCenterId || 'Unknown';
+                                    const isPendingAuth = log.status === 'PENDING_REGISTRAR_AUTHORIZATION';
+                                    const isApproved = log.status === 'APPROVED' || log.applied === true;
 
-                                        {/* Staff Details */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center justify-center font-bold text-sm mr-3">
-                                                    {log.staff?.name?.charAt(0) || 'S'}
+                                    return (
+                                        <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5 text-gray-900 font-medium">
+                                                    <Calendar size={14} className="text-gray-400" />
+                                                    {log.effectiveDate ? new Date(log.effectiveDate).toLocaleDateString() : 'Immediate'}
                                                 </div>
-                                                <div>
-                                                    <div className="text-sm font-semibold text-gray-900">{log.staff?.name || 'Unknown Staff'}</div>
-                                                    <div className="text-xs text-gray-550">{log.staff?.email}</div>
+                                                {log.postingOrderRefNumber && (
+                                                    <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                                                        Ref: {log.postingOrderRefNumber}
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                <div className="font-semibold text-gray-900">
+                                                    {log.staff?.name || 'Staff Member'}
                                                 </div>
-                                            </div>
-                                        </td>
+                                                <div className="text-xs text-gray-500">
+                                                    {log.staff?.email || ''}
+                                                </div>
+                                                {log.relocationAllowance && (
+                                                    <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <Banknote size={10} /> Relocation Allowance: ₦{(log.relocationAllowanceAmount || 0).toLocaleString()}
+                                                    </span>
+                                                )}
+                                            </td>
 
-                                        {/* Movement */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 text-sm text-gray-800 whitespace-normal">
-                                                <span className="bg-gray-100 text-gray-700 py-1 px-2.5 rounded-lg text-xs font-medium max-w-[200px] break-words">
-                                                    {log.oldCenterId || 'Unassigned'}
-                                                </span>
-                                                <ArrowRight size={14} className="text-gray-400 flex-shrink-0" />
-                                                <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 py-1 px-2.5 rounded-lg text-xs font-medium max-w-[200px] break-words">
-                                                    {log.newCenterId}
-                                                </span>
-                                            </div>
-                                        </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 text-gray-800">
+                                                    <span className="font-medium text-gray-600">{originName}</span>
+                                                    <ArrowRight size={14} className="text-blue-500 flex-shrink-0" />
+                                                    <span className="font-bold text-blue-900">{destName}</span>
+                                                </div>
+                                                {log.reason && (
+                                                    <div className="text-xs text-gray-500 mt-1 line-clamp-1 italic">
+                                                        &ldquo;{log.reason}&rdquo;
+                                                    </div>
+                                                )}
+                                            </td>
 
-                                        {/* Reason */}
-                                        <td className="px-6 py-4 text-sm text-gray-600 whitespace-normal break-words max-w-[280px]">
-                                            {log.reason || 'No reason specified'}
-                                        </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-xs text-gray-600">
+                                                    <span className="text-gray-400">Imputer:</span> {log.initiatedBy?.name || 'HR Admin'}
+                                                </div>
+                                                <div className="text-xs text-gray-600 mt-0.5">
+                                                    <span className="text-gray-400">Authorizer:</span>{' '}
+                                                    {log.authorizedBy?.name ? (
+                                                        <span className="text-emerald-700 font-medium">{log.authorizedBy.name}</span>
+                                                    ) : (
+                                                        <span className="text-amber-600 italic">Pending Registrar</span>
+                                                    )}
+                                                </div>
+                                            </td>
 
-                                        {/* Initiator */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-550 font-medium">
-                                            {log.initiatedBy?.name || 'System / Auto'}
-                                        </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {isApproved ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <CheckCircle2 size={12} /> Authorized & Active
+                                                    </span>
+                                                ) : isPendingAuth ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                        <Clock size={12} className="animate-spin" /> Pending Registrar
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                        <XCircle size={12} /> Rejected
+                                                    </span>
+                                                )}
+                                            </td>
 
-                                        {/* Transfer Status */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {log.applied ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                    <CheckCircle2 size={13} />
-                                                    Active / Applied
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
-                                                    <Clock size={13} />
-                                                    Pending Login
-                                                </span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))
-							)}
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {isPendingAuth && isRegistrarOrAdmin && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleAuthorize(log.id)}
+                                                                disabled={actionLoadingId === log.id}
+                                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-sm transition"
+                                                            >
+                                                                {actionLoadingId === log.id ? 'Authorizing...' : 'Authorize'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setRejectTransferId(log.id);
+                                                                    setRejectModalOpen(true);
+                                                                }}
+                                                                disabled={actionLoadingId === log.id}
+                                                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    {isApproved && (
+                                                        <button
+                                                            onClick={() => handleDownloadLetter(log.id, log.staff?.name || 'Staff')}
+                                                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition"
+                                                            title="Download Official Posting Order Letter PDF"
+                                                        >
+                                                            <Download size={12} /> Letter
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
                 </div>
 
-                {/* Pagination Controls */}
+                {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="bg-gray-50/50 border-t border-gray-150 px-6 py-4 flex items-center justify-between">
-                        <div className="text-xs font-medium text-gray-550">
-                            Showing <span className="font-semibold text-gray-800">{Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}</span> to{' '}
-                            <span className="font-semibold text-gray-800">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of{' '}
-                            <span className="font-semibold text-gray-800">{totalItems}</span> entries
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-150 bg-gray-50/50">
+                        <div className="text-xs text-gray-500">
+                            Showing <span className="font-semibold">{Math.min(totalItems, (currentPage - 1) * itemsPerPage + 1)}</span> to{' '}
+                            <span className="font-semibold">{Math.min(totalItems, currentPage * itemsPerPage)}</span> of{' '}
+                            <span className="font-semibold">{totalItems}</span> transfers
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                className="h-8 px-2.5 border rounded-lg flex items-center justify-center text-gray-650 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors text-xs font-semibold gap-1"
+                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 transition"
                             >
-                                <ChevronLeft size={14} />
-                                Previous
+                                <ChevronLeft size={16} />
                             </button>
-                            
-                            <div className="flex items-center gap-1">
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNumber => (
-                                    <button
-                                        key={pageNumber}
-                                        onClick={() => setCurrentPage(pageNumber)}
-                                        className={`h-8 w-8 rounded-lg text-xs font-semibold transition-colors ${
-                                            currentPage === pageNumber
-                                                ? 'bg-blue-700 text-white shadow-sm'
-                                                : 'text-gray-650 hover:bg-gray-100 border border-transparent'
-                                        }`}
-                                    >
-                                        {pageNumber}
-                                    </button>
-                                ))}
-                            </div>
-
+                            <span className="text-xs font-semibold text-gray-700">
+                                Page {currentPage} of {totalPages}
+                            </span>
                             <button
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                 disabled={currentPage === totalPages}
-                                className="h-8 px-2.5 border rounded-lg flex items-center justify-center text-gray-650 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors text-xs font-semibold gap-1"
+                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 transition"
                             >
-                                Next
-                                <ChevronRight size={14} />
+                                <ChevronRight size={16} />
                             </button>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Transfer staff modal */}
+            {/* Rejection Modal */}
+            {rejectModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+                        <div className="flex items-center gap-3 text-rose-600">
+                            <AlertTriangle size={24} />
+                            <h3 className="text-lg font-bold">Reject Staff Posting Request</h3>
+                        </div>
+                        <p className="text-xs text-gray-600">
+                            Please provide a formal justification for rejecting this transfer order. The imputer and registry folios will be notified.
+                        </p>
+                        <form onSubmit={handleRejectSubmit} className="space-y-4">
+                            <textarea
+                                required
+                                value={rejectionReason}
+                                onChange={e => setRejectionReason(e.target.value)}
+                                rows={3}
+                                placeholder="Enter reason for rejection..."
+                                className="w-full p-3 border rounded-xl text-sm focus:ring-2 focus:ring-rose-500 outline-none text-black"
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="secondary"
+                                    type="button"
+                                    onClick={() => {
+                                        setRejectModalOpen(false);
+                                        setRejectTransferId(null);
+                                        setRejectionReason('');
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    type="submit"
+                                    disabled={actionLoadingId !== null}
+                                >
+                                    Confirm Rejection
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Transfer Staff Modal */}
             {showModal && (
                 <TransferStaffModal
                     onClose={() => setShowModal(false)}
-                    onSuccess={fetchHistory}
+                    onSuccess={() => {
+                        setShowModal(false);
+                        fetchHistory();
+                    }}
                 />
             )}
         </div>

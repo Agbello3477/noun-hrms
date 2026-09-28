@@ -8,7 +8,7 @@ import api from '../../../../lib/api';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
 import Button from '@/components/ui/Button';
 import {
-    TrendingUp, Search, RefreshCw, Shield, CheckCircle2,
+    TrendingUp, Search, RefreshCw, Shield, ShieldAlert, CheckCircle2,
     XCircle, ChevronLeft, ChevronRight, AlertTriangle,
     Download, Calendar, User, Briefcase, Star, Filter,
     Clock, PlayCircle, ToggleLeft, ToggleRight, ClipboardList, Video,
@@ -66,8 +66,8 @@ interface AuditLogItem {
     actor: { id: string; name?: string | null; email: string; role: string };
 }
 
-const ALLOWED_ROLES = ['HR_ADMIN', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'];
-const MANAGE_ROLES = ['HR_ADMIN', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'];
+const ALLOWED_ROLES = ['HR_ADMIN', 'REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'];
+const MANAGE_ROLES = ['HR_ADMIN', 'REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'];
 
 export default function DueForPromotionPage() {
     const { user, isLoading: authLoading } = useAuth();
@@ -389,6 +389,10 @@ export default function DueForPromotionPage() {
                 return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300"><CheckCircle2 size={10} /> Approved</span>;
             case 'DEFERRED':
                 return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-300"><XCircle size={10} /> Deferred</span>;
+            case 'DISQUALIFIED_DISCIPLINARY':
+                return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-300"><ShieldAlert size={10} /> Disciplinary Hold</span>;
+            case 'PENDING_REGISTRAR_OVERRIDE':
+                return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300"><Clock size={10} /> Pending Registrar Override</span>;
             default:
                 return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300"><Clock size={10} /> Pending Maturity</span>;
         }

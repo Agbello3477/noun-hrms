@@ -290,6 +290,12 @@ export const login = async (req: Request, res: Response) => {
         }
 
         if (!user.isActive) {
+            if (user.staffProfile?.accountStatus === 'PENDING_REGISTRAR_CLEARANCE' || user.staffProfile?.isActivated === false) {
+                return res.status(403).json({
+                    message: 'Account is pending official clearance and authorization by the Registrar. You will receive an activation email once cleared.',
+                    pendingClearance: true
+                });
+            }
             console.log(`User ${user.email} is inactive.`);
             return res.status(403).json({ message: 'Account is deactivated' });
         }

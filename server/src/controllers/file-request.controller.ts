@@ -4,30 +4,34 @@ import { randomBytes } from 'crypto';
 import prisma from '../prisma';
 import { notifyUser } from './notification.controller';
 
-// Create Request (VC/Registrar -> HR)
+// Create Request (VC/Registrar/Director/Dean -> HR)
 export const createRequest = async (req: Request, res: Response) => {
     try {
         const { staffId, reason } = req.body;
         // @ts-ignore
         const requesterId = req.user.id;
 
-        // Validation: Verify staff exists
         const staff = await prisma.staffProfile.findUnique({ where: { id: staffId } });
         if (!staff) return res.status(404).json({ message: 'Staff not found' });
+
+        const submittedAt = new Date();
+        const expectedResolutionAt = new Date(submittedAt.getTime() + 24 * 3600000); // 24h SLA target
 
         const request = await prisma.fileRequest.create({
             data: {
                 requesterId,
                 staffId,
                 reason,
-                status: RequestStatus.PENDING
+                status: RequestStatus.PENDING,
+                submittedAt,
+                expectedResolutionAt
             }
         });
 
         // Notify all HR Admins (Registry)
         const hrAdmins = await prisma.user.findMany({
             where: {
-                role: { in: [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN] }
+                role: { in: [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR] }
             }
         });
 
@@ -61,19 +65,23 @@ export const approveRequest = async (req: Request, res: Response) => {
         // @ts-ignore
         const approverId = req.user.id;
 
-        // Role Check logic is in routes, but double check
-        if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(approverRole)) {
+        if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR].includes(approverRole)) {
             return res.status(403).json({ message: 'Unauthorized' });
         }
 
-        // Generate Secure Link (Mock logic for now)
-        // In reality, this would be a signed URL or a temporary token
+        const existing = await prisma.fileRequest.findUnique({ where: { id: requestId } });
+        if (!existing) return res.status(404).json({ message: 'File request not found' });
+
         const token = randomBytes(32).toString('hex');
         const accessLink = `/dashboard/dossier/view?token=${token}`;
 
-        // Expiry: 24 hours
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
+
+        const resolvedAt = new Date();
+        const submittedAt = existing.submittedAt || existing.createdAt;
+        const turnaroundTimeHours = (resolvedAt.getTime() - submittedAt.getTime()) / (1000 * 60 * 60);
+        const slaBreach = existing.expectedResolutionAt ? resolvedAt > existing.expectedResolutionAt : false;
 
         const request = await prisma.fileRequest.update({
             where: { id: requestId },
@@ -82,12 +90,14 @@ export const approveRequest = async (req: Request, res: Response) => {
                 accessLink,
                 expiresAt,
                 approvedById: approverId,
-                transferredById: approverId
+                transferredById: approverId,
+                resolvedAt,
+                turnaroundTimeHours,
+                slaBreach
             }
         });
 
         res.json({ message: 'Request approved', request });
-
     } catch (error) {
         res.status(500).json({ message: 'Error approving request' });
     }
@@ -101,22 +111,16 @@ export const getRequests = async (req: Request, res: Response) => {
         // @ts-ignore
         const role = req.user.role;
 
-        // If I am requester, show my outgoing. If I am HR, show incoming.
         let whereClause: any = {};
 
         if (req.query.type === 'incoming') {
-            // HR Viewing incoming Queue
-            if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(role)) {
+            if (![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR].includes(role)) {
                 return res.status(403).json({ message: 'Unauthorized to view incoming requests' });
             }
-            // Show all pending or recently processed
-            // No user filter needed, show ALL
         } else if (req.query.type === 'received') {
-            // Requesters viewing approved files in their dashboard
             whereClause.requesterId = userId;
             whereClause.status = RequestStatus.APPROVED;
         } else {
-            // Requesters viewing their history (VC, Registrar, etc)
             whereClause.requesterId = userId;
         }
 
@@ -143,7 +147,6 @@ export const getRequests = async (req: Request, res: Response) => {
         });
 
         res.json(requests);
-
     } catch (error) {
         res.status(500).json({ message: 'Error fetching requests' });
     }
@@ -156,13 +159,19 @@ export const approveRequestRoute = async (req: Request, res: Response) => {
         // @ts-ignore
         const approverId = req.user.id;
 
-        // Generate Secure Link (Mock logic for now)
+        const existing = await prisma.fileRequest.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ message: 'File request not found' });
+
         const token = randomBytes(32).toString('hex');
         const accessLink = `/dashboard/dossier/view?token=${token}`;
 
-        // Expiry: 24 hours
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
+
+        const resolvedAt = new Date();
+        const submittedAt = existing.submittedAt || existing.createdAt;
+        const turnaroundTimeHours = (resolvedAt.getTime() - submittedAt.getTime()) / (1000 * 60 * 60);
+        const slaBreach = existing.expectedResolutionAt ? resolvedAt > existing.expectedResolutionAt : false;
 
         const request = await prisma.fileRequest.update({
             where: { id },
@@ -171,7 +180,10 @@ export const approveRequestRoute = async (req: Request, res: Response) => {
                 accessLink,
                 expiresAt,
                 approvedById: approverId,
-                transferredById: approverId
+                transferredById: approverId,
+                resolvedAt,
+                turnaroundTimeHours,
+                slaBreach
             }
         });
 
@@ -186,10 +198,21 @@ export const rejectRequestRoute = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
+        const existing = await prisma.fileRequest.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ message: 'File request not found' });
+
+        const resolvedAt = new Date();
+        const submittedAt = existing.submittedAt || existing.createdAt;
+        const turnaroundTimeHours = (resolvedAt.getTime() - submittedAt.getTime()) / (1000 * 60 * 60);
+        const slaBreach = existing.expectedResolutionAt ? resolvedAt > existing.expectedResolutionAt : false;
+
         const request = await prisma.fileRequest.update({
             where: { id },
             data: {
-                status: RequestStatus.REJECTED
+                status: RequestStatus.REJECTED,
+                resolvedAt,
+                turnaroundTimeHours,
+                slaBreach
             }
         });
 
@@ -215,9 +238,8 @@ export const returnRequest = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'File request not found' });
         }
 
-        // Verify permission: only the original requester or HR can return the file
         // @ts-ignore
-        if (fileRequest.requesterId !== userId && ![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(req.user.role)) {
+        if (fileRequest.requesterId !== userId && ![Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR].includes(req.user.role)) {
             return res.status(403).json({ message: 'Unauthorized to return this file' });
         }
 
@@ -230,10 +252,9 @@ export const returnRequest = async (req: Request, res: Response) => {
             }
         });
 
-        // Notify all HR Admins (Registry)
         const hrAdmins = await prisma.user.findMany({
             where: {
-                role: { in: [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN] }
+                role: { in: [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR] }
             }
         });
 

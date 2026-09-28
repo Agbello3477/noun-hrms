@@ -1,22 +1,23 @@
 /**
- * Retirement Cron Job — NOUN HRMS
+ * Statutory Retirement Cron Job — NOUN HRMS
  *
  * Schedule: 06:00 WAT on the 1st of every month  →  "0 6 1 * *"
  *
  * Logic:
  *  1. Scan all ACTIVE staff with dateOfBirth or dateOfFirstAppointment set
- *  2. Calculate their retirement date using FGN PSR rules
- *  3. If retirement is ≤ 6 months away AND we haven't alerted this month:
+ *  2. Calculate statutory retirement date (75 yrs for Prof/Reader; 65 yrs or 35 yrs service for others)
+ *  3. Auto-populate statutoryRetirementDate and statutoryRetirementReason if missing or changed
+ *  4. If retirement is within 12, 6, 3, or 1 months AND we haven't alerted this month:
  *     a. Create a RetirementLog record
  *     b. Update retirementAlertSentAt on the StaffProfile
- *     c. Send in-app Notification to all HR_ADMIN users
+ *     c. Send in-app Notification to all HR_ADMIN & REGISTRAR users
  *     d. Send batch email alert to HR department
  */
 
 import cron from 'node-cron';
 import prisma from '../prisma';
 import {
-    calculateRetirementDate,
+    calculateStatutoryRetirementDate,
     monthsBetween,
     formatRetirementDate,
     getRetirementReasonLabel
@@ -27,9 +28,6 @@ import {
 } from '../services/email.service';
 import { Role } from '@prisma/client';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Core retirement scan — callable by cron OR manually from the API
-// ─────────────────────────────────────────────────────────────────────────────
 export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'): Promise<{
     processed: number;
     skipped: number;
@@ -39,16 +37,16 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
     const log: string[] = [];
     const errors: string[] = [];
     const now = new Date();
-    const ALERT_WINDOW_MONTHS = 6;
+    const ALERT_WINDOW_MONTHS = 12; // Alert when retirement is within 12 months (includes 12, 6, 3, 1 mo thresholds)
     let processed = 0;
     let skipped = 0;
 
     const startTs = now.toISOString();
-    log.push(`[${startTs}] 🚀 Retirement Cron STARTED (trigger=${triggeredBy})`);
+    log.push(`[${startTs}] 🚀 Statutory Retirement Cron STARTED (trigger=${triggeredBy})`);
     console.log(`[RETIREMENT_CRON] Job started at ${startTs}. Trigger: ${triggeredBy}`);
 
     try {
-        // 1 ─ Fetch all ACTIVE staff who have DOB or appointment date
+        // Fetch all ACTIVE staff who have DOB or appointment date
         const candidates = await prisma.staffProfile.findMany({
             where: {
                 isDeleted: false,
@@ -67,32 +65,40 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
 
         log.push(`[RETIREMENT_CRON] Found ${candidates.length} candidates with retirement data.`);
 
-        // 2 ─ Collect alerts for this run
         const alertPayloads: RetirementAlertPayload[] = [];
 
         for (const profile of candidates) {
             try {
-                if (!profile.dateOfBirth && !profile.dateOfFirstAppointment) {
-                    skipped++;
-                    continue;
-                }
-
-                // Calculate retirement date (need at least DOB)
                 if (!profile.dateOfBirth) {
                     skipped++;
                     log.push(`[SKIP] ${profile.staffId || profile.id} — no date of birth`);
                     continue;
                 }
 
-                const result = calculateRetirementDate(
+                const result = calculateStatutoryRetirementDate(
                     profile.dateOfBirth,
                     profile.dateOfFirstAppointment,
-                    profile.cadre
+                    profile.rank,
+                    profile.cadre || profile.cadreType
                 );
+
+                // Auto-sync statutoryRetirementDate and statutoryRetirementReason on StaffProfile if not matching
+                const existingDateStr = profile.statutoryRetirementDate ? profile.statutoryRetirementDate.toISOString() : null;
+                const newDateStr = result.retirementDate.toISOString();
+
+                if (existingDateStr !== newDateStr || profile.statutoryRetirementReason !== result.reason) {
+                    await prisma.staffProfile.update({
+                        where: { id: profile.id },
+                        data: {
+                            statutoryRetirementDate: result.retirementDate,
+                            statutoryRetirementReason: result.reason
+                        }
+                    });
+                }
 
                 const months = monthsBetween(now, result.retirementDate);
 
-                // Only alert if within 6 months AND retirement hasn't passed
+                // Alert if within 12 months and not already retired in the past (months >= 0)
                 if (months < 0 || months > ALERT_WINDOW_MONTHS) {
                     skipped++;
                     continue;
@@ -120,7 +126,7 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
                 const retirementMonthYear = formatRetirementDate(result.retirementDate);
                 const reason = getRetirementReasonLabel(result.reason);
 
-                // 3a ─ Create RetirementLog
+                // 1. Create RetirementLog
                 await prisma.retirementLog.create({
                     data: {
                         staffProfileId: profile.id,
@@ -134,15 +140,18 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
                     }
                 });
 
-                // 3b ─ Update retirementAlertSentAt
+                // 2. Update retirementAlertSentAt
                 await prisma.staffProfile.update({
                     where: { id: profile.id },
                     data: { retirementAlertSentAt: now }
                 });
 
-                // 3c ─ In-app notification to HR Admins
+                // 3. In-app notification to HR Admins & Registrar
                 const hrAdmins = await prisma.user.findMany({
-                    where: { role: Role.HR_ADMIN, isActive: true },
+                    where: { 
+                        role: { in: [Role.HR_ADMIN, Role.REGISTRAR, Role.SUPER_USER] }, 
+                        isActive: true 
+                    },
                     select: { id: true }
                 });
 
@@ -150,20 +159,18 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
                     await prisma.notification.create({
                         data: {
                             userId: admin.id,
-                            title: '⚠️ Staff Retirement Alert',
-                            message: `${staffName} (${staffId}) is due to retire in ${months} month${months !== 1 ? 's' : ''} — ${retirementMonthYear}. Reason: ${reason}. Department: ${department}.`,
+                            title: '⚠️ Staff Statutory Retirement Alert',
+                            message: `${staffName} (${staffId}) is due to retire in ${months} month${months !== 1 ? 's' : ''} — ${retirementMonthYear}. Reason: ${reason} (${result.isProfessorOrReader ? 'Professor/Reader 75yr rule' : 'Standard 65yr/35yr rule'}). Unit: ${department}.`,
                             type: 'WARNING',
                             link: '/dashboard/hr/archive'
                         }
                     });
                 }
 
-                // Collect for batch email
                 alertPayloads.push({ staffName, staffId, retirementMonthYear, department, reason, monthsAway: months });
 
                 processed++;
                 log.push(`[OK] ${staffName} (${staffId}) — retires ${retirementMonthYear} (${months}mo), reason: ${reason}`);
-                console.log(`[RETIREMENT_CRON] ✅ Alerted: ${staffName} <${profile.user?.email}>`);
 
             } catch (innerErr: any) {
                 const msg = `[ERROR] Failed for profile ${profile.id}: ${innerErr.message}`;
@@ -173,18 +180,21 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
             }
         }
 
-        // 4 ─ Send batch email to all HR Admins
+        // Send batch email to all HR Admins
         if (alertPayloads.length > 0) {
             try {
                 const hrAdminEmails = await prisma.user.findMany({
-                    where: { role: Role.HR_ADMIN, isActive: true },
+                    where: { 
+                        role: { in: [Role.HR_ADMIN, Role.REGISTRAR, Role.SUPER_USER] }, 
+                        isActive: true 
+                    },
                     select: { email: true }
                 });
 
                 for (const admin of hrAdminEmails) {
                     await sendRetirementAlertEmail(admin.email, alertPayloads);
                 }
-                log.push(`[EMAIL] Retirement alert batch email sent to ${hrAdminEmails.length} HR Admin(s)`);
+                log.push(`[EMAIL] Retirement alert batch email sent to ${hrAdminEmails.length} HR Admin/Registrar(s)`);
             } catch (emailErr: any) {
                 const msg = `[EMAIL_ERROR] Failed to send batch email: ${emailErr.message}`;
                 errors.push(msg);
@@ -210,9 +220,6 @@ export const runRetirementJob = async (triggeredBy: 'CRON' | 'MANUAL' = 'CRON'):
     return { processed, skipped, errors, log };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Schedule: 06:00 WAT on the 1st of every month
-// ─────────────────────────────────────────────────────────────────────────────
 export const scheduleRetirementCron = () => {
     cron.schedule('0 6 1 * *', async () => {
         console.log('[RETIREMENT_CRON] 🕖 1st-of-month trigger — running retirement scan...');
@@ -221,5 +228,5 @@ export const scheduleRetirementCron = () => {
         timezone: 'Africa/Lagos'   // WAT — West Africa Time (UTC+1)
     });
 
-    console.log('[RETIREMENT_CRON] ✅ Monthly retirement scan cron scheduled (1st 06:00 WAT).');
+    console.log('[RETIREMENT_CRON] ✅ Monthly statutory retirement scan cron scheduled (1st 06:00 WAT).');
 };

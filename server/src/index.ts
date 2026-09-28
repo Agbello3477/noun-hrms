@@ -49,6 +49,8 @@ import { schedulePromotionCron } from './jobs/promotionCron';
 import { scheduleRetirementCron } from './jobs/retirementCron';
 import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
 import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
+import { scheduleAperReminderCron } from './jobs/aperReminderCron';
+import { scheduleQueryDeadlineCron } from './jobs/queryDeadlineCron';
 import { RlsService } from './services/rls.service';
 import { startDatabaseKeepalive } from './prisma';
 
@@ -289,6 +291,8 @@ server.listen(PORT, () => {
     scheduleRetirementCron();
     scheduleSessionCleanupCron();
     scheduleLeaveResumptionCron();
+    scheduleAperReminderCron();
+    scheduleQueryDeadlineCron();
     scheduleSyntheticMonitoring();
 
     // Automatically ensure Row Level Security (RLS) is enabled on all tables

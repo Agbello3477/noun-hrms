@@ -202,9 +202,13 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         const dob = new Date(editDateOfBirth);
         if (isNaN(dob.getTime())) return null;
 
-        const isAcademic = editCadre === 'ACADEMIC';
-        const ageLimit = isAcademic ? 65 : 60;
-        const serviceLimit = isAcademic ? 40 : 35;
+        const rankLower = (editRank || staff?.staffProfile?.rank || '').toLowerCase();
+        const roleLower = (editRole || staff?.role || '').toLowerCase();
+        const isProfessorOrReader = (editCadre === 'ACADEMIC' || staff?.staffProfile?.cadre === 'ACADEMIC') && 
+            (rankLower.includes('prof') || rankLower.includes('reader') || roleLower.includes('prof'));
+
+        const ageLimit = isProfessorOrReader ? 75 : 65;
+        const serviceLimit = 35;
 
         // Age-based retirement
         const ageRetirementDate = new Date(dob);
@@ -221,11 +225,11 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         }
 
         let retirementDate = ageRetirementDate;
-        let reason = 'Age Limit Reached';
+        let reason = isProfessorOrReader ? 'Statutory Retirement by Age (75 Years - Professor/Reader)' : 'Statutory Retirement by Age (65 Years Limit)';
 
-        if (serviceRetirementDate && serviceRetirementDate < ageRetirementDate) {
+        if (serviceRetirementDate && !isProfessorOrReader && serviceRetirementDate < ageRetirementDate) {
             retirementDate = serviceRetirementDate;
-            reason = 'Maximum Service Years Reached';
+            reason = 'Statutory Retirement by Length of Service (35 Years Pensionable Limit)';
         }
 
         return {

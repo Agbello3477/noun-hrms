@@ -26,6 +26,8 @@ export const applyForLeave = async (req: Request, res: Response) => {
         const start = new Date(startDate);
         const end = new Date(endDate);
         const durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) || 1;
+        const submittedAt = new Date();
+        const expectedResolutionAt = new Date(submittedAt.getTime() + 48 * 3600000); // 48 hours SLA target
 
         const leave = await prisma.leaveRequest.create({
             data: {
@@ -35,7 +37,9 @@ export const applyForLeave = async (req: Request, res: Response) => {
                 endDate: end,
                 durationDays,
                 reason,
-                status: LeaveStatus.PENDING
+                status: LeaveStatus.PENDING,
+                submittedAt,
+                expectedResolutionAt
             }
         });
 
@@ -319,12 +323,23 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             }
         }
 
+        const now = new Date();
+        const isFinalDecision = status === 'APPROVED' || status === 'REJECTED';
+        const submittedAt = existingLeave.submittedAt || existingLeave.createdAt;
+        const turnaroundTimeHours = isFinalDecision ? (now.getTime() - submittedAt.getTime()) / (1000 * 60 * 60) : undefined;
+        const slaBreach = isFinalDecision && existingLeave.expectedResolutionAt ? now > existingLeave.expectedResolutionAt : false;
+
         const leave = await prisma.leaveRequest.update({
             where: { id: leaveId },
             data: {
                 status: status as LeaveStatus,
                 durationDays: updatedDuration,
                 endDate: updatedEndDate,
+                ...(isFinalDecision ? {
+                    resolvedAt: now,
+                    turnaroundTimeHours,
+                    slaBreach
+                } : {}),
                 // Store the decision-maker for both APPROVED and REJECTED so their signature appears
                 ...(status === 'APPROVED' || status === 'REJECTED' ? { approvedById: approverId } : {}),
                 ...(status === 'RECOMMENDED' ? { recommendedById: approverId } : {}),
