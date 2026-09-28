@@ -23,6 +23,8 @@ export const enableDbMock = async () => {
         const leaveRequests: any[] = [];
         const promotionAuditLogs: any[] = [];
         const staffQueries: any[] = [];
+        const transferLogs: any[] = [];
+        const authorizationAuditTrails: any[] = [];
 
         // Mock User
         (prisma.user as any).create = async (args: any) => {
@@ -673,6 +675,81 @@ export const enableDbMock = async () => {
             delete: async (args: any) => ({ id: args.where?.id }),
             deleteMany: async () => {
                 staffQueries.length = 0;
+                return { count: 1 };
+            }
+        };
+
+        // Mock TransferLog
+        (prisma as any).transferLog = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-transfer-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    status: 'PENDING_REGISTRAR_APPROVAL',
+                    ...args.data,
+                    staffProfile: staffProfiles.find(p => p.id === args.data.staffProfileId) || {
+                        id: args.data.staffProfileId,
+                        surname: 'Staff',
+                        otherNames: 'Test',
+                        user: { name: 'Test Staff', email: 'teststaff@noun.edu.ng' }
+                    },
+                    fromUnit: { name: 'Registry Unit' },
+                    toUnit: { name: 'Academic Planning' },
+                    imputedBy: users.find(u => u.id === args.data.imputedById) || { name: 'Imputer Officer', email: 'imputer@noun.edu.ng' }
+                };
+                transferLogs.push(item);
+                return item;
+            },
+            findMany: async (args: any) => {
+                if (args?.where?.status) {
+                    return transferLogs.filter(t => t.status === args.where.status);
+                }
+                return transferLogs;
+            },
+            findUnique: async (args: any) => {
+                return transferLogs.find(t => t.id === args.where.id) || null;
+            },
+            findFirst: async (args: any) => {
+                return transferLogs[0] || null;
+            },
+            update: async (args: any) => {
+                const item = transferLogs.find(t => t.id === args.where.id);
+                if (item) {
+                    Object.assign(item, args.data);
+                    return item;
+                }
+                return { id: args.where.id, ...args.data };
+            },
+            delete: async (args: any) => ({ id: args.where?.id }),
+            deleteMany: async () => {
+                transferLogs.length = 0;
+                return { count: 1 };
+            }
+        };
+
+        // Mock AuthorizationAuditTrail
+        (prisma as any).authorizationAuditTrail = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-audit-trail-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    ...args.data,
+                    imputer: users.find(u => u.id === args.data.imputerId) || { name: 'Imputer Officer', email: 'imputer@noun.edu.ng', role: 'REGISTRY_ADMIN' },
+                    authorizer: users.find(u => u.id === args.data.authorizerId) || { name: 'Registrar', email: 'registrar@noun.edu.ng', role: 'REGISTRAR' }
+                };
+                authorizationAuditTrails.push(item);
+                return item;
+            },
+            findMany: async (args: any) => {
+                return authorizationAuditTrails;
+            },
+            findUnique: async (args: any) => {
+                return authorizationAuditTrails.find(a => a.id === args.where.id) || null;
+            },
+            count: async () => authorizationAuditTrails.length,
+            delete: async (args: any) => ({ id: args.where?.id }),
+            deleteMany: async () => {
+                authorizationAuditTrails.length = 0;
                 return { count: 1 };
             }
         };

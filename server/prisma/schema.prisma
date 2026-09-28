@@ -100,6 +100,10 @@ model User {
   // Academic Publications Vetted
   vettedPublications       AcademicPublication[] @relation("VettedPublications")
 
+  // Dual-Control Maker-Checker Audit Trails
+  imputedAuditTrails       AuthorizationAuditTrail[] @relation("ImputedAuditTrails")
+  authorizedAuditTrails    AuthorizationAuditTrail[] @relation("AuthorizedAuditTrails")
+
   @@map("users")
 }
 
@@ -121,8 +125,10 @@ model Notification {
 
 enum Role {
   SUPER_USER    // System Owner
-  HR_ADMIN      // Registry HQ (Global Oversight)
+  HR_ADMIN      // Registry HQ / HR Imputer
+  REGISTRY_ADMIN // Registry Imputer / Operations Officer
   REGISTRAR     // Registrar / Principal Officer (Authorizer)
+  DEPUTY_REGISTRAR // Authorized Delegate / Checker when designated
   UNIT_HEAD     // Director / Dean / HOD (Approver)
   UNIT_ADMIN    // Unit Admin (Recommender)
   BURSARY       // Finance
@@ -168,9 +174,12 @@ enum EmploymentCategory {
 
 enum TransferStatus {
   DRAFT
+  PENDING_REGISTRAR_APPROVAL
   PENDING_REGISTRAR_AUTHORIZATION
+  AUTHORIZED
   APPROVED
   REJECTED
+  RETURNED_FOR_REVIEW
   CANCELLED
 }
 
@@ -1689,5 +1698,51 @@ model CallNotification {
   @@map("call_notifications")
 }
 
+// ==========================================
+// Dual-Control Maker-Checker Audit Trail Model
+// ==========================================
 
+enum AuthorizationEntityType {
+  STAFF_POSTING
+  FILE_CREATION
+  PROMOTION_OVERRIDE
+  DISCIPLINARY_SANCTION
+  LEAVE_ESCALATION
+}
 
+enum AuthorizationActionTaken {
+  APPROVED
+  REJECTED
+  RETURNED_TO_IMPUTER
+}
+
+model AuthorizationAuditTrail {
+  id              String                   @id @default(uuid())
+  entityType      AuthorizationEntityType
+  entityId        String
+  
+  imputerId       String
+  imputer         User                     @relation("ImputedAuditTrails", fields: [imputerId], references: [id])
+  imputerIp       String?
+  imputedAt       DateTime                 @default(now())
+  
+  authorizerId    String?
+  authorizer      User?                    @relation("AuthorizedAuditTrails", fields: [authorizerId], references: [id])
+  authorizerIp    String?
+  authorizedAt    DateTime?
+  
+  actionTaken     AuthorizationActionTaken
+  remarks         String?                  @db.Text
+  digitalStampRef String?
+  metadata        Json?
+  
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@map("authorization_audit_trails")
+  @@index([entityType, entityId])
+  @@index([imputerId])
+  @@index([authorizerId])
+  @@index([actionTaken])
+  @@index([createdAt])
+}

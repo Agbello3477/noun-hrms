@@ -79,8 +79,10 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const isAdmin = role === 'ADMIN' || isSuperUser; // Legacy Admin support
     const isVC = role === 'VICE_CHANCELLOR';
 
-    // Registry / HR
-    const isRegistry = role === 'HR_ADMIN' || isVC || isAdmin;
+    // Registry / HR Imputer vs Authorizer Segregation
+    const isRegistrar = ['REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER'].includes(role || '');
+    const isImputer = ['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN'].includes(role || '');
+    const isRegistry = isImputer || isRegistrar || isVC || isAdmin;
 
     // Bursary / Finance
     const isBursary = role === 'BURSARY' || role === 'AUDIT' || isVC || isAdmin;
@@ -112,13 +114,24 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
             <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 scrollbar-thin">
                 <LinkItem href="/dashboard" icon={LayoutDashboard} label="Overview" />
 
-                {/* VC Executive Section */}
-                {(isVC || isSuperUser) && (
+                {/* Registrar Executive Oversight */}
+                {isRegistrar && (
                     <>
                         <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Executive Oversight
+                            Principal Officer Cockpit
                         </div>
-                        <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />
+                        <LinkItem href="/registrar-cockpit" icon={ClipboardCheck} label="Registrar Cockpit" badge="Authorizer" />
+                        {isVC && <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />}
+                    </>
+                )}
+
+                {/* Registry Imputer Workspace */}
+                {isImputer && (
+                    <>
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Operations Desk
+                        </div>
+                        <LinkItem href="/registry-workspace" icon={Briefcase} label="Registry Workspace" badge="Imputer" />
                     </>
                 )}
 

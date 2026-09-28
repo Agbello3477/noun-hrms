@@ -12,8 +12,8 @@ interface User {
     name: string;
     mustChangePassword?: boolean;
 
-    // Phase 3 Enterprise Roles
-    role: 'SUPER_USER' | 'HR_ADMIN' | 'UNIT_HEAD' | 'UNIT_ADMIN' | 'BURSARY' | 'AUDIT' | 'STUDY_CENTER_MANAGER' | 'STAFF' | 'ADMIN' | 'VICE_CHANCELLOR';
+    // Phase 3 & Dual-Control RBAC Roles
+    role: 'SUPER_USER' | 'HR_ADMIN' | 'REGISTRY_ADMIN' | 'REGISTRAR' | 'DEPUTY_REGISTRAR' | 'UNIT_HEAD' | 'UNIT_ADMIN' | 'BURSARY' | 'AUDIT' | 'STUDY_CENTER_MANAGER' | 'STAFF' | 'ADMIN' | 'VICE_CHANCELLOR';
 
     staffProfile?: {
         id: string;

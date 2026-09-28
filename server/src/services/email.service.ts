@@ -123,24 +123,28 @@ export const sendAccountCreatedNotification = async (
     email: string,
     phone: string | null,
     name: string,
-    staffId: string
+    staffId: string,
+    setupToken?: string
 ) => {
-    const subject = 'Your NOUN HRMS Account Has Been Created';
+    const subject = 'Your NOUN HRMS Account Has Been Created & Cleared';
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const activationLink = setupToken ? `${clientUrl}/activate?token=${setupToken}` : clientUrl;
     const html = `
         <h1>Welcome to NOUN HRMS</h1>
         <p>Dear <strong>${name}</strong>,</p>
-        <p>An official staff file and portal account has been created for you.</p>
-        <p>You can now log in to the portal using the credentials below:</p>
+        <p>An official staff file and portal account has been cleared and authorized by the Registrar.</p>
+        <p>You can now activate and access your portal account using the details below:</p>
         <ul>
-            <li><strong>Login URL:</strong> <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}">NOUN HRMS Portal</a></li>
+            <li><strong>Login URL:</strong> <a href="${clientUrl}">NOUN HRMS Portal</a></li>
             <li><strong>Username/Email:</strong> ${email}</li>
             <li><strong>Staff ID:</strong> ${staffId}</li>
-            <li><strong>Default Password:</strong> 123456789</li>
+            ${setupToken ? `<li><strong>One-Time Setup Token:</strong> <code>${setupToken}</code></li>` : `<li><strong>Default Password:</strong> 123456789</li>`}
+            ${setupToken ? `<li><strong>Direct Activation:</strong> <a href="${activationLink}">Click here to set your password</a></li>` : ''}
         </ul>
-        <p><em>Note: You will be prompted to change this default password upon your first login.</em></p>
+        <p><em>Note: You will be prompted to set or change your password upon your first access.</em></p>
         <br>
         <p>Regards,</p>
-        <p>NOUN Registry / HR Department</p>
+        <p>Office of the Registrar &mdash; National Open University of Nigeria</p>
     `;
 
     // Send Email
@@ -148,7 +152,7 @@ export const sendAccountCreatedNotification = async (
 
     // Send SMS
     if (phone) {
-        const smsMessage = `Welcome to NOUN HRMS. Your account has been created. Login with your Email (${email}) or Staff ID (${staffId}) and default password: 123456789. You must change your password on first login.`;
+        const smsMessage = `Welcome to NOUN HRMS. Your staff account (${staffId}) has been cleared by the Registrar. Access the portal at ${clientUrl} to set your password.`;
         await sendSMS(phone, smsMessage);
     }
 };
