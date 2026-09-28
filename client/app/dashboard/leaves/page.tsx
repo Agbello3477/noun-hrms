@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api, { getImageUrl } from '../../../lib/api';
 import { useSwrData } from '../../../hooks/useSwrData';
@@ -52,8 +52,24 @@ function LeavesContent() {
     // Primary Active Tab: 'official' | 'leaves'
     const [mainTab, setMainTab] = useState<'official' | 'leaves'>('official');
 
-    // Leaves Data & Modals
-    const { data: leaves = [], isLoading: loadingLeaves, refresh: fetchMyLeaves } = useSwrData<any[]>('/api/leaves/me', { ttl: 60000 });
+    // Leaves Data & Modals (Supporting v1 statutory leave applications & balances)
+    const { data: balanceData, refresh: fetchBalances } = useSwrData<any>('/api/v1/leave/balances', { ttl: 60000 });
+    const { data: v1Leaves = [], isLoading: loadingV1Leaves, refresh: fetchV1Leaves } = useSwrData<any[]>('/api/v1/leave/applications/my', { ttl: 60000 });
+    const { data: legacyLeaves = [], isLoading: loadingLegacyLeaves, refresh: fetchLegacyLeaves } = useSwrData<any[]>('/api/leaves/me', { ttl: 60000 });
+
+    const leaves = useMemo(() => {
+        if (v1Leaves && v1Leaves.length > 0) return v1Leaves;
+        return legacyLeaves || [];
+    }, [v1Leaves, legacyLeaves]);
+
+    const loadingLeaves = loadingV1Leaves && loadingLegacyLeaves;
+
+    const fetchMyLeaves = useCallback(() => {
+        fetchV1Leaves();
+        fetchLegacyLeaves();
+        fetchBalances();
+    }, [fetchV1Leaves, fetchLegacyLeaves, fetchBalances]);
+
     const [resuming, setResuming] = useState(false);
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
@@ -133,7 +149,7 @@ function LeavesContent() {
                 return (
                     <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
                         <CheckCircle size={12} className="stroke-[2.5]" />
-                        Approved
+                        Approved &amp; Cleared
                     </span>
                 );
             case 'REJECTED':
@@ -143,18 +159,27 @@ function LeavesContent() {
                         Rejected
                     </span>
                 );
+            case 'PENDING_REGISTRY':
             case 'RECOMMENDED':
                 return (
                     <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-blue-500/10 text-blue-700 border border-blue-500/20">
-                        <AlertCircle size={12} className="stroke-[2.5]" />
-                        Recommended
+                        <ShieldCheck size={12} className="stroke-[2.5]" />
+                        Level 2: Pending Registry
+                    </span>
+                );
+            case 'PENDING_HOD':
+            case 'PENDING':
+                return (
+                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                        <Clock size={12} className="stroke-[2.5]" />
+                        Level 1: Pending HOD
                     </span>
                 );
             default:
                 return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-slate-500/10 text-slate-700 border border-slate-500/20">
                         <Clock size={12} className="stroke-[2.5]" />
-                        Pending
+                        {status ? status.replace(/_/g, ' ') : 'Pending'}
                     </span>
                 );
         }
@@ -411,6 +436,64 @@ function LeavesContent() {
                             <span>Apply for Leave</span>
                         </button>
                     </div>
+
+                    {/* Dynamic Statutory Annual Leave Balance Card */}
+                    {(() => {
+                        const annualBalance = balanceData?.balances?.find((b: any) => b.leaveType === 'ANNUAL');
+                        const isPrincipal = balanceData?.staffProfile?.isPrincipalOfficer;
+                        const defaultQuota = isPrincipal ? 42 : 30;
+                        const totalEntitled = annualBalance?.totalDaysEntitled ?? defaultQuota;
+                        const daysUsed = annualBalance?.daysUtilized ?? 0;
+                        const daysAvailable = annualBalance?.daysRemaining ?? defaultQuota;
+
+                        return (
+                            <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-blue-800/40">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] uppercase tracking-widest font-black text-blue-300">
+                                                {balanceData?.staffProfile?.salaryScale || 'CONTISS'} Scale • {isPrincipal ? 'Principal Officer Quota' : 'Statutory Cadre Entitlement'}
+                                            </span>
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-500/20 text-blue-200 border border-blue-400/30">
+                                                {balanceData?.year || new Date().getFullYear()} Statutory Cycle
+                                            </span>
+                                        </div>
+                                        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+                                            Annual Leave Entitlement Balance
+                                        </h2>
+                                        <p className="text-xs text-blue-200/80 font-medium">
+                                            Net statutory working days (strictly excluding Saturdays, Sundays, and official national holidays)
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 text-center min-w-[100px]">
+                                            <span className="text-[10px] uppercase font-bold text-blue-200 block">Total Entitled</span>
+                                            <span className="text-2xl font-black text-white">{totalEntitled} Days</span>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 text-center min-w-[100px]">
+                                            <span className="text-[10px] uppercase font-bold text-amber-300 block">Days Utilized</span>
+                                            <span className="text-2xl font-black text-amber-300">{daysUsed} Days</span>
+                                        </div>
+                                        <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-2.5 rounded-xl border border-emerald-400/30 text-center min-w-[100px]">
+                                            <span className="text-[10px] uppercase font-bold text-emerald-300 block">Available</span>
+                                            <span className="text-2xl font-black text-emerald-300">{daysAvailable} Days</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Specialized Leave Status Pills */}
+                                {balanceData?.balances && balanceData.balances.length > 1 && (
+                                    <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-xs">
+                                        {balanceData.balances.filter((b: any) => b.leaveType !== 'ANNUAL').map((b: any) => (
+                                            <span key={b.id} className="px-3 py-1 rounded-lg bg-white/10 border border-white/10 font-medium text-slate-200">
+                                                <strong className="text-white">{b.leaveType.replace(/_/g, ' ')}:</strong> {b.daysRemaining} days remaining
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {user?.staffProfile?.status === 'ON_LEAVE' && (
                         <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm animate-in fade-in">

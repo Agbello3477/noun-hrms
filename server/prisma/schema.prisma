@@ -104,6 +104,10 @@ model User {
   imputedAuditTrails       AuthorizationAuditTrail[] @relation("ImputedAuditTrails")
   authorizedAuditTrails    AuthorizationAuditTrail[] @relation("AuthorizedAuditTrails")
 
+  // Leave Dual-Level Authorization Workflow
+  hodApprovedLeaves        LeaveApplication[] @relation("HodApprovedLeaves")
+  registryApprovedLeaves   LeaveApplication[] @relation("RegistryApprovedLeaves")
+
   @@map("users")
 }
 
@@ -330,6 +334,12 @@ model StaffProfile {
   clearedAt                    DateTime?
   clearedById                  String?
   clearanceRemarks             String?            @db.Text
+
+  // Statutory Leave Entitlements & Workflows
+  isPrincipalOfficer           Boolean            @default(false)
+  leaveBalances                LeaveBalance[]
+  leaveApplications            LeaveApplication[] @relation("StaffLeaveApplications")
+  reliefLeaveApplications      LeaveApplication[] @relation("ReliefStaffApplications")
 
   // Workflow
   leaves      LeaveRequest[]
@@ -691,15 +701,94 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum LeaveApplicationStatus {
+  PENDING_HOD
+  PENDING_REGISTRY
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum LeaveType {
   ANNUAL
-  CASUAL
-  SICK
-  MATERNITY
+  TERMINAL
+  RESEARCH
   STUDY
-  PATERNITY
+  TRAINING
+  CASUAL
+  EXAMINATION
+  EXTERNAL_ACADEMIC_AWARD
   SABBATICAL
-  WITHOUT_PAY
+  MATERNITY
+  PATERNITY
+  SICK
+  LEAVE_OF_ABSENCE_WITHOUT_PAY
+  WITHOUT_PAY // Legacy alias
+}
+
+model LeaveBalance {
+  id                 String       @id @default(uuid())
+  staffId            String
+  staff              StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  leaveType          LeaveType
+  year               Int
+  totalDaysEntitled  Int
+  daysUtilized       Int          @default(0)
+  daysRemaining      Int
+  isPaidLeave        Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([staffId, leaveType, year])
+  @@index([staffId])
+  @@index([year])
+  @@map("leave_balances")
+}
+
+model LeaveApplication {
+  id                      String                 @id @default(uuid())
+  staffId                 String
+  staff                   StaffProfile           @relation("StaffLeaveApplications", fields: [staffId], references: [id], onDelete: Cascade)
+  leaveType               LeaveType
+  startDate               DateTime
+  endDate                 DateTime
+  workingDaysCount        Int
+  reliefStaffId           String?
+  reliefStaff             StaffProfile?          @relation("ReliefStaffApplications", fields: [reliefStaffId], references: [id])
+  status                  LeaveApplicationStatus @default(PENDING_HOD)
+  reason                  String?                @db.Text
+  supportingDocumentUrl   String?
+  hodApprovalRemarks      String?                @db.Text
+  hodApprovedById         String?
+  hodApprovedBy           User?                  @relation("HodApprovedLeaves", fields: [hodApprovedById], references: [id])
+  hodApprovedAt           DateTime?
+  registryApprovalRemarks String?                @db.Text
+  registryApprovedById    String?
+  registryApprovedBy      User?                  @relation("RegistryApprovedLeaves", fields: [registryApprovedById], references: [id])
+  registryApprovedAt      DateTime?
+  isPrincipalOfficer      Boolean                @default(false)
+  isPaidLeave             Boolean                @default(true)
+  payrollSuspensionFlag   Boolean                @default(false)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  @@map("leave_applications")
+  @@index([staffId])
+  @@index([status])
+  @@index([leaveType])
+  @@index([startDate, endDate])
+}
+
+model UniversityHoliday {
+  id         String   @id @default(uuid())
+  date       DateTime @unique
+  name       String
+  isObserved Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("university_holidays")
+  @@index([date])
 }
 
 model LeaveRequest {

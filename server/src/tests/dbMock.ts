@@ -25,6 +25,9 @@ export const enableDbMock = async () => {
         const staffQueries: any[] = [];
         const transferLogs: any[] = [];
         const authorizationAuditTrails: any[] = [];
+        const leaveBalances: any[] = [];
+        const leaveApplications: any[] = [];
+        const universityHolidays: any[] = [];
 
         // Mock User
         (prisma.user as any).create = async (args: any) => {
@@ -432,6 +435,142 @@ export const enableDbMock = async () => {
                 const index = leaveRequests.findIndex(r => r.id === args.where.id);
                 if (index !== -1) leaveRequests.splice(index, 1);
                 return { id: args.where.id };
+            }
+        };
+
+        // Mock LeaveBalance
+        (prisma as any).leaveBalance = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-balance-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    daysUtilized: 0,
+                    isPaidLeave: true,
+                    ...args.data
+                };
+                leaveBalances.push(item);
+                return item;
+            },
+            findUnique: async (args: any) => {
+                if (args.where?.id) {
+                    return leaveBalances.find(b => b.id === args.where.id) || null;
+                }
+                const compound = args.where?.staffId_leaveType_year;
+                if (compound) {
+                    return (
+                        leaveBalances.find(
+                            b =>
+                                b.staffId === compound.staffId &&
+                                b.leaveType === compound.leaveType &&
+                                b.year === compound.year
+                        ) || null
+                    );
+                }
+                return null;
+            },
+            findMany: async (args: any) => {
+                let list = leaveBalances;
+                if (args.where?.staffId) {
+                    list = list.filter(b => b.staffId === args.where.staffId);
+                }
+                if (args.where?.year) {
+                    list = list.filter(b => b.year === args.where.year);
+                }
+                return list;
+            },
+            update: async (args: any) => {
+                const b = leaveBalances.find(item => item.id === args.where.id);
+                if (b) {
+                    Object.assign(b, args.data);
+                    return b;
+                }
+                return { id: args.where.id, ...args.data };
+            },
+            deleteMany: async () => {
+                leaveBalances.length = 0;
+                return { count: 1 };
+            }
+        };
+
+        // Mock LeaveApplication
+        (prisma as any).leaveApplication = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-leave-app-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    status: 'PENDING_HOD',
+                    isPaidLeave: true,
+                    payrollSuspensionFlag: false,
+                    ...args.data,
+                    staff: staffProfiles.find(p => p.id === args.data.staffId) || {
+                        id: args.data.staffId,
+                        surname: 'Staff',
+                        otherNames: 'Test',
+                        user: { name: 'Test Staff', email: 'staff@noun.edu.ng' }
+                    }
+                };
+                leaveApplications.push(item);
+                return item;
+            },
+            findUnique: async (args: any) => {
+                return leaveApplications.find(a => a.id === args.where.id) || null;
+            },
+            findFirst: async (args: any) => {
+                if (args.where?.staffId) {
+                    return (
+                        leaveApplications.find(a => a.staffId === args.where.staffId) ||
+                        null
+                    );
+                }
+                return leaveApplications[0] || null;
+            },
+            findMany: async (args: any) => {
+                let list = leaveApplications;
+                if (args.where?.staffId) {
+                    list = list.filter(a => a.staffId === args.where.staffId);
+                }
+                if (args.where?.status) {
+                    if (args.where.status?.in) {
+                        list = list.filter(a => args.where.status.in.includes(a.status));
+                    } else {
+                        list = list.filter(a => a.status === args.where.status);
+                    }
+                }
+                return list;
+            },
+            update: async (args: any) => {
+                const a = leaveApplications.find(item => item.id === args.where.id);
+                if (a) {
+                    Object.assign(a, args.data);
+                    return a;
+                }
+                return { id: args.where.id, ...args.data };
+            },
+            deleteMany: async () => {
+                leaveApplications.length = 0;
+                return { count: 1 };
+            }
+        };
+
+        // Mock UniversityHoliday
+        (prisma as any).universityHoliday = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-holiday-uuid-' + Math.random().toString(36).substr(2, 6),
+                    isObserved: true,
+                    ...args.data
+                };
+                universityHolidays.push(item);
+                return item;
+            },
+            findMany: async (args: any) => {
+                return universityHolidays;
+            },
+            deleteMany: async () => {
+                universityHolidays.length = 0;
+                return { count: 1 };
             }
         };
 
