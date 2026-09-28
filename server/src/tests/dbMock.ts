@@ -21,6 +21,8 @@ export const enableDbMock = async () => {
         const notifications: any[] = [];
         const aperSessions: any[] = [];
         const leaveRequests: any[] = [];
+        const promotionAuditLogs: any[] = [];
+        const staffQueries: any[] = [];
 
         // Mock User
         (prisma.user as any).create = async (args: any) => {
@@ -161,6 +163,8 @@ export const enableDbMock = async () => {
             const p = staffProfiles.find(p => p.id === args.where.id || p.userId === args.where.userId);
             const userObj = p ? users.find(u => u.id === p.userId) : null;
             const fallbackUser = { id: mockUserId, name: 'Test User', email: 'mock@noun.edu.ng' };
+            const profileId = p ? p.id : (args.where.id || args.where.userId || mockProfileId);
+            const matchedQueries = staffQueries.filter(q => q.staffId === profileId && (q.status === 'OPEN' || q.status === 'PENDING_RESPONSE' || q.status === 'UNDER_REVIEW'));
             if (!p) {
                 return {
                     id: mockProfileId,
@@ -168,12 +172,14 @@ export const enableDbMock = async () => {
                     status: currentStaffStatus,
                     isDeleted: currentStaffDeleted,
                     deletedAt: currentStaffDeleted ? new Date() : null,
-                    user: fallbackUser
+                    user: fallbackUser,
+                    queries: args?.include?.queries ? matchedQueries : []
                 };
             }
             return {
                 ...p,
-                user: userObj || fallbackUser
+                user: userObj || fallbackUser,
+                queries: args?.include?.queries ? matchedQueries : []
             };
         };
 
@@ -627,7 +633,6 @@ export const enableDbMock = async () => {
         });
 
         // Mock PromotionAuditLog
-        const promotionAuditLogs: any[] = [];
         (prisma as any).promotionAuditLog = {
             create: async (args: any) => {
                 const item = {
@@ -642,11 +647,13 @@ export const enableDbMock = async () => {
             findUnique: async (args: any) => promotionAuditLogs[0] || null,
             count: async () => promotionAuditLogs.length,
             delete: async (args: any) => ({ id: args.where?.id }),
-            deleteMany: async () => ({ count: 1 })
+            deleteMany: async () => {
+                promotionAuditLogs.length = 0;
+                return { count: 1 };
+            }
         };
 
         // Mock StaffQuery
-        const staffQueries: any[] = [];
         (prisma as any).staffQuery = {
             create: async (args: any) => {
                 const item = {
@@ -664,7 +671,10 @@ export const enableDbMock = async () => {
             findUnique: async (args: any) => staffQueries[0] || null,
             count: async () => staffQueries.length,
             delete: async (args: any) => ({ id: args.where?.id }),
-            deleteMany: async () => ({ count: 1 })
+            deleteMany: async () => {
+                staffQueries.length = 0;
+                return { count: 1 };
+            }
         };
 
         // Mock Transaction

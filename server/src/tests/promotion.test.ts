@@ -134,6 +134,25 @@ async function runTests() {
             }
         });
 
+        let disciplinaryBlocked = false;
+        try {
+            await PromotionService.updateStaffPromotionSchedule({
+                staffProfileId: testProfile.id,
+                actorId: adminUser.id,
+                actorRole: Role.REGISTRAR,
+                eligibilityStatus: 'DUE_FOR_REVIEW',
+                overrideReason: 'Attempt review with open query'
+            });
+        } catch (e: any) {
+            disciplinaryBlocked = e.message.includes('disciplinary matter');
+        }
+        assert(disciplinaryBlocked, 'Promotion blocked when staff has unresolved disciplinary query');
+
+        // Clean up query before subsequent test cases
+        await prisma.staffQuery.deleteMany({
+            where: { staffId: testProfile.id }
+        });
+
         // --- Test Case 9: calculateNextPromotionMaturity Helper ---
         const calcAcademic = calculateNextPromotionMaturity({
             cadre: 'ACADEMIC',
