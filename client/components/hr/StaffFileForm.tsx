@@ -801,6 +801,8 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">System Role</label>
                         <select name="role" required className="w-full border p-1.5 rounded" value={formData.role} onChange={handleChange}>
                             <option value="STAFF">Regular Staff</option>
+                            <option value="REGISTRAR">The Registrar (Super admin)</option>
+                            <option value="VICE_CHANCELLOR">The VC</option>
                             <option value="UNIT_HEAD">Dean / Unit Head / Director</option>
                             <option value="STUDY_CENTER_MANAGER">Center Manager</option>
                             <option value="HR_ADMIN">HR Admin</option>

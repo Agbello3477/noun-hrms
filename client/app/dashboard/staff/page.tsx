@@ -203,7 +203,7 @@ export default function StaffPage() {
         const r = staff.role;
         const rank = staff.staffProfile?.rank?.toLowerCase() || '';
 
-        if (r === 'SUPER_USER' || r === 'VICE_CHANCELLOR') return 'bg-purple-500/10 text-purple-800 border-purple-500/20';
+        if (r === 'SUPER_USER' || r === 'VICE_CHANCELLOR' || r === 'REGISTRAR') return 'bg-purple-500/10 text-purple-800 border-purple-500/20';
         if (r === 'HR_ADMIN') return 'bg-[#006533]/10 text-[#006533] border-[#006533]/20';
         if (r === 'UNIT_HEAD') {
             if (rank === 'director') return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
@@ -221,6 +221,8 @@ export default function StaffPage() {
         const r = staff.role;
         const rank = staff.staffProfile?.rank || '';
 
+        if (r === 'REGISTRAR') return 'The Registrar (Super admin)';
+        if (r === 'VICE_CHANCELLOR') return 'The VC';
         if (r === 'UNIT_HEAD') {
             if (rank.toLowerCase() === 'director') return 'Director';
             if (rank.toLowerCase() === 'dean') return 'Dean';
@@ -347,6 +349,8 @@ export default function StaffPage() {
                             className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-[#006533] focus:border-[#006533] outline-none font-medium text-slate-700 bg-white"
                         >
                             <option value="">All Roles</option>
+                            <option value="REGISTRAR">The Registrar (Super admin)</option>
+                            <option value="VICE_CHANCELLOR">The VC</option>
                             <option value="DIRECTOR">Director</option>
                             <option value="DEAN">Dean</option>
                             <option value="UNIT_HEAD">Head of Unit</option>

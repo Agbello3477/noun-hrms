@@ -18,7 +18,9 @@ import {
     TrendingUp,
     Info,
     CreditCard,
-    CheckCircle2
+    CheckCircle2,
+    Lock,
+    ShieldCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
@@ -127,7 +129,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     const [overrideReason, setOverrideReason] = useState('');
     const [isDueImmediately, setIsDueImmediately] = useState(false);
 
-    const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER'].includes(currentUser?.role || '');
+    const isRegistrarAuthorizer = ['REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser?.role || '');
+    const isHrAdmin = ['HR_ADMIN', 'REGISTRY_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR', 'REGISTRAR'].includes(currentUser?.role || '');
 
     const isManager = 
         currentUser?.role && 
@@ -253,7 +256,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             // Authorization check
             if (currentUser && staffData) {
                 const isSelf = currentUser.id === staffData.id || (currentUser.staffProfile?.id && currentUser.staffProfile.id === staffData.staffProfile?.id);
-                const isHrAdmin = ['HR_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser.role || '');
+                const isHrAdmin = ['HR_ADMIN', 'REGISTRY_ADMIN', 'ADMIN', 'SUPER_USER', 'VICE_CHANCELLOR', 'REGISTRAR'].includes(currentUser.role || '');
                 const isManagerOfStaff = 
                     ['UNIT_HEAD', 'STUDY_CENTER_MANAGER', 'UNIT_ADMIN'].includes(currentUser.role || '') && 
                     currentUser.staffProfile && staffData.staffProfile &&
@@ -369,11 +372,26 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 return;
             }
 
+            if (editRole !== staff?.role && !isRegistrarAuthorizer) {
+                alert('Security Violation: No system role can be changed without Registrar authorization.');
+                setSaving(false);
+                return;
+            }
+
             let dbRole = editRole;
             let dbRank = isHrAdmin ? (staff?.staffProfile?.rank || 'Staff') : editRank;
 
             if (isHrAdmin) {
-                if (editRole === 'DIRECTOR') {
+                if (editRole === 'REGISTRAR') {
+                    dbRole = 'REGISTRAR';
+                    dbRank = 'University Registrar';
+                } else if (editRole === 'VICE_CHANCELLOR') {
+                    dbRole = 'VICE_CHANCELLOR';
+                    dbRank = 'Vice-Chancellor';
+                } else if (editRole === 'SUPER_USER') {
+                    dbRole = 'SUPER_USER';
+                    dbRank = 'System Administrator';
+                } else if (editRole === 'DIRECTOR') {
                     dbRole = 'UNIT_HEAD';
                     dbRank = 'Director';
                 } else if (editRole === 'DEAN') {
@@ -445,7 +463,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 step: editStep,
                 cadre: editCadre,
                 gender: editGender,
-                role: isHrAdmin ? dbRole : staff?.role,
+                role: isRegistrarAuthorizer ? dbRole : staff?.role,
                 rank: dbRank,
                 unitId: isHrAdmin ? (editLocation === 'HQ' ? editUnitId : 'null') : staff?.staffProfile?.unitId,
                 centerId: isHrAdmin ? (editLocation === 'CENTER' ? editCenterId : 'null') : staff?.staffProfile?.centerId,
@@ -1051,9 +1069,17 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                 <h3 className="text-sm font-extrabold text-blue-700 uppercase tracking-wider">
                                     2. System Role & Structure Configuration
                                 </h3>
-                                {!isHrAdmin && (
+                                {!isHrAdmin ? (
                                     <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded border border-amber-200">
                                         Read-Only for Managers
+                                    </span>
+                                ) : isRegistrarAuthorizer ? (
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                                        <ShieldCheck size={12} className="text-emerald-600" /> Registrar Authorization Active
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                                        <Lock size={12} className="text-amber-600" /> Role Locked (Requires Registrar Authorization)
                                     </span>
                                 )}
                             </div>
@@ -1064,16 +1090,20 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                     <select
                                         value={editRole}
                                         onChange={e => setEditRole(e.target.value)}
-                                        disabled={!isHrAdmin}
+                                        disabled={!isRegistrarAuthorizer}
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed font-medium"
                                     >
                                         <option value="STAFF">Regular Staff</option>
+                                        <option value="REGISTRAR">The Registrar (Super admin)</option>
+                                        <option value="VICE_CHANCELLOR">The VC</option>
+                                        <option value="SUPER_USER">Super User / System Admin</option>
                                         <option value="DIRECTOR">Director (HQ/Directorate)</option>
                                         <option value="DEAN">Dean (Faculty)</option>
                                         <option value="UNIT_HEAD">Head of Unit / HOD</option>
                                         <option value="HEAD_OF_ADMIN">Head of Admin</option>
                                         <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
                                         <option value="HR_ADMIN">HR Admin</option>
+                                        <option value="REGISTRY_ADMIN">Registry Admin (Operations)</option>
                                         <option value="BURSARY">Bursary</option>
                                         <option value="AUDIT">Audit</option>
                                         <option value="CLINIC_HEAD">Head of Clinic</option>
@@ -1084,6 +1114,11 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="SECURITY_OFFICER">Officer</option>
                                         <option value="DRIVER">Driver</option>
                                     </select>
+                                    {!isRegistrarAuthorizer && (
+                                        <p className="text-[10px] text-amber-700 font-semibold mt-1 flex items-center gap-1">
+                                            <Lock size={10} /> Institutional Rule: No role can be changed without Registrar authorization.
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Location Type Toggle */}

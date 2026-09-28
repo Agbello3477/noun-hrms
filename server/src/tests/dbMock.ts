@@ -167,6 +167,25 @@ export const enableDbMock = async () => {
             };
         };
 
+        (prisma.staffProfile as any).upsert = async (args: any) => {
+            const p = staffProfiles.find(p => (args.where.id && p.id === args.where.id) || (args.where.userId && p.userId === args.where.userId));
+            if (p) {
+                Object.assign(p, args.update);
+                return p;
+            }
+            const created = {
+                id: `mock-profile-${Math.random().toString(36).substr(2, 9)}`,
+                userId: args.create?.userId || args.where?.userId || mockUserId,
+                status: 'ACTIVE',
+                cadre: 'ADMINISTRATIVE',
+                isDeleted: false,
+                deletedAt: null,
+                ...args.create
+            };
+            staffProfiles.push(created);
+            return created;
+        };
+
         (prisma.staffProfile as any).findUnique = async (args: any) => {
             const p = staffProfiles.find(p => (args.where.id && p.id === args.where.id) || (args.where.userId && p.userId === args.where.userId) || (args.where.staffId && p.staffId === args.where.staffId));
             const userObj = p ? users.find(u => u.id === p.userId) : null;
@@ -778,21 +797,34 @@ export const enableDbMock = async () => {
         };
 
         // Mock AuditLog
-        (prisma.auditLog as any).create = async (args: any) => ({
-            id: 'mock-audit-log-uuid',
-            ...args.data
-        });
+        const auditLogStore: any[] = [];
+        (prisma.auditLog as any).create = async (args: any) => {
+            const entry = {
+                id: 'mock-audit-log-uuid-' + Math.random().toString(36).substr(2, 6),
+                createdAt: new Date(),
+                ...args.data
+            };
+            auditLogStore.push(entry);
+            return entry;
+        };
+        (prisma.auditLog as any).findMany = async (args: any) => {
+            if (args?.where?.action) {
+                return auditLogStore.filter(a => a.action === args.where.action);
+            }
+            return auditLogStore;
+        };
         (prisma.auditLog as any).findUnique = async (args: any) => ({
             id: args.where.id,
             action: 'MANUAL_OVERRIDE'
         });
-        (prisma.auditLog as any).count = async () => 1;
+        (prisma.auditLog as any).count = async () => auditLogStore.length || 1;
         (prisma.auditLog as any).delete = async (args: any) => ({
             id: args.where.id
         });
-        (prisma.auditLog as any).deleteMany = async (args: any) => ({
-            count: 1
-        });
+        (prisma.auditLog as any).deleteMany = async (args: any) => {
+            auditLogStore.length = 0;
+            return { count: 1 };
+        };
 
         // Mock PromotionAuditLog
         (prisma as any).promotionAuditLog = {

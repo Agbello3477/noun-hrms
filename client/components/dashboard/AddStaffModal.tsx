@@ -346,7 +346,20 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
             let dbRole = formData.role;
             let assignedRank = formData.cadre === 'ACADEMIC' ? 'Academic Staff' : 'Staff';
 
-            if (formData.role === 'DIRECTOR') {
+            const isRegistrarAuthorizer = ['REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR'].includes(currentUser?.role || '');
+            if (['REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER'].includes(formData.role) && !isRegistrarAuthorizer) {
+                setError('Security Violation: Assigning the Registrar, VC, or Super User role requires direct Registrar authorization.');
+                setLoading(false);
+                return;
+            }
+
+            if (formData.role === 'REGISTRAR') {
+                dbRole = 'REGISTRAR';
+                assignedRank = 'University Registrar';
+            } else if (formData.role === 'VICE_CHANCELLOR') {
+                dbRole = 'VICE_CHANCELLOR';
+                assignedRank = 'Vice-Chancellor';
+            } else if (formData.role === 'DIRECTOR') {
                 dbRole = 'UNIT_HEAD';
                 assignedRank = 'Director';
             } else if (formData.role === 'DEAN') {
@@ -1001,6 +1014,8 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                                     onChange={handleChange}
                                 >
                                     <option value="STAFF">Regular Staff</option>
+                                    <option value="REGISTRAR">The Registrar (Super admin)</option>
+                                    <option value="VICE_CHANCELLOR">The VC</option>
                                     <option value="SUPER_USER">Super User / System Admin</option>
                                     <option value="DIRECTOR">Director (HQ/Directorate)</option>
                                     <option value="DEAN">Dean (Faculty)</option>

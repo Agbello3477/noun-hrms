@@ -14,6 +14,8 @@ router.use(verifyToken);
 // View All Staff: HR, Super User, Center Manager, Unit Head, Admin
 const viewRoles = [
     Role.HR_ADMIN,
+    Role.REGISTRY_ADMIN,
+    Role.REGISTRAR,
     Role.SUPER_USER,
     Role.STUDY_CENTER_MANAGER,
     Role.UNIT_HEAD,
@@ -32,10 +34,13 @@ const viewRoles = [
     Role.STAFF
 ];
 
-// Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin
+// Create Staff: HR Admin, Registry Admin, Registrar, Super User, VC, Admin, Unit Head, Center Manager, Unit Admin
 const manageRoles = [
     Role.HR_ADMIN,
+    Role.REGISTRY_ADMIN,
+    Role.REGISTRAR,
     Role.SUPER_USER,
+    Role.VICE_CHANCELLOR,
     Role.ADMIN,
     Role.UNIT_HEAD,
     Role.STUDY_CENTER_MANAGER,

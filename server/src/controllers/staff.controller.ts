@@ -496,7 +496,28 @@ export const createStaff = async (req: Request, res: Response) => {
 
         const creatorId = (req as any).user?.id;
         const creatorRole = (req as any).user?.role;
-        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN].includes(creatorRole as any);
+        const isHQAdmin = [
+            Role.HR_ADMIN,
+            Role.REGISTRY_ADMIN,
+            Role.REGISTRAR,
+            Role.SUPER_USER,
+            Role.ADMIN,
+            Role.VICE_CHANCELLOR
+        ].includes(creatorRole as any);
+
+        if ([Role.REGISTRAR, Role.VICE_CHANCELLOR, Role.SUPER_USER].includes(resolvedRole as any)) {
+            const isRegistrarAuthorizer = [
+                Role.REGISTRAR,
+                Role.SUPER_USER,
+                Role.VICE_CHANCELLOR
+            ].includes(creatorRole as any);
+
+            if (!isRegistrarAuthorizer) {
+                return res.status(403).json({
+                    message: 'Unauthorized: Assigning the Registrar, VC, or Super User role requires direct Registrar authorization.'
+                });
+            }
+        }
 
         let finalUnitId = unitId;
         let finalCenterId = centerId;
@@ -725,7 +746,14 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         const isSelf = updaterId === user.id;
-        const isAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR].includes(updaterRole as any);
+        const isAdmin = [
+            Role.HR_ADMIN,
+            Role.REGISTRY_ADMIN,
+            Role.REGISTRAR,
+            Role.SUPER_USER,
+            Role.ADMIN,
+            Role.VICE_CHANCELLOR
+        ].includes(updaterRole as any);
 
         let isManager = false;
         if ([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN].includes(updaterRole as any)) {
@@ -791,12 +819,37 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             passportUrl = await StorageService.uploadFile(file);
         }
 
-        // Handle administrator-only fields
-        if (isAdmin && role) {
+        // Handle administrator-only fields: ROLE CHANGE REQUIRES REGISTRAR AUTHORIZATION
+        if (role && role !== user.role) {
+            const isRegistrarAuthorizer = [
+                Role.REGISTRAR,
+                Role.SUPER_USER,
+                Role.VICE_CHANCELLOR
+            ].includes(updaterRole as any);
+
+            if (!isRegistrarAuthorizer) {
+                return res.status(403).json({
+                    message: 'Unauthorized: No system role can be changed without Registrar authorization. Only the Registrar or Chief Executive can modify user roles.'
+                });
+            }
+
             await prisma.user.update({
                 where: { id: user.id },
                 data: { role: role as Role }
             });
+
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        userId: updaterId!,
+                        action: 'ROLE_CHANGE_AUTHORIZED',
+                        resource: `User:${user.id}`,
+                        details: `Role for ${user.email} changed from ${user.role} to ${role} by ${updaterRole} (${updaterId})`
+                    }
+                });
+            } catch (auditErr) {
+                console.warn('Audit log recording error on role change:', auditErr);
+            }
         }
 
         const parseDate = (val: any) => {
