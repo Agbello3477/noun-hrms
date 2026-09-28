@@ -46,7 +46,8 @@ export const enableDbMock = async () => {
                     status: args.data.staffProfile.create.status || 'ACTIVE',
                     cadre: args.data.staffProfile.create.cadre || 'ADMINISTRATIVE',
                     isDeleted: false,
-                    deletedAt: null
+                    deletedAt: null,
+                    ...args.data.staffProfile.create
                 };
                 staffProfiles.push(profile);
                 user.staffProfile = profile;
@@ -219,6 +220,38 @@ export const enableDbMock = async () => {
                 ...p,
                 user: users.find(u => u.id === p.userId) || { id: p.userId, email: 'mock@test.com', name: 'Mock' }
             }));
+        };
+
+        (prisma.staffProfile as any).count = async (args: any) => staffProfiles.length || 1;
+        (prisma.staffProfile as any).groupBy = async (args: any) => [
+            { eligibilityStatus: 'PENDING_MATURITY', _count: { id: 1 } },
+            { eligibilityStatus: 'DUE_FOR_REVIEW', _count: { id: 1 } }
+        ];
+
+        // Mock PromotionBatch
+        (prisma as any).promotionBatch = {
+            upsert: async (args: any) => ({
+                id: 'mock-promo-batch-uuid',
+                cycleYear: args.create?.cycleYear || 2026,
+                status: 'OPEN',
+                notes: 'Mock Batch'
+            }),
+            findUnique: async () => null,
+            findMany: async () => []
+        };
+
+        // Mock PromotionBatchCandidate
+        (prisma as any).promotionBatchCandidate = {
+            create: async (args: any) => ({ id: 'mock-batch-cand-uuid', ...args.data }),
+            upsert: async (args: any) => ({ id: 'mock-batch-cand-uuid', ...args.create }),
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 1 })
+        };
+
+        // Mock PromotionLog
+        (prisma as any).promotionLog = {
+            create: async (args: any) => ({ id: 'mock-promo-log-uuid', ...args.data }),
+            deleteMany: async () => ({ count: 1 })
         };
 
         (prisma.staffProfile as any).delete = async (args: any) => {
@@ -592,6 +625,47 @@ export const enableDbMock = async () => {
         (prisma.auditLog as any).deleteMany = async (args: any) => ({
             count: 1
         });
+
+        // Mock PromotionAuditLog
+        const promotionAuditLogs: any[] = [];
+        (prisma as any).promotionAuditLog = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-promo-audit-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    ...args.data
+                };
+                promotionAuditLogs.push(item);
+                return item;
+            },
+            findMany: async (args: any) => promotionAuditLogs,
+            findUnique: async (args: any) => promotionAuditLogs[0] || null,
+            count: async () => promotionAuditLogs.length,
+            delete: async (args: any) => ({ id: args.where?.id }),
+            deleteMany: async () => ({ count: 1 })
+        };
+
+        // Mock StaffQuery
+        const staffQueries: any[] = [];
+        (prisma as any).staffQuery = {
+            create: async (args: any) => {
+                const item = {
+                    id: 'mock-query-uuid-' + Math.random().toString(36).substr(2, 6),
+                    createdAt: new Date(),
+                    status: 'OPEN',
+                    source: 'REGISTRY',
+                    resolutionStatus: 'PENDING',
+                    ...args.data
+                };
+                staffQueries.push(item);
+                return item;
+            },
+            findMany: async (args: any) => staffQueries,
+            findUnique: async (args: any) => staffQueries[0] || null,
+            count: async () => staffQueries.length,
+            delete: async (args: any) => ({ id: args.where?.id }),
+            deleteMany: async () => ({ count: 1 })
+        };
 
         // Mock Transaction
         (prisma as any).$transaction = async (cb: any) => {

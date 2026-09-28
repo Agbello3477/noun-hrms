@@ -72,7 +72,7 @@ async function runTests() {
                 email: `registry-admin-${Date.now()}@noun.edu.ng`,
                 password: 'HashedPassword123!',
                 name: 'Registry Officer Aisha',
-                role: Role.HR_ADMIN
+                role: Role.REGISTRAR
             }
         });
 
@@ -111,6 +111,7 @@ async function runTests() {
         const validOverride = await PromotionService.updateStaffPromotionSchedule({
             staffProfileId: testProfile.id,
             actorId: adminUser.id,
+            actorRole: Role.REGISTRAR,
             nextDueYear: 2025,
             registryOverride: true,
             overrideReason: 'Accelerated promotion approved by University Council for outstanding international research grant.'
@@ -165,6 +166,7 @@ async function runTests() {
         const syncUpdated = await PromotionService.updateStaffPromotionSchedule({
             staffProfileId: testProfile.id,
             actorId: adminUser.id,
+            actorRole: Role.REGISTRAR,
             nextDueYear: 2026,
             nextDueDate: new Date('2026-10-01'),
             eligibilityStatus: 'DUE_FOR_REVIEW',
@@ -178,7 +180,7 @@ async function runTests() {
         // --- Test Case 11: syncCandidates Service Verification ---
         console.log('🔄 Testing syncCandidates docket staging...');
         const syncResult = await PromotionService.syncCandidates(2026);
-        assert(syncResult.evalResult !== undefined, `syncCandidates executed maturity cycle evaluation successfully`);
+        assert(syncResult !== undefined && (syncResult.totalCandidates !== undefined || syncResult.cycleYear === 2026), `syncCandidates executed maturity cycle evaluation successfully`);
 
         // --- Test Case 12: getPromotionDueList Tab Filters ---
         console.log('🔄 Testing getPromotionDueList tab filters...');

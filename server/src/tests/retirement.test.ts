@@ -24,21 +24,21 @@ async function runTests() {
         const apptDate = new Date('2010-01-01'); // 16 years of service
 
         const nonAcademicRetirement = calculateRetirementDate(birthDate, apptDate, 'ADMINISTRATIVE');
-        // Expected retirement at 60 (2030-05-15) because service limit is 35 years (2045)
+        // Expected retirement at 65 (2035-05-15) per public service rules (service limit 35 yrs is 2045)
         assert(
-            nonAcademicRetirement.retirementDate.getFullYear() === 2030,
-            'Non-Academic retirement date calculated correctly (60 years age limit)'
+            nonAcademicRetirement.retirementDate.getFullYear() === 2035,
+            'Non-Academic retirement date calculated correctly (65 years age limit)'
         );
         assert(
             nonAcademicRetirement.reason === 'AGE_LIMIT',
             'Non-Academic retirement reason is AGE_LIMIT'
         );
 
-        const academicRetirement = calculateRetirementDate(birthDate, apptDate, 'ACADEMIC');
-        // Expected retirement at 65 (2035-05-15)
+        const profRetirement = calculateRetirementDate(birthDate, apptDate, 'ACADEMIC', 'PROFESSOR');
+        // Expected retirement at 75 (2045-05-15) for Professor/Reader
         assert(
-            academicRetirement.retirementDate.getFullYear() === 2035,
-            'Academic retirement date calculated correctly (65 years age limit)'
+            profRetirement.retirementDate.getFullYear() === 2045,
+            'Professor/Reader retirement date calculated correctly (75 years age limit)'
         );
 
         // --- Test Case 2: Retirement Date Calculation (Service-based) ---

@@ -103,7 +103,7 @@ export class PromotionService {
         }
 
         // 1. Disciplinary Integrity Gate
-        const hasDisciplinaryHold = profile.hasActiveDisciplinaryBlock || profile.queries.length > 0;
+        const hasDisciplinaryHold = Boolean(profile.hasActiveDisciplinaryBlock || (profile.queries && profile.queries.length > 0));
         if (hasDisciplinaryHold && (isDueImmediately || eligibilityStatus === PromotionEligibilityStatus.DUE_FOR_REVIEW || eligibilityStatus === PromotionEligibilityStatus.APPROVED)) {
             throw new Error(`Cannot clear or approve promotion: Staff candidate is blocked due to unresolved disciplinary matter (${profile.disciplinaryBlockReason || 'Open Registry Query'}).`);
         }
@@ -609,7 +609,8 @@ export class PromotionService {
             const effectiveDueYear = p.nextPromotionDueYear || p.nextDueYear;
             const effectiveDueDate = p.nextPromotionDueDate || p.nextDueDate;
             const effectiveStatus = p.promotionEligibilityStatus || p.eligibilityStatus;
-            const hasDisciplinaryHold = p.hasActiveDisciplinaryBlock || p.queries.length > 0;
+            const hasDisciplinaryHold = Boolean(p.hasActiveDisciplinaryBlock || (p.queries && p.queries.length > 0));
+            const openQueriesCount = p.queries?.length || 0;
 
             return {
                 ...p,
@@ -621,7 +622,7 @@ export class PromotionService {
                 promotionEligibilityStatus: effectiveStatus,
                 eligibilityStatus: effectiveStatus,
                 hasDisciplinaryHold,
-                openQueriesCount: p.queries.length
+                openQueriesCount
             };
         });
 
@@ -734,14 +735,15 @@ export class PromotionService {
                     const unitName = profile.unit?.name || profile.studyCenter?.name || profile.department || 'Registry Directorate';
 
                     // Disciplinary Integrity Gate Check
-                    const hasUnresolvedQueries = profile.queries.length > 0;
+                    const queriesCount = profile.queries?.length || 0;
+                    const hasUnresolvedQueries = queriesCount > 0;
                     const isSuspended = profile.status === 'SUSPENDED';
                     const hasDisciplinaryBlock = profile.hasActiveDisciplinaryBlock || hasUnresolvedQueries;
                     const integrityClear = !hasDisciplinaryBlock && !isSuspended;
 
                     let disqualificationReason: string | null = null;
                     if (hasUnresolvedQueries) {
-                        disqualificationReason = `Disciplinary Hold: Candidate has ${profile.queries.length} unresolved official disciplinary quer${profile.queries.length > 1 ? 'ies' : 'y'}.`;
+                        disqualificationReason = `Disciplinary Hold: Candidate has ${queriesCount} unresolved official disciplinary quer${queriesCount > 1 ? 'ies' : 'y'}.`;
                         integrityHoldsCount++;
                     } else if (profile.hasActiveDisciplinaryBlock) {
                         disqualificationReason = `Disciplinary Block: ${profile.disciplinaryBlockReason || 'Active Registry disciplinary block'}`;
