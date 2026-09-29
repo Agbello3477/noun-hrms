@@ -380,8 +380,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 return;
             }
 
-            if (editRole !== staff?.role && !isRegistrarAuthorizer) {
-                alert('Security Violation: No system role can be changed without Registrar authorization.');
+            if (editRole !== staff?.role && !isHrAdmin) {
+                alert('Security Violation: Only HR/Registry Administrators can request role changes, subject to Registrar authorization.');
                 setSaving(false);
                 return;
             }
@@ -483,6 +483,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 nextPromotionDueYear: editNextPromotionDueYear ? parseInt(editNextPromotionDueYear, 10) : undefined,
                 nextPromotionDueDate: editNextPromotionDueDate || undefined,
                 overrideReason: overrideReason || undefined,
+                roleChangeRemarks: overrideReason || undefined,
                 isDueImmediately: Boolean(isDueImmediately)
             };
 
