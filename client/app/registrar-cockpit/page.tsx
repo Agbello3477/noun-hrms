@@ -67,9 +67,11 @@ export default function RegistrarCockpitPage() {
         }
     }, [user, authLoading, router]);
 
-    // Initial Data Fetch
+    // Initial Data Fetch & Periodic Live Sync
     useEffect(() => {
         loadCockpitData();
+        const interval = setInterval(loadCockpitData, 15000); // 15s live cockpit sync
+        return () => clearInterval(interval);
     }, []);
 
     const loadCockpitData = async () => {
@@ -258,6 +260,36 @@ export default function RegistrarCockpitPage() {
                 }`}>
                     {feedback.type === 'success' ? <CheckCircle2 size={18} className="text-[#006533]" /> : <XCircle size={18} className="text-red-600" />}
                     <span>{feedback.message}</span>
+                </div>
+            )}
+
+            {/* High-Priority Role Change Attention Banner */}
+            {pendingRoleChanges.length > 0 && (
+                <div className="mb-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl shrink-0">
+                            <Key size={20} className="animate-pulse" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-indigo-950 flex items-center gap-2">
+                                Action Required: {pendingRoleChanges.length} Role Authorization Request{pendingRoleChanges.length > 1 ? 's' : ''} Pending
+                                <span className="text-[10px] bg-indigo-200/80 text-indigo-900 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Dual-Control Gate
+                                </span>
+                            </h3>
+                            <p className="text-xs text-indigo-800 mt-0.5">
+                                Role changes requested by HR will take effect immediately after your executive authorization.
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="emerald"
+                        size="sm"
+                        onClick={() => setActiveSection('roles')}
+                        className="shrink-0"
+                    >
+                        Authorize Requests ({pendingRoleChanges.length})
+                    </Button>
                 </div>
             )}
 
@@ -490,30 +522,56 @@ export default function RegistrarCockpitPage() {
                             <p className="text-xs text-slate-400 py-4 text-center">No pending role change requests.</p>
                         ) : (
                             <div className="space-y-2">
-                                {pendingRoleChanges.slice(0, 3).map((rc) => (
-                                    <div key={rc.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                {pendingRoleChanges.slice(0, 5).map((rc) => (
+                                    <div key={rc.id} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                         <div>
-                                            <div className="text-xs font-bold text-slate-900">
-                                                {rc.name} ({rc.staffProfile?.staffId || 'N/A'})
+                                            <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                                <span>{rc.name}</span>
+                                                <span className="font-mono text-[11px] bg-slate-200/70 text-slate-700 px-1.5 py-0.5 rounded">
+                                                    {rc.staffProfile?.staffId || rc.email}
+                                                </span>
                                             </div>
-                                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
-                                                <span className="font-mono text-slate-600">{rc.role}</span>
+                                            <div className="text-[11px] text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-mono text-slate-500 line-through">{rc.role}</span>
                                                 <span>&rarr;</span>
-                                                <span className="font-mono font-bold text-indigo-700">{rc.pendingRole}</span>
-                                                {rc.roleChangeRemarks && (
-                                                    <span className="italic text-slate-400 text-[10px] ml-1">
-                                                        ({rc.roleChangeRemarks})
-                                                    </span>
-                                                )}
+                                                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                                    {rc.pendingRole}
+                                                </span>
+                                                <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium border border-amber-200">
+                                                    Role will take effect immediately after registrar&apos;s authorization
+                                                </span>
                                             </div>
+                                            {rc.roleChangeRemarks && (
+                                                <div className="italic text-slate-500 text-[10px] mt-1">
+                                                    Justification: &ldquo;{rc.roleChangeRemarks}&rdquo;
+                                                </div>
+                                            )}
                                         </div>
-                                        <Button
-                                            variant="emerald"
-                                            size="xs"
-                                            onClick={() => setActiveSection('roles')}
-                                        >
-                                            Review Request
-                                        </Button>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <Button
+                                                variant="danger"
+                                                size="xs"
+                                                isLoading={actionLoading}
+                                                onClick={() => handleRoleChangeDecision(rc.id, 'REJECTED')}
+                                            >
+                                                Reject
+                                            </Button>
+                                            <Button
+                                                variant="emerald"
+                                                size="xs"
+                                                isLoading={actionLoading}
+                                                onClick={() => handleRoleChangeDecision(rc.id, 'APPROVED')}
+                                            >
+                                                Authorize
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={() => setActiveSection('roles')}
+                                            >
+                                                Details
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -920,7 +978,7 @@ export default function RegistrarCockpitPage() {
                                             </span>
                                         </div>
 
-                                        <div className="flex items-center gap-2 text-xs">
+                                        <div className="flex items-center gap-2 text-xs flex-wrap">
                                             <span className="text-slate-500">Current Role:</span>
                                             <span className="px-2 py-0.5 rounded font-mono font-semibold bg-slate-100 text-slate-700">
                                                 {rc.role}
@@ -929,6 +987,9 @@ export default function RegistrarCockpitPage() {
                                             <span className="text-slate-500">Requested Role:</span>
                                             <span className="px-2 py-0.5 rounded font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
                                                 {rc.pendingRole}
+                                            </span>
+                                            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-medium border border-amber-200">
+                                                Role will take effect immediately after registrar&apos;s authorization
                                             </span>
                                         </div>
 

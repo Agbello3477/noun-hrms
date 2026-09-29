@@ -888,17 +888,21 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                         }
                     });
 
-                    // Notify all active Registrars
-                    const registrars = await prisma.user.findMany({
-                        where: { role: Role.REGISTRAR, isActive: true },
+                    // Notify all active Registrars and Authorizers
+                    const authorizers = await prisma.user.findMany({
+                        where: {
+                            role: { in: [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.VICE_CHANCELLOR, Role.SUPER_USER] },
+                            isActive: true
+                        },
                         select: { id: true }
                     });
-                    for (const reg of registrars) {
+                    for (const authUser of authorizers) {
                         await prisma.notification.create({
                             data: {
-                                userId: reg.id,
+                                userId: authUser.id,
                                 title: 'Role Authorization Required',
-                                message: `${updaterRole} requested role change for ${user.name || user.email} to ${role}. Registrar approval required.`
+                                message: `${updaterRole} requested role change for ${user.name || user.email} to ${role}. Role will take effect immediately after registrar's authorization.`,
+                                type: 'ROLE_AUTHORIZATION_REQUIRED'
                             }
                         }).catch(() => {});
                     }
@@ -1123,11 +1127,12 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             redisService.clearPattern('hr:analytics:*'),
             redisService.clearPattern('manager:dashboard:*'),
             redisService.clearPattern('vc:executive:*'),
+            redisService.clearPattern('registrar:*'),
             redisService.del(`user:session:${user.id}`)
         ]);
 
         const successMessage = roleChangeRequested
-            ? `Profile updated. Role change to ${role} requested and will take effect once approved by the Registrar.`
+            ? `Profile updated. Role will take effect immediately after registrar's authorization.`
             : 'Profile updated successfully';
 
         res.json({

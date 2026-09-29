@@ -487,7 +487,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             };
 
             const { data } = await api.put(`/api/staff/${staff?.id}`, payload);
-            alert(data?.message || 'Staff profile updated successfully.');
+            alert(data?.message || (editRole !== staff?.role && !isRegistrarAuthorizer
+                ? "Staff profile updated. Role will take effect immediately after registrar's authorization."
+                : 'Staff profile updated successfully.'));
             fetchStaffData(); // Reload profile details
         } catch (error: any) {
             console.error(error);
@@ -1218,13 +1220,40 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="SECURITY_OFFICER">Officer</option>
                                         <option value="DRIVER">Driver</option>
                                     </select>
-                                    {isRegistrarAuthorizer ? (
+                                    {staff?.roleChangeStatus === 'PENDING_REGISTRAR_APPROVAL' ? (
+                                        <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start gap-2 shadow-xs">
+                                            <Clock size={16} className="text-amber-600 animate-pulse shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-bold text-amber-900">
+                                                    Role will take effect immediately after registrar&apos;s authorization
+                                                </p>
+                                                <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                                                    Pending Role: <span className="font-mono font-bold uppercase underline">{staff.pendingRole}</span>
+                                                    {staff.roleChangeRequestedAt && (
+                                                        <span> &bull; Submitted {new Date(staff.roleChangeRequestedAt).toLocaleDateString()}</span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : editRole !== staff?.role && isHrAdmin && !isRegistrarAuthorizer ? (
+                                        <div className="mt-2 p-2.5 bg-blue-50 border border-blue-300 rounded-xl text-xs text-blue-900 flex items-start gap-2 shadow-xs">
+                                            <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-bold text-blue-900">
+                                                    Role will take effect immediately after registrar&apos;s authorization
+                                                </p>
+                                                <p className="text-[11px] font-medium text-blue-700 mt-0.5">
+                                                    Selected: <span className="font-mono font-bold">{editRole}</span> &bull; Click &ldquo;Save Changes&rdquo; below to submit to Registrar
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : isRegistrarAuthorizer ? (
                                         <p className="text-[10px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
                                             <ShieldCheck size={10} /> Direct Authorization: Changes take effect immediately.
                                         </p>
                                     ) : isHrAdmin ? (
                                         <p className="text-[10px] text-blue-700 font-semibold mt-1 flex items-center gap-1">
-                                            <Lock size={10} /> Dual-Control Policy: Role changes submitted by HR will require Registrar approval.
+                                            <Lock size={10} /> Role will take effect immediately after registrar&apos;s authorization.
                                         </p>
                                     ) : (
                                         <p className="text-[10px] text-gray-500 font-semibold mt-1 flex items-center gap-1">
