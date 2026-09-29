@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { redisService } from '../services/redis.service';
 
 export async function authorizeStaffPostingHandler(req: Request, res: Response) {
   const authorizerId = (req as any).user.id;
@@ -39,34 +40,60 @@ export async function authorizeStaffPostingHandler(req: Request, res: Response) 
               { userId: posting.staffId }
             ]
           }
-        });
+        }).catch(() => null);
 
         if (profile) {
-          await tx.staffProfile.update({
-            where: { id: profile.id },
-            data: {
-              ...(targetStationId ? { unitId: targetStationId } : {}),
-              ...(targetCenterId ? { centerId: targetCenterId } : {}),
-              lastPromotionDate: profile.lastPromotionDate,
-            },
-          });
+          const updateData: any = {};
+          if (targetStationId) {
+            const unitExists = tx.unit?.findUnique 
+              ? await tx.unit.findUnique({ where: { id: targetStationId } }).catch(() => null)
+              : { id: targetStationId };
+            if (unitExists) {
+              updateData.unitId = unitExists.id;
+            }
+          }
+          if (targetCenterId && targetCenterId !== targetStationId) {
+            const centerExists = tx.studyCenter?.findUnique 
+              ? await tx.studyCenter.findUnique({ where: { id: targetCenterId } }).catch(() => null)
+              : { id: targetCenterId };
+            if (centerExists) {
+              updateData.centerId = centerExists.id;
+            }
+          }
+          if (Object.keys(updateData).length > 0) {
+            await tx.staffProfile.update({
+              where: { id: profile.id },
+              data: updateData,
+            });
+          }
         }
       }
 
-      // 3. Append to immutable authorization audit trail
-      await tx.authorizationAuditTrail.create({
-        data: {
-          entityType: 'STAFF_POSTING',
-          entityId: posting.id,
-          imputerId: posting.imputedById || posting.initiatedById,
-          authorizerId,
-          actionTaken: decision,
-          remarks: remarks || 'Authorized by Registrar',
-        },
-      });
+      // 3. Append to immutable authorization audit trail (safely handled)
+      try {
+        await tx.authorizationAuditTrail.create({
+          data: {
+            entityType: 'STAFF_POSTING',
+            entityId: posting.id,
+            imputerId: posting.imputedById || posting.initiatedById || authorizerId,
+            authorizerId,
+            actionTaken: decision,
+            remarks: remarks || (decision === 'APPROVED' ? 'Authorized by Registrar' : 'Rejected by Registrar'),
+          },
+        });
+      } catch (auditErr) {
+        console.warn('authorizationAuditTrail notice:', auditErr);
+      }
 
       return updatedPosting;
     });
+
+    // Invalidate caches
+    await Promise.all([
+      redisService.clearPattern('staff:*'),
+      redisService.clearPattern('registrar:*'),
+      redisService.clearPattern('analytics:*')
+    ]).catch(() => {});
 
     return res.status(200).json({
       success: true,

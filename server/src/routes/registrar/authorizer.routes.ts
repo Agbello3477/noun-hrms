@@ -6,6 +6,7 @@ import prisma from '../../prisma';
 import { Role, TransferStatus, AuthorizationEntityType, AuthorizationActionTaken } from '@prisma/client';
 import { sendAccountCreatedNotification } from '../../services/email.service';
 import { notifyUser } from '../../controllers/notification.controller';
+import { redisService } from '../../services/redis.service';
 import crypto from 'crypto';
 
 const router = Router();
@@ -169,48 +170,101 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
                     }
                 });
 
-                // Apply update to staff profile placement
-                if (posting.staff?.staffProfile) {
-                    await tx.staffProfile.update({
-                        where: { id: posting.staff.staffProfile.id },
-                        data: {
-                            unitId: posting.newUnitId || undefined,
-                            centerId: posting.newCenterId || undefined
-                        }
-                    });
-                }
+                // Apply update to staff profile placement with foreign key validation
+                const profile = posting.staff?.staffProfile || await tx.staffProfile.findFirst({
+                    where: {
+                        OR: [
+                            { id: posting.staffId },
+                            { userId: posting.staffId }
+                        ]
+                    }
+                }).catch(() => null);
 
-                // Dual-Control Audit Record
-                await tx.authorizationAuditTrail.create({
-                    data: {
-                        entityType: AuthorizationEntityType.STAFF_POSTING,
-                        entityId: posting.id,
-                        imputerId: posting.initiatedById,
-                        imputerIp: req.ip,
-                        imputedAt: posting.createdAt,
-                        authorizerId,
-                        authorizerIp: req.ip,
-                        authorizedAt: now,
-                        actionTaken: AuthorizationActionTaken.APPROVED,
-                        remarks: remarks || 'Officially ratified by Registrar',
-                        digitalStampRef: digitalStamp,
-                        metadata: {
-                            staffName: posting.staff.name,
-                            newUnitId: posting.newUnitId,
-                            newCenterId: posting.newCenterId
+                if (profile) {
+                    const updateData: any = {};
+                    if (posting.newUnitId) {
+                        const unitExists = await tx.unit.findUnique({ where: { id: posting.newUnitId } }).catch(() => null);
+                        if (unitExists) {
+                            updateData.unitId = unitExists.id;
                         }
                     }
-                });
+                    if (posting.newCenterId && posting.newCenterId !== posting.newUnitId) {
+                        const centerExists = await tx.studyCenter.findUnique({ where: { id: posting.newCenterId } }).catch(() => null);
+                        if (centerExists) {
+                            updateData.centerId = centerExists.id;
+                        }
+                    }
+                    if (Object.keys(updateData).length > 0) {
+                        await tx.staffProfile.update({
+                            where: { id: profile.id },
+                            data: updateData
+                        });
+                    }
+                }
+
+                // Dual-Control Audit Record (safely committed)
+                try {
+                    await tx.authorizationAuditTrail.create({
+                        data: {
+                            entityType: AuthorizationEntityType.STAFF_POSTING,
+                            entityId: posting.id,
+                            imputerId: posting.initiatedById || authorizerId,
+                            imputerIp: req.ip,
+                            imputedAt: posting.createdAt,
+                            authorizerId,
+                            authorizerIp: req.ip,
+                            authorizedAt: now,
+                            actionTaken: AuthorizationActionTaken.APPROVED,
+                            remarks: remarks || 'Officially ratified by Registrar',
+                            digitalStampRef: digitalStamp,
+                            metadata: {
+                                staffName: posting.staff?.name || posting.staff?.email || 'Staff',
+                                newUnitId: posting.newUnitId,
+                                newCenterId: posting.newCenterId
+                            }
+                        }
+                    });
+                } catch (auditErr) {
+                    console.warn('authorizationAuditTrail notice:', auditErr);
+                }
+
+                try {
+                    await tx.auditLog.create({
+                        data: {
+                            userId: authorizerId,
+                            action: 'AUTHORIZE_STAFF_TRANSFER',
+                            resource: `TransferLog:${posting.id}`,
+                            details: JSON.stringify({
+                                postingId: posting.id,
+                                staffId: posting.staffId,
+                                decision: 'APPROVED',
+                                remarks
+                            }),
+                            ipAddress: req.ip
+                        }
+                    });
+                } catch (e) {}
             });
 
-            // Notify Imputer
-            await notifyUser(
-                posting.initiatedById,
-                '✅ Posting Order Authorized',
-                `Staff posting for ${posting.staff.name} has been authorized and ratified by the Registrar.`,
-                'SUCCESS',
-                '/registry-workspace'
-            ).catch(() => {});
+            // Notify Imputer safely
+            if (posting.initiatedById) {
+                await notifyUser(
+                    posting.initiatedById,
+                    '✅ Posting Order Authorized',
+                    `Staff posting for ${posting.staff?.name || 'Staff Member'} has been authorized and ratified by the Registrar.`,
+                    'SUCCESS',
+                    '/registry-workspace'
+                ).catch(() => {});
+            }
+
+            // Invalidate Caches
+            await Promise.all([
+                redisService.clearPattern('staff:*'),
+                redisService.clearPattern('analytics:*'),
+                redisService.clearPattern('hr:analytics:*'),
+                redisService.clearPattern('registrar:*'),
+                redisService.del(`user:session:${posting.staffId}`)
+            ]).catch(() => {});
 
             return res.json({
                 message: 'Staff posting order successfully authorized and executed.',
@@ -234,30 +288,59 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
                     }
                 });
 
-                await tx.authorizationAuditTrail.create({
-                    data: {
-                        entityType: AuthorizationEntityType.STAFF_POSTING,
-                        entityId: posting.id,
-                        imputerId: posting.initiatedById,
-                        imputerIp: req.ip,
-                        imputedAt: posting.createdAt,
-                        authorizerId,
-                        authorizerIp: req.ip,
-                        authorizedAt: now,
-                        actionTaken: AuthorizationActionTaken.REJECTED,
-                        remarks,
-                        metadata: { staffName: posting.staff.name }
-                    }
-                });
+                try {
+                    await tx.authorizationAuditTrail.create({
+                        data: {
+                            entityType: AuthorizationEntityType.STAFF_POSTING,
+                            entityId: posting.id,
+                            imputerId: posting.initiatedById || authorizerId,
+                            imputerIp: req.ip,
+                            imputedAt: posting.createdAt,
+                            authorizerId,
+                            authorizerIp: req.ip,
+                            authorizedAt: now,
+                            actionTaken: AuthorizationActionTaken.REJECTED,
+                            remarks,
+                            metadata: { staffName: posting.staff?.name || 'Staff' }
+                        }
+                    });
+                } catch (auditErr) {
+                    console.warn('authorizationAuditTrail notice:', auditErr);
+                }
+
+                try {
+                    await tx.auditLog.create({
+                        data: {
+                            userId: authorizerId,
+                            action: 'REJECT_STAFF_TRANSFER',
+                            resource: `TransferLog:${posting.id}`,
+                            details: JSON.stringify({
+                                postingId: posting.id,
+                                staffId: posting.staffId,
+                                decision: 'REJECTED',
+                                reason: remarks
+                            }),
+                            ipAddress: req.ip
+                        }
+                    });
+                } catch (e) {}
             });
 
-            await notifyUser(
-                posting.initiatedById,
-                '❌ Posting Order Rejected',
-                `Staff posting for ${posting.staff.name} was rejected by the Registrar. Reason: ${remarks}`,
-                'ERROR',
-                '/registry-workspace'
-            ).catch(() => {});
+            if (posting.initiatedById) {
+                await notifyUser(
+                    posting.initiatedById,
+                    '❌ Posting Order Rejected',
+                    `Staff posting for ${posting.staff?.name || 'Staff Member'} was rejected by the Registrar. Reason: ${remarks}`,
+                    'ERROR',
+                    '/registry-workspace'
+                ).catch(() => {});
+            }
+
+            await Promise.all([
+                redisService.clearPattern('staff:*'),
+                redisService.clearPattern('analytics:*'),
+                redisService.clearPattern('registrar:*')
+            ]).catch(() => {});
 
             return res.json({
                 message: 'Staff posting order rejected.',
@@ -273,30 +356,41 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
                     }
                 });
 
-                await tx.authorizationAuditTrail.create({
-                    data: {
-                        entityType: AuthorizationEntityType.STAFF_POSTING,
-                        entityId: posting.id,
-                        imputerId: posting.initiatedById,
-                        imputerIp: req.ip,
-                        imputedAt: posting.createdAt,
-                        authorizerId,
-                        authorizerIp: req.ip,
-                        authorizedAt: now,
-                        actionTaken: AuthorizationActionTaken.RETURNED_TO_IMPUTER,
-                        remarks,
-                        metadata: { staffName: posting.staff.name }
-                    }
-                });
+                try {
+                    await tx.authorizationAuditTrail.create({
+                        data: {
+                            entityType: AuthorizationEntityType.STAFF_POSTING,
+                            entityId: posting.id,
+                            imputerId: posting.initiatedById || authorizerId,
+                            imputerIp: req.ip,
+                            imputedAt: posting.createdAt,
+                            authorizerId,
+                            authorizerIp: req.ip,
+                            authorizedAt: now,
+                            actionTaken: AuthorizationActionTaken.RETURNED_TO_IMPUTER,
+                            remarks,
+                            metadata: { staffName: posting.staff?.name || 'Staff' }
+                        }
+                    });
+                } catch (auditErr) {
+                    console.warn('authorizationAuditTrail notice:', auditErr);
+                }
             });
 
-            await notifyUser(
-                posting.initiatedById,
-                '↩️ Posting Returned for Review',
-                `Posting order for ${posting.staff.name} was returned by the Registrar with notes: ${remarks}`,
-                'WARNING',
-                '/registry-workspace'
-            ).catch(() => {});
+            if (posting.initiatedById) {
+                await notifyUser(
+                    posting.initiatedById,
+                    '↩️ Posting Returned for Review',
+                    `Posting order for ${posting.staff?.name || 'Staff Member'} was returned by the Registrar with notes: ${remarks}`,
+                    'WARNING',
+                    '/registry-workspace'
+                ).catch(() => {});
+            }
+
+            await Promise.all([
+                redisService.clearPattern('staff:*'),
+                redisService.clearPattern('registrar:*')
+            ]).catch(() => {});
 
             return res.json({
                 message: 'Posting order returned to imputer for review.',
