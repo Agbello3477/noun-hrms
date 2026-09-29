@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { verifyToken } from '../../middleware/auth.middleware';
 import { requireAuthorizerRole, validateDualControlSelfAuthorization } from '../../middleware/rbac.middleware';
+import { enforceMakerChecker } from '../../middleware/enforceMakerChecker';
 import prisma from '../../prisma';
 import { Role, TransferStatus, AuthorizationEntityType, AuthorizationActionTaken } from '@prisma/client';
 import { sendAccountCreatedNotification } from '../../services/email.service';
@@ -310,8 +311,28 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
     }
 };
 
-router.put('/postings/:id/authorize', handleAuthorizePosting);
-router.post('/postings/:id/authorize', handleAuthorizePosting);
+router.put(
+    '/postings/:id/authorize',
+    enforceMakerChecker({
+        entityType: 'staffPosting',
+        paramKey: 'id',
+        imputerField: 'imputedById',
+        statusField: 'status',
+        allowedStatuses: ['PENDING_REGISTRAR_AUTHORIZATION', 'PENDING_REGISTRAR_APPROVAL']
+    }),
+    handleAuthorizePosting
+);
+router.post(
+    '/postings/:id/authorize',
+    enforceMakerChecker({
+        entityType: 'staffPosting',
+        paramKey: 'id',
+        imputerField: 'imputedById',
+        statusField: 'status',
+        allowedStatuses: ['PENDING_REGISTRAR_AUTHORIZATION', 'PENDING_REGISTRAR_APPROVAL']
+    }),
+    handleAuthorizePosting
+);
 
 /**
  * GET /api/v1/registrar/files/pending
@@ -447,8 +468,28 @@ const handleClearFile = async (req: Request, res: Response) => {
     }
 };
 
-router.put('/files/:id/clear', handleClearFile);
-router.post('/files/:id/clear', handleClearFile);
+router.put(
+    '/files/:id/clear',
+    enforceMakerChecker({
+        entityType: 'staffProfile',
+        paramKey: 'id',
+        imputerField: 'createdById',
+        statusField: 'accountStatus',
+        allowedStatuses: ['PENDING_REGISTRAR_CLEARANCE']
+    }),
+    handleClearFile
+);
+router.post(
+    '/files/:id/clear',
+    enforceMakerChecker({
+        entityType: 'staffProfile',
+        paramKey: 'id',
+        imputerField: 'createdById',
+        statusField: 'accountStatus',
+        allowedStatuses: ['PENDING_REGISTRAR_CLEARANCE']
+    }),
+    handleClearFile
+);
 
 /**
  * PUT /api/v1/registrar/files/:id/reject
