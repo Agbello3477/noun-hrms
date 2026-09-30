@@ -70,10 +70,16 @@ export default function LoginForm({ onSwitchView }: LoginFormProps) {
           code: err.code,
           response: err.response?.data
       });
-      const errorMessage = err.response?.data?.message || 
-        (err.code === 'ECONNABORTED' || !err.response 
-          ? 'Cannot connect to the server. Please verify your internet connection.'
-          : 'Login failed');
+      let errorMessage = err.response?.data?.message;
+      if (!errorMessage) {
+        if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && !navigator.onLine) {
+          errorMessage = 'You appear to be offline. Please verify your internet connection.';
+        } else if (err.code === 'ECONNABORTED' || !err.response) {
+          errorMessage = 'Cannot connect to the backend server. The server at noun-hrms.onrender.com is currently unreachable or suspended on Render. Please check the Render dashboard.';
+        } else {
+          errorMessage = 'Login failed. Please try again.';
+        }
+      }
       setError(errorMessage);
     } finally {
       setIsLoading(false);
