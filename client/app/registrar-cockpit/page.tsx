@@ -235,6 +235,14 @@ export default function RegistrarCockpitPage() {
                 </div>
                 <div className="flex items-center gap-2.5">
                     <Button
+                        variant="emerald"
+                        size="sm"
+                        onClick={() => router.push('/registrar-cockpit/applications')}
+                        icon={<FileText size={14} />}
+                    >
+                        Applications Docket
+                    </Button>
+                    <Button
                         variant="outline"
                         size="sm"
                         onClick={handleExportAuditCsv}

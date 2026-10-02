@@ -228,7 +228,23 @@ export default function RegistryWorkspacePage() {
                         Impute and stage sensitive administrative records. All actions require independent Registrar authorization before activation.
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
+                    <Button
+                        variant="emerald"
+                        size="sm"
+                        onClick={() => router.push('/registry/inward-docket')}
+                        icon={<FileText size={14} />}
+                    >
+                        Inward Docket Desk
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push('/registry/master-application-archive')}
+                        icon={<Layers size={14} />}
+                    >
+                        Master Archive
+                    </Button>
                     <Button
                         variant="outline"
                         size="sm"

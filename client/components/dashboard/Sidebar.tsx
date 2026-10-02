@@ -121,6 +121,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                             Principal Officer Cockpit
                         </div>
                         <LinkItem href="/registrar-cockpit" icon={ClipboardCheck} label="Registrar Cockpit" badge="Authorizer" />
+                        <LinkItem href="/registrar-cockpit/applications" icon={FileText} label="Executive Applications Docket" badge="Registrar" />
                         {isVC && <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />}
                     </>
                 )}
@@ -145,6 +146,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
                         <LinkItem href="/dashboard/registry/file-requests" icon={FileInput} label="File Request Gateway" />
                         <LinkItem href="/dashboard/registry/applications" icon={FileText} label="Registry Applications" />
+                        <LinkItem href="/registry/inward-docket" icon={FileInput} label="Inward Docket & Folio Desk" />
+                        <LinkItem href="/registry/master-application-archive" icon={Archive} label="Master Application Archive" />
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
@@ -165,6 +168,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Unit Management
                         </div>
+                        <LinkItem href="/director/applications/pending" icon={ClipboardCheck} label="Vetting Applications" badge="Director" />
                         <LinkItem href="/dashboard/unit/staff" icon={Briefcase} label="Unit Staff" />
                         <LinkItem href="/dashboard/unit/leaves" icon={FileText} label="Leave Approvals" />
                         <LinkItem href="/dashboard/unit/aper" icon={ClipboardCheck} label="Appraisal Review" />
@@ -245,7 +249,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 )}
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
-                <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Applications" />
+                <LinkItem href="/portal/applications/my-applications" icon={FileText} label="Institutional Applications" badge="Through Director" />
+                <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Leaves" />
 
                 {/* System Administration */}
                 {isAdmin && (
