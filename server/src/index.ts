@@ -61,6 +61,11 @@ import { ensureRegistrarAccount } from './services/registrarSeed.service';
 
 import compression from 'compression';
 import { SentinelSDK } from './sentinel-sdk';
+import {
+  createWafPreParserMiddleware,
+  createWafBodyInspectorMiddleware,
+  zeroTrustResponseMaskingMiddleware,
+} from './security/waf';
 
 const app = express();
 app.set('trust proxy', 2); // Trust two proxies (Cloudflare -> Render LB) to ensure req.ip is the real user IP
@@ -76,7 +81,10 @@ const sentinel = new SentinelSDK({
   timeoutMs: 2000,         // Aborts telemetry request after 2s if monitor is slow
 });
 
-// 2. Mount Sentinel Telemetry Middleware as early as possible
+// 2. Mount Zero-Trust Response Masking Interceptor (prevents stack traces & DB leaks on 500 errors)
+app.use(zeroTrustResponseMaskingMiddleware);
+
+// 3. Mount Sentinel Telemetry Middleware
 app.use(sentinel.middleware());
 
 // Enable response compression (Gzip/Brotli) for all payloads > 1KB
@@ -89,7 +97,7 @@ app.use(compression({
     }
 }));
 
-// Apply observability context tracing as the very first middleware
+// Apply observability context tracing
 app.use(observabilityMiddleware);
 
 app.use(helmet());
@@ -114,8 +122,16 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'x-archive-code']
 }));
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// 4. Mount Application-Level WAF Stage 1 (Pre-Parser: IP Jail, Scanners, Host Header, Rate Limiting, Query/Path Injection)
+app.use(createWafPreParserMiddleware({ sentinelInstance: sentinel }));
+
+// 5. Body Parsers with hard 2MB JSON ceiling (DOS amplification protection)
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// 6. Mount Application-Level WAF Stage 2 (Body Inspector: Deep SQLi, XSS, NoSQL, Prototype Pollution, Cmd Injection)
+app.use(createWafBodyInspectorMiddleware({ sentinelInstance: sentinel }));
 
 // Serve Uploads with explicit Cross-Origin and Byte-Range headers for smooth audio/video streaming
 const uploadDirs = [

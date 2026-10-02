@@ -126,6 +126,36 @@ export class SentinelSDK {
   }
 
   /**
+   * Record security alert event from WAF
+   */
+  public recordSecurityAlert(alert: {
+    systemId?: string;
+    timestamp: string;
+    rule: string;
+    severity: string;
+    clientIp: string;
+    userAgent?: string;
+    method: string;
+    uri: string;
+    payloadSnippet?: string;
+    actionTaken: string;
+  }) {
+    const event: TelemetryEvent = {
+      systemId: alert.systemId || this.config.systemId,
+      timestamp: alert.timestamp,
+      method: alert.method,
+      path: alert.uri,
+      statusCode: alert.actionTaken === 'FLAGGED' ? 200 : 403,
+      durationMs: 0,
+      clientIp: alert.clientIp,
+      userAgent: alert.userAgent,
+      errorMessage: `[WAF] Rule: ${alert.rule} (${alert.severity}) - Action: ${alert.actionTaken}`,
+      payloadSnippet: alert.payloadSnippet,
+    };
+    this.enqueue(event);
+  }
+
+  /**
    * Asynchronously dispatch buffered events to SentinelOps ingest API
    */
   public async flush(): Promise<void> {
