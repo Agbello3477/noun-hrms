@@ -115,6 +115,13 @@ model User {
   hodApprovedLeaves        LeaveApplication[] @relation("HodApprovedLeaves")
   registryApprovedLeaves   LeaveApplication[] @relation("RegistryApprovedLeaves")
 
+  // Institutional Multi-Tier Routing Workflow
+  institutionalApplicationsSubmitted     InstitutionalApplication[]    @relation("InstitutionalApplicant")
+  institutionalApplicationsDirected      InstitutionalApplication[]    @relation("InstitutionalDirector")
+  institutionalApplicationsRegistrar     InstitutionalApplication[]    @relation("InstitutionalRegistrar")
+  institutionalApplicationsDocketed      InstitutionalApplication[]    @relation("InstitutionalRegistryClerk")
+  applicationRevisionsActed              ApplicationRevisionHistory[]  @relation("ApplicationRevisionActor")
+
   @@map("users")
 }
 
@@ -1842,4 +1849,115 @@ model AuthorizationAuditTrail {
   @@index([authorizerId])
   @@index([actionTaken])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INSTITUTIONAL DOCKET ROUTING WORKFLOW (STAFF -> DIRECTOR -> REGISTRY -> REGISTRAR)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ApplicationCategory {
+  POSTING_REQUEST
+  CONCURRENCE
+  STUDY_FELLOWSHIP
+  SPECIAL_CLEARANCE
+  GENERAL_MEMORANDUM
+  ADMINISTRATIVE_APPEAL
+}
+
+enum InstitutionalApplicationStatus {
+  SUBMITTED_TO_DIRECTOR
+  RETURNED_FOR_REWRITE
+  REJECTED_BY_DIRECTOR
+  RECOMMENDED_TO_REGISTRY
+  DOCKETED_PENDING_REGISTRAR
+  APPROVED_BY_REGISTRAR
+  DECLINED_BY_REGISTRAR
+}
+
+enum ApplicationHolderRole {
+  STAFF
+  DIRECTOR
+  REGISTRY_ADMIN
+  REGISTRAR
+}
+
+enum ApplicationRevisionAction {
+  SUBMITTED
+  REWRITE_REQUESTED
+  RECOMMENDED
+  DOCKET_ACKNOWLEDGED
+  APPROVED
+  DECLINED
+}
+
+enum ApplicationArchiveFinalStatus {
+  APPROVED
+  DECLINED
+  REJECTED_BY_DIRECTOR
+}
+
+model InstitutionalApplication {
+  id                     String                         @id @default(uuid())
+  referenceNumber        String                         @unique
+  applicantId            String
+  applicant              User                           @relation("InstitutionalApplicant", fields: [applicantId], references: [id])
+  directorId             String
+  director               User                           @relation("InstitutionalDirector", fields: [directorId], references: [id])
+  registrarId            String?
+  registrar              User?                          @relation("InstitutionalRegistrar", fields: [registrarId], references: [id])
+  registryClerkId        String?
+  registryClerk          User?                          @relation("InstitutionalRegistryClerk", fields: [registryClerkId], references: [id])
+  subject                String
+  category               ApplicationCategory
+  content                String                         @db.Text
+  attachmentUrls         String[]
+  status                 InstitutionalApplicationStatus @default(SUBMITTED_TO_DIRECTOR)
+  currentHolderRole      ApplicationHolderRole          @default(DIRECTOR)
+  directorRemarks        String?                        @db.Text
+  directorRecommendedAt  DateTime?
+  registryDocketNumber   String?                        @unique
+  registryAcknowledgedAt DateTime?
+  registrarRemarks       String?                        @db.Text
+  registrarDecidedAt     DateTime?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  revisions              ApplicationRevisionHistory[]
+  archive                RegistryApplicationArchive?
+
+  @@index([applicantId, status])
+  @@index([directorId, status])
+  @@index([status, currentHolderRole])
+  @@index([registryDocketNumber])
+  @@map("institutional_applications")
+}
+
+model ApplicationRevisionHistory {
+  id              String                    @id @default(uuid())
+  applicationId   String
+  application     InstitutionalApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actorId         String
+  actor           User                      @relation("ApplicationRevisionActor", fields: [actorId], references: [id])
+  stage           String
+  action          ApplicationRevisionAction
+  comments        String?                   @db.Text
+  snapshotContent String?                   @db.Text
+  createdAt       DateTime                  @default(now())
+
+  @@index([applicationId])
+  @@index([actorId])
+  @@map("application_revision_histories")
+}
+
+model RegistryApplicationArchive {
+  id                   String                        @id @default(uuid())
+  applicationId        String                        @unique
+  application          InstitutionalApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  archivedDocketNumber String                        @unique
+  finalStatus          ApplicationArchiveFinalStatus
+  fullAuditCopy        Json
+  archivedAt           DateTime                      @default(now())
+
+  @@index([archivedDocketNumber])
+  @@map("registry_application_archives")
 }

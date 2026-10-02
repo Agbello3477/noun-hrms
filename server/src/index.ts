@@ -45,6 +45,8 @@ import researchRoutes from './routes/research.routes';
 import meetingRoutes from './routes/meeting.routes';
 import observabilityRoutes from './routes/observability.routes';
 import officialApplicationRoutes from './routes/official-application.routes';
+import docketRoutes from './routes/applications/docket.routes';
+import { setDocketSocketIO } from './services/docketNotification.service';
 import { observabilityMiddleware } from './middleware/observability.middleware';
 import { jobQueueService } from './services/jobQueue.service';
 import { scheduleSyntheticMonitoring } from './jobs/syntheticMonitoring';
@@ -205,6 +207,10 @@ app.use('/api/voip', voipRoutes);
 app.use('/api/v1/webrtc', voipRoutes);
 app.use('/api/webrtc', voipRoutes);
 
+// Institutional Multi-Tier Routing & Application Docket Subsystem
+app.use('/api/v1/applications', docketRoutes);
+app.use('/api/applications', docketRoutes);
+
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
 
@@ -279,6 +285,7 @@ const io = new SocketIOServer(server, {
 });
 setupChatSocket(io);
 setupVoipSocket(io);
+setDocketSocketIO(io);
 
 // Setup WebSockets for Yjs Document Collaboration
 const wss = new WebSocketServer({ noServer: true });
