@@ -173,6 +173,18 @@ export default function RegistryApplicationsPage() {
 
                 <div className="flex items-center gap-2">
                     <button
+                        onClick={() => router.push('/dashboard/registry/inward-docket')}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                    >
+                        <FileText size={14} /> Inward Docket &amp; Folio Desk
+                    </button>
+                    <button
+                        onClick={() => router.push('/dashboard/registry/master-archive')}
+                        className="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                    >
+                        <ShieldCheck size={14} /> Master Archive
+                    </button>
+                    <button
                         onClick={() => fetchApplications()}
                         className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                     >

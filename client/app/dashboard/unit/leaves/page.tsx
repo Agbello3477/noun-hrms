@@ -352,7 +352,17 @@ export default function UnitLeavesPage() {
                             }`}
                         >
                             <Clock size={15} className="text-amber-600" />
-                            <span>Pending Approvals ({leaves.length})</span>
+                            <span>Pending Leaves ({leaves.length})</span>
+                        </button>
+                    )}
+
+                    {canApprove && (
+                        <button
+                            onClick={() => window.location.href = '/dashboard/director/applications'}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200 transition-all"
+                        >
+                            <ShieldCheck size={15} className="text-amber-700" />
+                            <span>Vetting Staff Applications</span>
                         </button>
                     )}
                 </div>

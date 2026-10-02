@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import api, { getImageUrl } from '../../../lib/api';
 import { useSwrData } from '../../../hooks/useSwrData';
 import {
@@ -47,6 +47,7 @@ function LeavesContent() {
     const openParam = searchParams.get('open');
     const tabParam = searchParams.get('tab');
     const appIdParam = searchParams.get('appId');
+    const router = useRouter();
     const { user, refreshUser } = useAuth();
 
     // Primary Active Tab: 'official' | 'leaves'
@@ -209,11 +210,19 @@ function LeavesContent() {
                 <div className="flex flex-wrap gap-2.5">
                     <button
                         type="button"
+                        onClick={() => router.push('/dashboard/portal/applications')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                    >
+                        <FileText size={14} />
+                        <span>Apply &ldquo;Through Director&rdquo; to Registrar</span>
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setIsWriteModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-md active:scale-95"
                     >
                         <Send size={14} />
-                        <span>Write Official Application to Registry</span>
+                        <span>Write Direct to Registry</span>
                     </button>
                     <button
                         type="button"
