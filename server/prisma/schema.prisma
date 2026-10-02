@@ -122,6 +122,14 @@ model User {
   institutionalApplicationsDocketed      InstitutionalApplication[]    @relation("InstitutionalRegistryClerk")
   applicationRevisionsActed              ApplicationRevisionHistory[]  @relation("ApplicationRevisionActor")
 
+  // File Requisition & Custody Tracking
+  fileRequisitionsSubmitted              FileRequisition[]             @relation("FileRequisitionsSubmitted")
+  fileRequisitionsAcknowledged           FileRequisition[]             @relation("FileRequisitionsAcknowledged")
+  fileRequisitionsAuthorized             FileRequisition[]             @relation("FileRequisitionsAuthorized")
+  fileRequisitionsDispatched             FileRequisition[]             @relation("FileRequisitionsDispatched")
+  fileRequisitionsReceived               FileRequisition[]             @relation("FileRequisitionsReceived")
+  fileCustodyAudits                      FileCustodyAuditTrail[]       @relation("FileCustodyAudits")
+
   @@map("users")
 }
 
@@ -444,6 +452,9 @@ model StaffProfile {
   ownedProjects ResearchProject[] @relation("ProjectOwner")
   projectMemberships ProjectMember[]
   projectFiles UploadedProjectFile[]
+
+  // File Requisition & Custody Tracking
+  fileRequisitions FileRequisition[] @relation("SubjectStaffFileRequisitions")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1961,3 +1972,112 @@ model RegistryApplicationArchive {
   @@index([archivedDocketNumber])
   @@map("registry_application_archives")
 }
+
+// -------------------------------------------------------------
+// FILE REQUISITION, CUSTODY TRACKING & RELEASE AUTHORIZATION
+// -------------------------------------------------------------
+
+enum FileRequisitionUrgency {
+  ROUTINE
+  URGENT
+  STATUTORY_AUDIT
+  LEGAL_SUBPOENA
+}
+
+enum FileRequestedFormat {
+  PHYSICAL_HARDCOPY
+  DIGITAL_TRANSCRIPT
+  BOTH
+}
+
+enum FileRequisitionStatus {
+  SUBMITTED
+  ACKNOWLEDGED_PENDING_REGISTRAR
+  REJECTED_BY_REGISTRY
+  AUTHORIZED_BY_REGISTRAR
+  DECLINED_BY_REGISTRAR
+  DISPATCHED_RELEASED
+  RETURNED_ARCHIVED
+}
+
+enum FileCustodyAction {
+  REQUISITION_SUBMITTED
+  ACKNOWLEDGED_AND_FORWARDED
+  REGISTRAR_AUTHORIZED
+  REGISTRAR_DECLINED
+  FILE_DISPATCHED
+  FILE_RETURN_LOGGED
+}
+
+model FileRequisition {
+  id                         String                 @id @default(uuid())
+  requisitionNumber          String                 @unique // e.g. "NOUN/REQ/FILE/2026/00318"
+  staffProfileId             String
+  staffProfile               StaffProfile           @relation("SubjectStaffFileRequisitions", fields: [staffProfileId], references: [id])
+  requesterId                String
+  requester                  User                   @relation("FileRequisitionsSubmitted", fields: [requesterId], references: [id])
+  requesterDepartment        String
+  purposeOfRequest           String                 @db.Text
+  urgencyLevel               FileRequisitionUrgency @default(ROUTINE)
+  requestedFileFormat        FileRequestedFormat    @default(PHYSICAL_HARDCOPY)
+  expectedReturnDate         DateTime?
+  status                     FileRequisitionStatus  @default(SUBMITTED)
+
+  // Stage 2: Registry Acknowledgment & Folio
+  acknowledgedById           String?
+  acknowledgedBy             User?                  @relation("FileRequisitionsAcknowledged", fields: [acknowledgedById], references: [id])
+  acknowledgedAt             DateTime?
+  registryFolioReference     String?
+  adminAcknowledgmentRemarks String?                @db.Text
+
+  // Stage 3: Registrar Executive Authorization
+  authorizedById             String?
+  authorizedBy               User?                  @relation("FileRequisitionsAuthorized", fields: [authorizedById], references: [id])
+  authorizedAt               DateTime?
+  registrarRemarks           String?                @db.Text
+
+  // Stage 4: Registry Physical Dispatch / Digital Access Token
+  dispatchedById             String?
+  dispatchedBy               User?                  @relation("FileRequisitionsDispatched", fields: [dispatchedById], references: [id])
+  dispatchedAt               DateTime?
+  dispatchReceiptNumber      String?                @unique // e.g. "NOUN/DISPATCH/2026/00091"
+  trackingNotes              String?                @db.Text
+  digitalAccessToken         String?
+  digitalAccessExpiresAt     DateTime?
+
+  // Stage 5: Custody Return & Re-Archiving
+  returnedAt                 DateTime?
+  receivingOfficerId         String?
+  receivingOfficer           User?                  @relation("FileRequisitionsReceived", fields: [receivingOfficerId], references: [id])
+
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+
+  custodyAuditTrail          FileCustodyAuditTrail[]
+
+  @@index([staffProfileId, status])
+  @@index([requesterId, status])
+  @@index([status])
+  @@index([requisitionNumber])
+  @@index([dispatchReceiptNumber])
+  @@map("file_requisitions")
+}
+
+model FileCustodyAuditTrail {
+  id            String            @id @default(uuid())
+  requisitionId String
+  requisition   FileRequisition   @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  action        FileCustodyAction
+  actorId       String
+  actor         User              @relation("FileCustodyAudits", fields: [actorId], references: [id])
+  details       String?           @db.Text
+  ipAddress     String?
+  userAgent     String?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+
+  @@index([requisitionId])
+  @@index([actorId])
+  @@map("file_custody_audit_trails")
+}
+

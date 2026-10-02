@@ -27,7 +27,9 @@ import {
     HeartPulse,
     Shield,
     TrendingUp,
-    FileInput
+    FileInput,
+    ShieldAlert,
+    PackageCheck
 } from 'lucide-react';
 
 
@@ -122,6 +124,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/registrar-cockpit" icon={ClipboardCheck} label="Registrar Cockpit" badge="Authorizer" />
                         <LinkItem href="/registrar-cockpit/applications" icon={FileText} label="Executive Applications Docket" badge="Registrar" />
+                        <LinkItem href="/registrar-cockpit/file-releases" icon={ShieldAlert} label="File Release Docket" badge="Registrar" />
                         {isVC && <LinkItem href="/dashboard/vc-executive" icon={TrendingUp} label="VC Command Center" />}
                     </>
                 )}
@@ -144,7 +147,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/staff" icon={Users} label="Staff Directory" />
                         <LinkItem href="/dashboard/hr/files" icon={FolderOpen} label="File Registry" />
-                        <LinkItem href="/dashboard/registry/file-requests" icon={FileInput} label="File Request Gateway" />
+                        <LinkItem href="/registry/file-requests/inward" icon={FolderOpen} label="File Intake & Folio" badge="Vault" />
+                        <LinkItem href="/registry/file-requests/ready-for-dispatch" icon={PackageCheck} label="File Dispatch & Custody" />
                         <LinkItem href="/dashboard/registry/inward-docket" icon={FileInput} label="Inward Docket & Folio Desk" />
                         <LinkItem href="/dashboard/registry/master-archive" icon={Archive} label="Master Application Archive" />
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (

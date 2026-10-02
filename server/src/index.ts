@@ -46,6 +46,8 @@ import meetingRoutes from './routes/meeting.routes';
 import observabilityRoutes from './routes/observability.routes';
 import officialApplicationRoutes from './routes/official-application.routes';
 import docketRoutes from './routes/applications/docket.routes';
+import fileRequisitionRegistryRoutes from './routes/registry/fileRequisition.routes';
+import fileRequisitionRegistrarRoutes from './routes/registrar/fileRequisition.routes';
 import { setDocketSocketIO } from './services/docketNotification.service';
 import { observabilityMiddleware } from './middleware/observability.middleware';
 import { jobQueueService } from './services/jobQueue.service';
@@ -210,6 +212,12 @@ app.use('/api/webrtc', voipRoutes);
 // Institutional Multi-Tier Routing & Application Docket Subsystem
 app.use('/api/v1/applications', docketRoutes);
 app.use('/api/applications', docketRoutes);
+
+// File Requisition, Custody Tracking & Release Authorization Subsystem
+app.use('/api/v1/registry/file-requests', fileRequisitionRegistryRoutes);
+app.use('/api/registry/file-requests', fileRequisitionRegistryRoutes);
+app.use('/api/v1/registrar/file-requests', fileRequisitionRegistrarRoutes);
+app.use('/api/registrar/file-requests', fileRequisitionRegistrarRoutes);
 
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
