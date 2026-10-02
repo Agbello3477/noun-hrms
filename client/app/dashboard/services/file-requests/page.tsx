@@ -1,322 +1,287 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import api from '../../../../lib/api';
-import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { useAuth } from '../../../../hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import {
+  FolderOpen,
+  Plus,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  FileCheck2,
+  ShieldCheck,
+  ExternalLink,
+  Printer,
+  History,
+} from 'lucide-react';
+import { RequisitionStatusStepper, FileRequisitionStatus } from '@/components/fileRequisition/RequisitionStatusStepper';
+import { LodgeRequisitionModal } from '@/components/fileRequisition/LodgeRequisitionModal';
+import { CustodyReleaseReceiptModal } from '@/components/fileRequisition/CustodyReleaseReceiptModal';
+import { DigitalTranscriptViewerModal } from '@/components/fileRequisition/DigitalTranscriptViewerModal';
+import { useAuth } from '@/hooks/useAuth';
 
-interface FileRequest {
-    id: string;
-    documentType?: string;
-    purpose?: string;
-    reason?: string;
-    urgency?: string;
-    status: 'PENDING' | 'APPROVED' | 'REJECTED';
-    createdAt: string;
-    adminComment?: string;
-    staff?: {
-        surname: string;
-        otherNames: string;
-        staffId: string;
-    };
-}
+export default function MyFileRequisitionsPage() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [requisitions, setRequisitions] = useState<any[]>([]);
+  const [selectedReq, setSelectedReq] = useState<any | null>(null);
 
-function parseReason(reason: string | null | undefined) {
-    if (!reason) return { purpose: 'N/A', documentType: 'Personal File', urgency: 'MEDIUM' };
-    
-    if (reason.includes('|')) {
-        const parts = reason.split('|');
-        let purpose = '';
-        let documentType = 'Personal File';
-        let urgency = 'MEDIUM';
-        
-        parts.forEach(part => {
-            const splitIndex = part.indexOf(':');
-            if (splitIndex !== -1) {
-                const key = part.substring(0, splitIndex).trim();
-                const val = part.substring(splitIndex + 1).trim();
-                if (key === 'Reason') {
-                    purpose = val;
-                } else if (key === 'Document Type') {
-                    documentType = val;
-                } else if (key === 'Urgency') {
-                    urgency = val;
-                }
-            }
-        });
-        
-        return { purpose: purpose || 'N/A', documentType, urgency };
+  // Modals
+  const [isLodgeOpen, setIsLodgeOpen] = useState(false);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
+
+  const fetchMyRequisitions = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/api/v1/registry/file-requests/my');
+      if (res.data?.success) {
+        setRequisitions(res.data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch personal file requisitions:', err);
+    } finally {
+      setLoading(false);
     }
-    
-    return { purpose: reason, documentType: 'Personal File', urgency: 'MEDIUM' };
-}
+  };
 
-export default function FileRequestPage() {
-    const { user } = useAuth();
-    const router = useRouter();
-    const [requests, setRequests] = useState<FileRequest[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
+  useEffect(() => {
+    fetchMyRequisitions();
+  }, []);
 
-    // Form State
-    const [docType, setDocType] = useState('Personal File');
-    const [purpose, setPurpose] = useState('');
-    const [urgency, setUrgency] = useState('MEDIUM');
-    const [submitting, setSubmitting] = useState(false);
-
-    // Staff Selection State
-    const [staffList, setStaffList] = useState<any[]>([]);
-    const [loadingStaff, setLoadingStaff] = useState(false);
-    const [selectedStaffId, setSelectedStaffId] = useState('');
-    const [staffSearch, setStaffSearch] = useState('');
-
-    const fetchRequests = async () => {
-        try {
-            const res = await api.get('/api/file-requests');
-            setRequests(res.data);
-        } catch (error) {
-            console.error('Failed to fetch requests', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchStaff = async () => {
-        setLoadingStaff(true);
-        try {
-            const res = await api.get('/api/staff?dropdown=true&limit=1000');
-            const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-            if (data.length > 0) {
-                setStaffList(data);
-            } else {
-                const regRes = await api.get('/api/registry/files');
-                const regData = Array.isArray(regRes.data) ? regRes.data : (regRes.data?.data || []);
-                setStaffList(regData);
-            }
-        } catch (error) {
-            console.error('Failed to fetch staff list via /api/staff, trying fallback', error);
-            try {
-                const regRes = await api.get('/api/registry/files');
-                const regData = Array.isArray(regRes.data) ? regRes.data : (regRes.data?.data || []);
-                setStaffList(regData);
-            } catch (e) {
-                console.error('Failed fallback fetch registry files', e);
-            }
-        } finally {
-            setLoadingStaff(false);
-        }
-    };
-
-    useEffect(() => {
-        if (user && user.role === 'STAFF') {
-            router.push('/dashboard');
-        } else {
-            fetchRequests();
-            fetchStaff();
-        }
-    }, [user, router]);
-
-    if (user && user.role === 'STAFF') {
-        return null;
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedStaffId) {
-            alert('Please select a staff member');
-            return;
-        }
-        setSubmitting(true);
-        try {
-            const finalReason = `Reason: ${purpose} | Document Type: ${docType} | Urgency: ${urgency}`;
-            await api.post('/api/file-requests/request', {
-                staffId: selectedStaffId,
-                reason: finalReason
-            });
-            setShowModal(false);
-            setPurpose('');
-            setSelectedStaffId('');
-            setStaffSearch('');
-            fetchRequests();
-        } catch (error) {
-            alert('Failed to submit request');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'APPROVED': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><CheckCircle size={12} className="mr-1" /> Approved</span>;
-            case 'REJECTED': return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><XCircle size={12} className="mr-1" /> Rejected</span>;
-            default: return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><Clock size={12} className="mr-1" /> Pending</span>;
-        }
-    };
-
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">File Requests</h1>
-                    <p className="text-sm text-gray-500">Request access to official files or documents from Registry.</p>
-                </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                    <Plus size={18} /> New Request
-                </button>
-            </div>
-
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Staff Member</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request Details / Purpose</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {requests.map(req => {
-                            const parsed = parseReason(req.reason || req.purpose);
-                            return (
-                                <tr key={req.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {req.staff ? `${req.staff.surname} ${req.staff.otherNames}` : 'Unknown Staff'}
-                                        {req.staff?.staffId && <span className="text-xs text-gray-400 block font-normal mt-0.5">ID: {req.staff.staffId}</span>}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-550">
-                                        <div className="font-semibold text-gray-900">{parsed.documentType}</div>
-                                        <div className="text-xs text-gray-650 mt-0.5">{parsed.purpose}</div>
-                                        <div className="mt-1">
-                                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                                                parsed.urgency === 'HIGH' ? 'bg-red-50 text-red-700' :
-                                                parsed.urgency === 'MEDIUM' ? 'bg-yellow-50 text-yellow-750' :
-                                                'bg-gray-55 text-gray-600'
-                                            }`}>{parsed.urgency} Urgency</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(req.status)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(req.createdAt).toLocaleDateString()}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                        {requests.length === 0 && !loading && (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-10 text-center text-gray-500">No requests found.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4">Request File Access</h3>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Document Type</label>
-                                <select
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={docType}
-                                    onChange={e => setDocType(e.target.value)}
-                                >
-                                    <option value="Personal File">Personal File (Open)</option>
-                                    <option value="Confidential File">Confidential File</option>
-                                    <option value="Service Record">Service Record</option>
-                                    <option value="Gazette">Gazette / Promotion</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Search Staff</label>
-                                <input
-                                    type="text"
-                                    placeholder="Filter by name or staff ID..."
-                                    value={staffSearch}
-                                    onChange={e => setStaffSearch(e.target.value)}
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm outline-none mb-1"
-                                />
-                                <div className="flex items-center justify-between mt-2 mb-1">
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Select Staff Member *</label>
-                                    {loadingStaff && (
-                                        <span className="text-xs text-blue-600 flex items-center gap-1">
-                                            <Loader2 size={12} className="animate-spin" /> Loading directory...
-                                        </span>
-                                    )}
-                                </div>
-                                <select
-                                    required
-                                    className="block w-full border border-gray-300 rounded-md p-2 bg-white text-sm"
-                                    value={selectedStaffId}
-                                    onChange={e => setSelectedStaffId(e.target.value)}
-                                    disabled={loadingStaff}
-                                >
-                                    <option value="">-- Choose Staff Member ({staffList.length} Active Records) --</option>
-                                    {staffList
-                                        .filter(s => {
-                                            const query = staffSearch.toLowerCase().trim();
-                                            if (!query) return true;
-                                            const name = (s.name || '').toLowerCase();
-                                            const staffId = (s.staffProfile?.staffId || s.staffId || '').toLowerCase();
-                                            const surname = (s.staffProfile?.surname || s.surname || '').toLowerCase();
-                                            const otherNames = (s.staffProfile?.otherNames || s.otherNames || '').toLowerCase();
-                                            return name.includes(query) || staffId.includes(query) || surname.includes(query) || otherNames.includes(query);
-                                        })
-                                        .map(s => {
-                                            const profileId = s.staffProfile?.id || s.id;
-                                            const staffIdCode = s.staffProfile?.staffId || s.staffId || 'No ID';
-                                            const fullName = s.name || (s.staffProfile ? `${s.staffProfile.surname || ''} ${s.staffProfile.otherNames || ''}`.trim() : `${s.surname || ''} ${s.otherNames || ''}`.trim()) || 'Staff';
-                                            const unitName = s.staffProfile?.unit?.name || s.unit?.name || '';
-                                            return (
-                                                <option key={s.id || profileId} value={profileId}>
-                                                    {fullName} — {staffIdCode} {unitName ? `(${unitName})` : ''}
-                                                </option>
-                                            );
-                                        })
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Purpose / Reason for Request</label>
-                                <textarea
-                                    required
-                                    rows={3}
-                                    placeholder="Reason for request..."
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={purpose}
-                                    onChange={e => setPurpose(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Urgency</label>
-                                <select
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                                    value={urgency}
-                                    onChange={e => setUrgency(e.target.value)}
-                                >
-                                    <option value="LOW">Low</option>
-                                    <option value="MEDIUM">Medium</option>
-                                    <option value="HIGH">High</option>
-                                </select>
-                            </div>
-                            <div className="flex gap-2 pt-4">
-                                <button type="button" onClick={() => { setShowModal(false); setStaffSearch(''); setSelectedStaffId(''); }} className="px-4 py-2 border rounded hover:bg-gray-50">Cancel</button>
-                                <button type="submit" disabled={submitting || !selectedStaffId} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 font-semibold text-sm">
-                                    {submitting ? 'Submitting...' : 'Submit Request'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+  return (
+    <div className="min-h-screen bg-slate-50/50 p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 uppercase tracking-wider mb-1">
+            <FolderOpen className="w-4 h-4" />
+            <span>Staff Self Service • Registry Vault Gatepass & Custody</span>
+          </div>
+          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+            My Personnel File Requisitions
+          </h1>
+          <p className="text-xs text-slate-500">
+            Lodge official file requests, monitor Registry Vault folio intake, track Registrar executive authorization, and retrieve custody release gatepasses.
+          </p>
         </div>
-    );
+
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={fetchMyRequisitions}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsLodgeOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Lodge Personnel File Request
+          </button>
+        </div>
+      </div>
+
+      {/* Main Requisition List */}
+      <div className="space-y-4">
+        {loading ? (
+          <div className="py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+            <Loader2 className="w-7 h-7 animate-spin mx-auto text-emerald-600 mb-2" />
+            <p className="text-xs font-medium">Loading your file requisitions from the Registry Vault...</p>
+          </div>
+        ) : requisitions.length === 0 ? (
+          <div className="py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 p-8 space-y-3">
+            <FolderOpen className="w-10 h-10 text-emerald-700/50 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800">No File Requisitions Lodged Yet</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              If your department or unit requires official physical or digital personnel records (for Accreditation, APER, or Promotions), click below to lodge a requisition.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsLodgeOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors mt-2"
+            >
+              <Plus className="w-4 h-4" /> Lodge File Requisition
+            </button>
+          </div>
+        ) : (
+          requisitions.map((req) => {
+            const isReleased = req.status === 'DISPATCHED_RELEASED';
+            const isReturned = req.status === 'RETURNED_ARCHIVED';
+            const hasDigitalFormat =
+              req.requestedFileFormat === 'DIGITAL_TRANSCRIPT' || req.requestedFileFormat === 'BOTH';
+
+            return (
+              <div
+                key={req.id}
+                className="rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden transition-all hover:border-slate-300"
+              >
+                {/* Header Strip */}
+                <div className="flex flex-wrap items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3 gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-900">
+                      {req.requisitionNumber}
+                    </span>
+                    {req.registryFolioReference && (
+                      <span className="font-mono text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-sm border border-emerald-200">
+                        Vault Folio: {req.registryFolioReference}
+                      </span>
+                    )}
+                    {req.dispatchReceiptNumber && (
+                      <span className="font-mono text-xs font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-sm border border-indigo-200">
+                        Receipt: {req.dispatchReceiptNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-slate-500">
+                    Lodged On:{' '}
+                    <span className="font-medium text-slate-700">
+                      {new Date(req.createdAt).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {/* Subject Staff */}
+                    <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Subject Personnel Record
+                      </span>
+                      <p className="font-bold text-slate-900 text-sm">
+                        {req.staffProfile?.user?.name || 'Staff Member'}
+                      </p>
+                      <p className="text-slate-600 font-mono text-[11px]">
+                        Staff ID: {req.staffProfile?.staffId || 'N/A'}
+                      </p>
+                      <p className="text-slate-500 text-[11px]">{req.staffProfile?.rank || 'Staff'}</p>
+                    </div>
+
+                    {/* Request Details */}
+                    <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Requisition Parameters
+                      </span>
+                      <p className="font-semibold text-slate-800">
+                        Format: <span className="font-bold text-slate-900">{req.requestedFileFormat}</span>
+                      </p>
+                      <p className="text-slate-600">
+                        Urgency: <span className="font-bold text-emerald-800">{req.urgencyLevel}</span>
+                      </p>
+                      <p className="text-slate-500 text-[11px]">
+                        Expected Return:{' '}
+                        {req.expectedReturnDate
+                          ? new Date(req.expectedReturnDate).toLocaleDateString('en-GB')
+                          : '14 Days SLA'}
+                      </p>
+                    </div>
+
+                    {/* Purpose */}
+                    <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Stated Purpose
+                      </span>
+                      <p className="text-slate-700 italic line-clamp-3 text-[11px]" title={req.purposeOfRequest}>
+                        &ldquo;{req.purposeOfRequest}&rdquo;
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 5-Step Progress Tracker */}
+                  <RequisitionStatusStepper
+                    status={req.status as FileRequisitionStatus}
+                    folioNumber={req.registryFolioReference}
+                    dispatchReceiptNumber={req.dispatchReceiptNumber}
+                    urgency={req.urgencyLevel}
+                    format={req.requestedFileFormat}
+                  />
+
+                  {/* Action Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                    <div className="text-[11px] text-slate-500">
+                      Status:{' '}
+                      <span className="font-bold text-emerald-800">{req.status.replace(/_/g, ' ')}</span>
+                      {req.authorizedBy && (
+                        <span> • Authorized by {req.authorizedBy.name}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {(isReleased || isReturned || req.dispatchReceiptNumber) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReq(req);
+                            setIsReceiptOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-slate-600" /> Custody Gatepass
+                        </button>
+                      )}
+
+                      {isReleased && hasDigitalFormat && req.digitalAccessToken && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReq(req);
+                            setIsDigitalViewerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-200 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> View Digital Transcript
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Lodge Requisition Modal */}
+      <LodgeRequisitionModal
+        isOpen={isLodgeOpen}
+        onClose={() => setIsLodgeOpen(false)}
+        onSuccess={() => {
+          fetchMyRequisitions();
+        }}
+        defaultDepartment={user?.staffProfile?.department || ''}
+      />
+
+      {/* Custody Receipt Gatepass */}
+      <CustodyReleaseReceiptModal
+        isOpen={isReceiptOpen}
+        onClose={() => setIsReceiptOpen(false)}
+        requisition={selectedReq}
+        onViewDigital={() => {
+          setIsReceiptOpen(false);
+          setIsDigitalViewerOpen(true);
+        }}
+      />
+
+      {/* Digital Transcript Viewer */}
+      {selectedReq && (
+        <DigitalTranscriptViewerModal
+          isOpen={isDigitalViewerOpen}
+          onClose={() => setIsDigitalViewerOpen(false)}
+          requisitionId={selectedReq.id}
+          token={selectedReq.digitalAccessToken}
+        />
+      )}
+    </div>
+  );
 }
