@@ -79,14 +79,24 @@ export default function ReceivedFilesPage() {
     return (
         <div className="space-y-8 p-6 min-h-screen bg-gray-55/30">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                    <FolderOpen className="text-blue-600" size={28} />
-                    Received Files
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Access and view official staff digital files authorized by Registry.
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <FolderOpen className="text-blue-600" size={28} />
+                        Received Files
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Access and view official staff digital files authorized by Registry.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => router.push('/dashboard/services/file-requests')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition"
+                >
+                    <FolderOpen size={15} />
+                    <span>Lodge / Track File Requisitions</span>
+                </button>
             </div>
 
             {/* List of Files */}

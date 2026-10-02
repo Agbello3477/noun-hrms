@@ -7,7 +7,8 @@ import { useSwrData } from '../../../hooks/useSwrData';
 import {
     Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus,
     FileText, ShieldCheck, Send, Eye, Printer, RefreshCw,
-    Building, User, CheckCircle2, ChevronRight, Layers, ArrowUpRight
+    Building, User, CheckCircle2, ChevronRight, Layers, ArrowUpRight,
+    FolderOpen, PackageCheck, ExternalLink
 } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
@@ -16,6 +17,10 @@ import StampedAcknowledgmentModal from '../../../components/applications/Stamped
 import ApplicationStatusBadge from '../../../components/applications/ApplicationStatusBadge';
 import ApplicationProgressStepper from '../../../components/applications/ApplicationProgressStepper';
 import ApplicationDetailsModal from '../../../components/applications/ApplicationDetailsModal';
+import { LodgeRequisitionModal } from '../../../components/fileRequisition/LodgeRequisitionModal';
+import { CustodyReleaseReceiptModal } from '../../../components/fileRequisition/CustodyReleaseReceiptModal';
+import { DigitalTranscriptViewerModal } from '../../../components/fileRequisition/DigitalTranscriptViewerModal';
+import { RequisitionStatusStepper, FileRequisitionStatus } from '../../../components/fileRequisition/RequisitionStatusStepper';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface OfficialApplication {
@@ -53,14 +58,36 @@ function LeavesContent() {
     const router = useRouter();
     const { user, refreshUser } = useAuth();
 
-    // Primary Active Tab: 'institutional' | 'official' | 'leaves'
-    const [mainTab, setMainTab] = useState<'institutional' | 'official' | 'leaves'>('institutional');
+    // Primary Active Tab: 'institutional' | 'official' | 'leaves' | 'file-requisitions'
+    const [mainTab, setMainTab] = useState<'institutional' | 'official' | 'leaves' | 'file-requisitions'>('institutional');
 
     // 1. Through Director Institutional Applications State
     const [institutionalApps, setInstitutionalApps] = useState<any[]>([]);
     const [loadingInstApps, setLoadingInstApps] = useState(false);
     const [selectedInstApp, setSelectedInstApp] = useState<any | null>(null);
     const [isInstDetailsOpen, setIsInstDetailsOpen] = useState(false);
+
+    // File Requisitions State
+    const [fileRequisitions, setFileRequisitions] = useState<any[]>([]);
+    const [loadingFileReqs, setLoadingFileReqs] = useState(false);
+    const [isLodgeRequisitionOpen, setIsLodgeRequisitionOpen] = useState(false);
+    const [selectedRequisition, setSelectedRequisition] = useState<any | null>(null);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+    const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
+
+    const fetchMyFileRequisitions = useCallback(async () => {
+        setLoadingFileReqs(true);
+        try {
+            const res = await api.get('/api/v1/registry/file-requests/my');
+            if (res.data?.success) {
+                setFileRequisitions(res.data.data || []);
+            }
+        } catch (err) {
+            console.warn('Failed to load file requisitions:', err);
+        } finally {
+            setLoadingFileReqs(false);
+        }
+    }, []);
 
     // Resubmit Drawer State for Institutional Applications
     const [resubmittingApp, setResubmittingApp] = useState<any | null>(null);
@@ -130,7 +157,8 @@ function LeavesContent() {
     useEffect(() => {
         fetchInstitutionalApps();
         fetchOfficialApps();
-    }, [fetchInstitutionalApps, fetchOfficialApps]);
+        fetchMyFileRequisitions();
+    }, [fetchInstitutionalApps, fetchOfficialApps, fetchMyFileRequisitions]);
 
     // Handle Query parameters
     useEffect(() => {
@@ -146,6 +174,9 @@ function LeavesContent() {
         } else if (openParam === 'institutional') {
             setWriteModalMode('THROUGH_DIRECTOR');
             setIsWriteModalOpen(true);
+        } else if (openParam === 'file-requisition') {
+            setMainTab('file-requisitions');
+            setIsLodgeRequisitionOpen(true);
         }
 
         if (tabParam === 'leaves') {
@@ -154,6 +185,8 @@ function LeavesContent() {
             setMainTab('official');
         } else if (tabParam === 'institutional') {
             setMainTab('institutional');
+        } else if (tabParam === 'file-requisitions') {
+            setMainTab('file-requisitions');
         }
     }, [openParam, tabParam]);
 
@@ -253,6 +286,14 @@ function LeavesContent() {
                     </button>
                     <button
                         type="button"
+                        onClick={() => setIsLodgeRequisitionOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-emerald-300 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold transition-all shadow-xs active:scale-95"
+                    >
+                        <FolderOpen size={14} className="stroke-[2.5]" />
+                        <span>Lodge File Requisition</span>
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setIsApplyModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs active:scale-95"
                     >
@@ -301,6 +342,25 @@ function LeavesContent() {
                             mainTab === 'official' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                         }`}>
                             {officialTotal}
+                        </span>
+                    )}
+                </button>
+
+                <button
+                    onClick={() => setMainTab('file-requisitions')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                        mainTab === 'file-requisitions'
+                            ? 'bg-[#006533] text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    <FolderOpen size={16} />
+                    <span>File Requisitions &amp; Custody</span>
+                    {fileRequisitions.length > 0 && (
+                        <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                            mainTab === 'file-requisitions' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                            {fileRequisitions.length}
                         </span>
                     )}
                 </button>
@@ -589,6 +649,155 @@ function LeavesContent() {
                 </div>
             )}
 
+            {/* TAB: FILE REQUISITIONS & CUSTODY */}
+            {mainTab === 'file-requisitions' && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                    {/* Header Card / Quick CTA */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+                        <div>
+                            <h3 className="text-sm font-bold text-slate-900">Personnel File Requisitions &amp; Vault Gatepass</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Request physical confidential jackets or digital single-session transcripts authorized by the Registrar.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => router.push('/dashboard/services/file-requests')}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+                            >
+                                <ExternalLink size={14} /> Full Vault Portal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsLodgeRequisitionOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl text-white bg-emerald-700 hover:bg-emerald-800 shadow-xs"
+                            >
+                                <Plus size={14} /> New Requisition
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Requisitions List */}
+                    {loadingFileReqs ? (
+                        <div className="enterprise-card p-12 text-center text-slate-400 space-y-2">
+                            <RefreshCw size={24} className="mx-auto animate-spin text-[#006533]" />
+                            <p className="text-xs font-bold">Loading your file requisitions from Registry Vault...</p>
+                        </div>
+                    ) : fileRequisitions.length === 0 ? (
+                        <div className="enterprise-card p-12 text-center max-w-xl mx-auto space-y-4">
+                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-[#006533]/20">
+                                <FolderOpen size={28} />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No file requisitions lodged yet</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
+                                    You have not submitted any personnel file custody requisitions to the Registry Vault.
+                                </p>
+                            </div>
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsLodgeRequisitionOpen(true)}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#006533] text-white font-bold text-xs shadow-sm hover:bg-[#004d26] transition active:scale-95"
+                                >
+                                    <Plus size={16} /> Lodge Personnel File Request
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {fileRequisitions.map((req) => (
+                                <div
+                                    key={req.id}
+                                    className="p-5 rounded-2xl border border-slate-200/80 bg-white shadow-xs space-y-4 hover:border-slate-300 transition-all"
+                                >
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div className="flex items-center gap-2.5 flex-wrap">
+                                            <span className="font-mono text-xs font-bold text-emerald-950 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                {req.requisitionNumber}
+                                            </span>
+                                            {req.registryFolioReference && (
+                                                <span className="font-mono text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                                                    Folio: {req.registryFolioReference}
+                                                </span>
+                                            )}
+                                            <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                                {req.urgencyLevel}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
+                                                Format: {req.requestedFileFormat}
+                                            </span>
+                                        </div>
+                                        <span className="text-[11px] text-slate-400 font-medium">
+                                            Submitted {new Date(req.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                            <span className="text-slate-400">Subject Personnel File:</span>
+                                            <div className="font-bold text-slate-900 mt-0.5">
+                                                {req.staffProfile?.user?.name || `${req.staffProfile?.surname || ''} ${req.staffProfile?.otherNames || ''}`}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500">
+                                                Staff ID: {req.staffProfile?.staffId || 'N/A'} &bull; {req.staffProfile?.unit?.name || 'Unit'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-400">Purpose of Request:</span>
+                                            <div className="text-slate-700 font-mono text-[11px] mt-0.5 bg-slate-50 p-2 rounded border border-slate-100 line-clamp-2">
+                                                {req.purposeOfRequest}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Stepper */}
+                                    <div className="py-2">
+                                        <RequisitionStatusStepper status={req.status as FileRequisitionStatus} />
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                        <div className="text-xs text-slate-500">
+                                            Status: <strong className="text-slate-800">{req.status}</strong>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {req.dispatchReceiptNumber && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedRequisition(req);
+                                                        setIsReceiptModalOpen(true);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition"
+                                                >
+                                                    <Printer size={13} /> View Gatepass Receipt
+                                                </button>
+                                            )}
+                                            {(req.requestedFileFormat === 'DIGITAL_TRANSCRIPT' || req.requestedFileFormat === 'BOTH') &&
+                                                (req.status === 'AUTHORIZED_BY_REGISTRAR' || req.status === 'DISPATCHED_RELEASED') && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedRequisition(req);
+                                                        setIsDigitalViewerOpen(true);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-xs font-bold text-white shadow-xs transition"
+                                                >
+                                                    <Eye size={13} /> View Digital Dossier
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* TAB 3: LEAVES & SABBATICALS */}
             {mainTab === 'leaves' && (
                 <div className="space-y-6 animate-in fade-in duration-150">
@@ -812,6 +1021,36 @@ function LeavesContent() {
                 onClose={() => setIsSabbaticalModalOpen(false)}
                 onSuccess={fetchMyLeaves}
             />
+
+            {/* Lodge File Requisition Modal */}
+            {isLodgeRequisitionOpen && (
+                <LodgeRequisitionModal
+                    isOpen={isLodgeRequisitionOpen}
+                    onClose={() => setIsLodgeRequisitionOpen(false)}
+                    onSuccess={() => {
+                        setIsLodgeRequisitionOpen(false);
+                        fetchMyFileRequisitions();
+                    }}
+                />
+            )}
+
+            {/* Custody Release Receipt Modal */}
+            {isReceiptModalOpen && selectedRequisition && (
+                <CustodyReleaseReceiptModal
+                    isOpen={isReceiptModalOpen}
+                    onClose={() => setIsReceiptModalOpen(false)}
+                    requisition={selectedRequisition}
+                />
+            )}
+
+            {/* Digital Transcript Viewer Modal */}
+            {isDigitalViewerOpen && selectedRequisition && (
+                <DigitalTranscriptViewerModal
+                    isOpen={isDigitalViewerOpen}
+                    onClose={() => setIsDigitalViewerOpen(false)}
+                    requisitionId={selectedRequisition.id}
+                />
+            )}
         </div>
     );
 }

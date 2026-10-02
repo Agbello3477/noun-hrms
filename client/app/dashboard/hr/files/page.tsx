@@ -6,7 +6,7 @@ import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
 import BatchDossierUploadModal from '../../../../components/dashboard/BatchDossierUploadModal';
-import { Search, Plus, FileInput, X, Archive, TrendingUp, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle, FolderUp } from 'lucide-react';
+import { Search, Plus, FileInput, X, Archive, TrendingUp, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle, FolderUp, PackageCheck, FolderOpen } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 import Button from '../../../../components/ui/Button';
 
@@ -183,6 +183,20 @@ export default function FileRegistryPage() {
                     <p className="text-gray-500 text-sm">Digitized staff files with dual-control Registrar clearance</p>
                 </div>
                 <div className="flex flex-wrap gap-2.5 items-center">
+                    <button
+                        onClick={() => router.push('/registry/file-requests/inward')}
+                        className="flex items-center gap-2 px-3.5 py-2 border border-emerald-400 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-xs text-sm font-semibold transition"
+                    >
+                        <FolderOpen size={16} />
+                        File Intake &amp; Folio Desk
+                    </button>
+                    <button
+                        onClick={() => router.push('/registry/file-requests/ready-for-dispatch')}
+                        className="flex items-center gap-2 px-3.5 py-2 border border-blue-400 bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-xs text-sm font-semibold transition"
+                    >
+                        <PackageCheck size={16} />
+                        File Dispatch &amp; Custody
+                    </button>
                     <button
                         onClick={() => router.push('/dashboard/registry/due-for-promotion')}
                         className="flex items-center gap-2 px-4 py-2 border border-emerald-300 text-emerald-800 bg-emerald-50/90 rounded-lg hover:bg-emerald-100 shadow-sm text-sm font-semibold transition"

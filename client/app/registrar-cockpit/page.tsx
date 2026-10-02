@@ -22,27 +22,33 @@ import {
     Building2,
     Calendar,
     Award,
-    FileText
+    FileText,
+    ShieldAlert,
+    FolderOpen,
+    ExternalLink,
+    Lock
 } from 'lucide-react';
 
 export default function RegistrarCockpitPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits'>('queue');
+    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits' | 'file-releases'>('queue');
     const [queueSummary, setQueueSummary] = useState({
         totalPending: 0,
         postings: 0,
         files: 0,
         promotionOverrides: 0,
         disciplinaryQueries: 0,
-        roleChanges: 0
+        roleChanges: 0,
+        fileReleases: 0
     });
 
     const [pendingPostings, setPendingPostings] = useState<any[]>([]);
     const [pendingFiles, setPendingFiles] = useState<any[]>([]);
     const [pendingOverrides, setPendingOverrides] = useState<any[]>([]);
     const [pendingRoleChanges, setPendingRoleChanges] = useState<any[]>([]);
+    const [pendingFileReleases, setPendingFileReleases] = useState<any[]>([]);
     const [audits, setAudits] = useState<any[]>([]);
 
     const [loadingQueue, setLoadingQueue] = useState(true);
@@ -53,6 +59,7 @@ export default function RegistrarCockpitPage() {
     const [selectedPosting, setSelectedPosting] = useState<any | null>(null);
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
     const [selectedOverride, setSelectedOverride] = useState<any | null>(null);
+    const [selectedFileRelease, setSelectedFileRelease] = useState<any | null>(null);
 
     // Decision modal / input state
     const [decisionRemarks, setDecisionRemarks] = useState('');
@@ -77,19 +84,26 @@ export default function RegistrarCockpitPage() {
     const loadCockpitData = async () => {
         setLoadingQueue(true);
         try {
-            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes] = await Promise.all([
+            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes, fileReleasesRes] = await Promise.all([
                 api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0, roleChanges: 0 } } })),
                 api.get('/api/v1/registrar/postings/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/files/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/promotions/pending-overrides').catch(() => ({ data: [] })),
-                api.get('/api/v1/registrar/role-changes/pending').catch(() => ({ data: [] }))
+                api.get('/api/v1/registrar/role-changes/pending').catch(() => ({ data: [] })),
+                api.get('/api/v1/registrar/file-requests/pending').catch(() => ({ data: { data: [] } }))
             ]);
 
-            setQueueSummary(queueRes.data.queueSummary);
+            const releases = fileReleasesRes.data?.data || [];
+            const summary = {
+                ...queueRes.data.queueSummary,
+                fileReleases: releases.length
+            };
+            setQueueSummary(summary);
             setPendingPostings(postingsRes.data || []);
             setPendingFiles(filesRes.data || []);
             setPendingOverrides(overridesRes.data || []);
             setPendingRoleChanges(roleChangesRes.data || []);
+            setPendingFileReleases(releases);
 
             if (postingsRes.data && postingsRes.data.length > 0) {
                 setSelectedPosting(postingsRes.data[0]);
@@ -100,10 +114,32 @@ export default function RegistrarCockpitPage() {
             if (overridesRes.data && overridesRes.data.length > 0) {
                 setSelectedOverride(overridesRes.data[0]);
             }
+            if (releases && releases.length > 0) {
+                setSelectedFileRelease(releases[0]);
+            }
         } catch (err: any) {
             console.error('Failed to load cockpit data', err);
         } finally {
             setLoadingQueue(false);
+        }
+    };
+
+    // File Release Decision Handler
+    const handleFileReleaseDecision = async (requisitionId: string, decision: 'APPROVE' | 'DECLINE') => {
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const res = await api.post(`/api/v1/registrar/file-requests/${requisitionId}/authorize`, {
+                decision,
+                remarks: decisionRemarks || undefined
+            });
+            setFeedback({ type: 'success', message: res.data?.message || 'File release authorization recorded.' });
+            setDecisionRemarks('');
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'File release authorization failed.' });
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -302,7 +338,7 @@ export default function RegistrarCockpitPage() {
             )}
 
             {/* Metrics KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
                 <div
                     onClick={() => setActiveSection('queue')}
                     className={`cursor-pointer p-4 rounded-2xl border transition-all ${
@@ -313,7 +349,7 @@ export default function RegistrarCockpitPage() {
                         <span className="text-xs font-semibold">Total Authorizations</span>
                         <FileCheck2 size={16} className="text-[#006533]" />
                     </div>
-                    <div className="text-2xl font-black text-slate-900">{queueSummary.totalPending}</div>
+                    <div className="text-2xl font-black text-slate-900">{queueSummary.totalPending + (pendingFileReleases?.length || 0)}</div>
                     <div className="text-[10px] text-slate-400 mt-1">Pending across all queues</div>
                 </div>
 
@@ -343,6 +379,20 @@ export default function RegistrarCockpitPage() {
                     </div>
                     <div className="text-2xl font-black text-slate-900">{queueSummary.files}</div>
                     <div className="text-[10px] text-amber-600 font-semibold mt-1">Pending Activation</div>
+                </div>
+
+                <div
+                    onClick={() => setActiveSection('file-releases')}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                        activeSection === 'file-releases' ? 'bg-white border-[#006533] ring-2 ring-[#006533]/20 shadow-xs' : 'bg-white border-slate-200/80 hover:border-slate-300'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                        <span className="text-xs font-semibold">File Releases</span>
+                        <ShieldAlert size={16} className="text-rose-600" />
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{pendingFileReleases.length}</div>
+                    <div className="text-[10px] text-rose-600 font-semibold mt-1">Confidential Release Docket</div>
                 </div>
 
                 <div
@@ -390,7 +440,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'postings' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Transfer & Posting Ratifications ({pendingPostings.length})
+                    Transfer &amp; Posting Ratifications ({pendingPostings.length})
                 </button>
                 <button
                     onClick={() => setActiveSection('files')}
@@ -399,6 +449,14 @@ export default function RegistrarCockpitPage() {
                     }`}
                 >
                     Pending File Clearances ({pendingFiles.length})
+                </button>
+                <button
+                    onClick={() => setActiveSection('file-releases')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'file-releases' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Confidential File Releases ({pendingFileReleases.length})
                 </button>
                 <button
                     onClick={() => setActiveSection('promotions')}
@@ -425,7 +483,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'audits' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Audit & Digital Signature Trails
+                    Audit &amp; Digital Signature Trails
                 </button>
             </div>
 
@@ -507,6 +565,51 @@ export default function RegistrarCockpitPage() {
                                             }}
                                         >
                                             Clear File
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <ShieldAlert size={16} className="text-rose-600" />
+                                Confidential File Releases Awaiting Executive Authorization
+                            </h2>
+                            <Button variant="ghost" size="xs" onClick={() => setActiveSection('file-releases')}>
+                                View All ({pendingFileReleases.length})
+                            </Button>
+                        </div>
+                        {loadingQueue ? (
+                            <div className="space-y-3 py-2">
+                                <div className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                                <div className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                            </div>
+                        ) : pendingFileReleases.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-6 text-center">No confidential file release dockets pending.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {pendingFileReleases.slice(0, 3).map((req) => (
+                                    <div key={req.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-900">
+                                                {req.staffProfile?.user?.name || `${req.staffProfile?.surname || ''} ${req.staffProfile?.otherNames || ''}`}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500">
+                                                Req: {req.requester?.name} &bull; {req.urgencyLevel}
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="emerald"
+                                            size="xs"
+                                            onClick={() => {
+                                                setSelectedFileRelease(req);
+                                                setActiveSection('file-releases');
+                                            }}
+                                        >
+                                            Review
                                         </Button>
                                     </div>
                                 ))}
@@ -887,6 +990,206 @@ export default function RegistrarCockpitPage() {
                         ) : (
                             <div className="py-12 text-center text-slate-400 text-xs">
                                 Select a staff file from the queue to review and clear.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Section: Confidential File Releases */}
+            {activeSection === 'file-releases' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                        <div className="flex items-center justify-between mb-3 px-1">
+                            <div>
+                                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Pending File Release Requisitions</h2>
+                                <span className="text-[11px] text-slate-500">{pendingFileReleases.length} requisitions awaiting authorization</span>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => router.push('/registrar-cockpit/file-releases')}
+                                className="text-emerald-700 font-bold"
+                            >
+                                <ExternalLink size={14} className="mr-1" /> Full Docket
+                            </Button>
+                        </div>
+
+                        {loadingQueue ? (
+                            <div className="space-y-2">
+                                <div className="h-16 bg-slate-100 rounded-xl animate-pulse" />
+                                <div className="h-16 bg-slate-100 rounded-xl animate-pulse" />
+                            </div>
+                        ) : pendingFileReleases.length === 0 ? (
+                            <div className="py-12 text-center text-slate-400 text-xs">
+                                <CheckCircle2 className="w-8 h-8 text-emerald-600/60 mx-auto mb-2" />
+                                No pending file release requisitions.
+                            </div>
+                        ) : (
+                            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                                {pendingFileReleases.map((req) => {
+                                    const isSelected = selectedFileRelease?.id === req.id;
+                                    const isUrgent = ['URGENT', 'STATUTORY_AUDIT', 'LEGAL_SUBPOENA'].includes(req.urgencyLevel);
+                                    return (
+                                        <div
+                                            key={req.id}
+                                            onClick={() => setSelectedFileRelease(req)}
+                                            className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                                                isSelected
+                                                    ? 'bg-emerald-50/60 border-emerald-400 ring-1 ring-emerald-400'
+                                                    : 'bg-white border-slate-200/70 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-[11px] font-bold text-emerald-950">
+                                                    {req.requisitionNumber}
+                                                </span>
+                                                <span
+                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                                                        isUrgent
+                                                            ? 'bg-rose-100 text-rose-800'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}
+                                                >
+                                                    {req.urgencyLevel}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs font-bold text-slate-900 mt-1">
+                                                {req.staffProfile?.user?.name || `${req.staffProfile?.surname || ''} ${req.staffProfile?.otherNames || ''}`}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500">
+                                                Requester: {req.requester?.name} ({req.requesterDepartment})
+                                            </div>
+                                            <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 text-[10px]">
+                                                <span className="text-slate-400">Folio: {req.registryFolioReference || 'NOUN/VAULT'}</span>
+                                                <span className="text-emerald-700 font-semibold">{req.requestedFileFormat}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs">
+                        {selectedFileRelease ? (
+                            <div>
+                                {(() => {
+                                    const isRequester = selectedFileRelease.requesterId === user?.id;
+                                    const isSubject = selectedFileRelease.staffProfile?.userId === user?.id;
+                                    const hasMakerCheckerConflict = isRequester || isSubject;
+
+                                    return (
+                                        <>
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                                <div>
+                                                    <span className="text-[10px] font-bold text-emerald-800 uppercase px-2 py-0.5 bg-emerald-100 rounded-sm">
+                                                        Registry Vault Custody Docket
+                                                    </span>
+                                                    <h2 className="text-lg font-bold text-slate-900 mt-1">
+                                                        {selectedFileRelease.staffProfile?.user?.name || `${selectedFileRelease.staffProfile?.surname || ''} ${selectedFileRelease.staffProfile?.otherNames || ''}`}
+                                                    </h2>
+                                                    <div className="text-xs text-slate-500 font-mono">
+                                                        Docket: {selectedFileRelease.requisitionNumber} &bull; Folio: {selectedFileRelease.registryFolioReference || 'NOUN/FOLIO/VAULT'}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                                        🟡 AWAITING_REGISTRAR_AUTHORIZATION
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {hasMakerCheckerConflict && (
+                                                <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs text-rose-800 font-medium">
+                                                    <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+                                                    <span>
+                                                        <strong>Dual-Control Maker-Checker Restriction:</strong> You cannot authorize this requisition because you are the {isRequester ? 'requester' : 'subject staff member'}. Another Principal Officer must review this docket.
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2 text-xs">
+                                                    <div className="font-bold text-slate-700 uppercase mb-2">Subject Personnel Details</div>
+                                                    <div><span className="text-slate-400">Staff ID:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.staffProfile?.staffId || 'N/A'}</span></div>
+                                                    <div><span className="text-slate-400">Directorate/Unit:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.staffProfile?.unit?.name || 'N/A'}</span></div>
+                                                    <div><span className="text-slate-400">Cadre/Rank:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.staffProfile?.rank || 'Staff'} ({selectedFileRelease.staffProfile?.cadre || 'NON_TEACHING'})</span></div>
+                                                    <div><span className="text-slate-400">Requested Format:</span> <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">{selectedFileRelease.requestedFileFormat}</span></div>
+                                                </div>
+
+                                                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2 text-xs">
+                                                    <div className="font-bold text-emerald-800 uppercase mb-2">Requisition &amp; Intake Details</div>
+                                                    <div><span className="text-emerald-700">Requester:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.requester?.name}</span></div>
+                                                    <div><span className="text-emerald-700">Department:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.requesterDepartment}</span></div>
+                                                    <div><span className="text-emerald-700">Urgency Level:</span> <span className="font-bold text-rose-800">{selectedFileRelease.urgencyLevel}</span></div>
+                                                    <div><span className="text-emerald-700">Acknowledged by:</span> <span className="font-semibold text-slate-800">{selectedFileRelease.acknowledgedBy?.name || 'Registry Vault Officer'}</span></div>
+                                                    {selectedFileRelease.adminAcknowledgmentRemarks && (
+                                                        <div className="p-2 bg-white rounded border border-emerald-200/60 text-[11px] text-slate-600 mt-2">
+                                                            <strong>Registry Notes:</strong> {selectedFileRelease.adminAcknowledgmentRemarks}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="p-4 rounded-xl border border-slate-200 bg-white mb-6 text-xs">
+                                                <div className="font-bold text-slate-700 uppercase mb-1">Purpose of Confidential File Requisition</div>
+                                                <p className="text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 font-mono text-[11px]">
+                                                    {selectedFileRelease.purposeOfRequest}
+                                                </p>
+                                            </div>
+
+                                            <div className="border-t border-slate-100 pt-4">
+                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                    Executive Determination Remarks (Mandatory for Decline)
+                                                </label>
+                                                <textarea
+                                                    rows={2}
+                                                    value={decisionRemarks}
+                                                    onChange={(e) => setDecisionRemarks(e.target.value)}
+                                                    placeholder="Enter statutory authorization notes or specific refusal reason..."
+                                                    className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#006533] mb-4 bg-slate-50/50"
+                                                />
+
+                                                <div className="flex items-center justify-between pt-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => router.push('/registrar-cockpit/file-releases')}
+                                                        className="text-xs text-slate-500"
+                                                    >
+                                                        Open Full Multi-Tier Docket Page
+                                                    </Button>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            disabled={actionLoading || hasMakerCheckerConflict}
+                                                            isLoading={actionLoading}
+                                                            onClick={() => handleFileReleaseDecision(selectedFileRelease.id, 'DECLINE')}
+                                                        >
+                                                            Decline Requisition
+                                                        </Button>
+                                                        <Button
+                                                            variant="emerald"
+                                                            size="sm"
+                                                            disabled={actionLoading || hasMakerCheckerConflict}
+                                                            isLoading={actionLoading}
+                                                            onClick={() => handleFileReleaseDecision(selectedFileRelease.id, 'APPROVE')}
+                                                        >
+                                                            Authorize File Release
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="py-12 text-center text-slate-400 text-xs">
+                                Select a file release requisition from the left pane to review and authorize.
                             </div>
                         )}
                     </div>
