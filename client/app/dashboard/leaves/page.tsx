@@ -7,12 +7,15 @@ import { useSwrData } from '../../../hooks/useSwrData';
 import {
     Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus,
     FileText, ShieldCheck, Send, Eye, Printer, RefreshCw,
-    Building, User, CheckCircle2, ChevronRight
+    Building, User, CheckCircle2, ChevronRight, Layers, ArrowUpRight
 } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
 import WriteOfficialApplicationModal from '../../../components/applications/WriteOfficialApplicationModal';
 import StampedAcknowledgmentModal from '../../../components/applications/StampedAcknowledgmentModal';
+import ApplicationStatusBadge from '../../../components/applications/ApplicationStatusBadge';
+import ApplicationProgressStepper from '../../../components/applications/ApplicationProgressStepper';
+import ApplicationDetailsModal from '../../../components/applications/ApplicationDetailsModal';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface OfficialApplication {
@@ -50,10 +53,55 @@ function LeavesContent() {
     const router = useRouter();
     const { user, refreshUser } = useAuth();
 
-    // Primary Active Tab: 'official' | 'leaves'
-    const [mainTab, setMainTab] = useState<'official' | 'leaves'>('official');
+    // Primary Active Tab: 'institutional' | 'official' | 'leaves'
+    const [mainTab, setMainTab] = useState<'institutional' | 'official' | 'leaves'>('institutional');
 
-    // Leaves Data & Modals (Supporting v1 statutory leave applications & balances)
+    // 1. Through Director Institutional Applications State
+    const [institutionalApps, setInstitutionalApps] = useState<any[]>([]);
+    const [loadingInstApps, setLoadingInstApps] = useState(false);
+    const [selectedInstApp, setSelectedInstApp] = useState<any | null>(null);
+    const [isInstDetailsOpen, setIsInstDetailsOpen] = useState(false);
+
+    // Resubmit Drawer State for Institutional Applications
+    const [resubmittingApp, setResubmittingApp] = useState<any | null>(null);
+    const [resubmitContent, setResubmitContent] = useState('');
+    const [resubmitComments, setResubmitComments] = useState('');
+    const [isResubmitting, setIsResubmitting] = useState(false);
+    const [resubmitError, setResubmitError] = useState<string | null>(null);
+
+    const fetchInstitutionalApps = useCallback(async () => {
+        setLoadingInstApps(true);
+        try {
+            const res = await api.get('/api/v1/applications/my-applications');
+            if (res.data?.success) {
+                setInstitutionalApps(res.data.applications || []);
+            }
+        } catch (err) {
+            console.warn('Failed to load institutional applications:', err);
+        } finally {
+            setLoadingInstApps(false);
+        }
+    }, []);
+
+    // 2. Direct Central Registry Stamped Applications Data & Modals
+    const [officialApps, setOfficialApps] = useState<OfficialApplication[]>([]);
+    const [loadingApps, setLoadingApps] = useState(false);
+    const [selectedApp, setSelectedApp] = useState<OfficialApplication | null>(null);
+    const [isStampedViewerOpen, setIsStampedViewerOpen] = useState(false);
+
+    const fetchOfficialApps = useCallback(async () => {
+        setLoadingApps(true);
+        try {
+            const res = await api.get('/api/official-applications/my');
+            setOfficialApps(res.data || []);
+        } catch (error) {
+            console.error('Failed to fetch official applications:', error);
+        } finally {
+            setLoadingApps(false);
+        }
+    }, []);
+
+    // 3. Leaves Data & Balances
     const { data: balanceData, refresh: fetchBalances } = useSwrData<any>('/api/v1/leave/balances', { ttl: 60000 });
     const { data: v1Leaves = [], isLoading: loadingV1Leaves, refresh: fetchV1Leaves } = useSwrData<any[]>('/api/v1/leave/applications/my', { ttl: 60000 });
     const { data: legacyLeaves = [], isLoading: loadingLegacyLeaves, refresh: fetchLegacyLeaves } = useSwrData<any[]>('/api/leaves/me', { ttl: 60000 });
@@ -71,34 +119,20 @@ function LeavesContent() {
         fetchBalances();
     }, [fetchV1Leaves, fetchLegacyLeaves, fetchBalances]);
 
-    const [resuming, setResuming] = useState(false);
+    // Unified Write Application Modal
+    const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
+    const [writeModalMode, setWriteModalMode] = useState<'THROUGH_DIRECTOR' | 'DIRECT_REGISTRY'>('THROUGH_DIRECTOR');
+
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isSabbaticalModalOpen, setIsSabbaticalModalOpen] = useState(false);
-
-    // Official Applications Data & Modals
-    const [officialApps, setOfficialApps] = useState<OfficialApplication[]>([]);
-    const [loadingApps, setLoadingApps] = useState(false);
-    const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
-    const [selectedApp, setSelectedApp] = useState<OfficialApplication | null>(null);
-    const [isStampedViewerOpen, setIsStampedViewerOpen] = useState(false);
-
-    const fetchOfficialApps = useCallback(async () => {
-        setLoadingApps(true);
-        try {
-            const res = await api.get('/api/official-applications/my');
-            setOfficialApps(res.data || []);
-        } catch (error) {
-            console.error('Failed to fetch official applications:', error);
-        } finally {
-            setLoadingApps(false);
-        }
-    }, []);
+    const [resuming, setResuming] = useState(false);
 
     useEffect(() => {
+        fetchInstitutionalApps();
         fetchOfficialApps();
-    }, [fetchOfficialApps]);
+    }, [fetchInstitutionalApps, fetchOfficialApps]);
 
-    // Query params router handlers
+    // Handle Query parameters
     useEffect(() => {
         if (openParam === 'apply') {
             setMainTab('leaves');
@@ -107,7 +141,10 @@ function LeavesContent() {
             setMainTab('leaves');
             setIsSabbaticalModalOpen(true);
         } else if (openParam === 'write' || openParam === 'official') {
-            setMainTab('official');
+            setWriteModalMode('DIRECT_REGISTRY');
+            setIsWriteModalOpen(true);
+        } else if (openParam === 'institutional') {
+            setWriteModalMode('THROUGH_DIRECTOR');
             setIsWriteModalOpen(true);
         }
 
@@ -115,10 +152,12 @@ function LeavesContent() {
             setMainTab('leaves');
         } else if (tabParam === 'official') {
             setMainTab('official');
+        } else if (tabParam === 'institutional') {
+            setMainTab('institutional');
         }
     }, [openParam, tabParam]);
 
-    // Handle deep-link to specific application
+    // Deep link to direct official app
     useEffect(() => {
         if (appIdParam && officialApps.length > 0) {
             const match = officialApps.find(a => a.id === appIdParam);
@@ -128,6 +167,31 @@ function LeavesContent() {
             }
         }
     }, [appIdParam, officialApps]);
+
+    const handleExecuteResubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resubmittingApp) return;
+
+        try {
+            setIsResubmitting(true);
+            setResubmitError(null);
+            const res = await api.post(`/api/v1/applications/${resubmittingApp.id}/resubmit`, {
+                content: resubmitContent,
+                comments: resubmitComments
+            });
+
+            if (res.data?.success) {
+                setResubmittingApp(null);
+                await fetchInstitutionalApps();
+            } else {
+                setResubmitError(res.data?.error || 'Failed to resubmit application.');
+            }
+        } catch (err: any) {
+            setResubmitError(err?.response?.data?.error || err.message || 'Resubmission failed');
+        } finally {
+            setIsResubmitting(false);
+        }
+    };
 
     const handleResumeFromLeave = async () => {
         setResuming(true);
@@ -144,90 +208,53 @@ function LeavesContent() {
         }
     };
 
-    const getLeaveStatusBadge = (status: string) => {
-        switch (status) {
-            case 'APPROVED':
-                return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-                        <CheckCircle size={12} className="stroke-[2.5]" />
-                        Approved &amp; Cleared
-                    </span>
-                );
-            case 'REJECTED':
-                return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-rose-500/10 text-rose-700 border border-rose-500/20">
-                        <XCircle size={12} className="stroke-[2.5]" />
-                        Rejected
-                    </span>
-                );
-            case 'PENDING_REGISTRY':
-            case 'RECOMMENDED':
-                return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-blue-500/10 text-blue-700 border border-blue-500/20">
-                        <ShieldCheck size={12} className="stroke-[2.5]" />
-                        Level 2: Pending Registry
-                    </span>
-                );
-            case 'PENDING_HOD':
-            case 'PENDING':
-                return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
-                        <Clock size={12} className="stroke-[2.5]" />
-                        Level 1: Pending HOD
-                    </span>
-                );
-            default:
-                return (
-                    <span className="px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold rounded-full bg-slate-500/10 text-slate-700 border border-slate-500/20">
-                        <Clock size={12} className="stroke-[2.5]" />
-                        {status ? status.replace(/_/g, ' ') : 'Pending'}
-                    </span>
-                );
-        }
-    };
+    // Metric counts
+    const instTotal = institutionalApps.length;
+    const instPending = institutionalApps.filter(a => ['SUBMITTED_TO_DIRECTOR', 'RECOMMENDED_TO_REGISTRY', 'DOCKETED_PENDING_REGISTRAR'].includes(a.status)).length;
+    const instRewrite = institutionalApps.filter(a => a.status === 'RETURNED_FOR_REWRITE').length;
+    const instApproved = institutionalApps.filter(a => a.status === 'APPROVED_BY_REGISTRAR').length;
 
-    // Official Apps Metrics
     const officialTotal = officialApps.length;
     const officialPending = officialApps.filter(a => a.status === 'PENDING_ACKNOWLEDGMENT').length;
     const officialAcknowledged = officialApps.filter(a => a.status === 'ACKNOWLEDGED' || !!a.registryStampNumber).length;
 
-    // Leave metrics
     const leaveTotal = leaves.length;
     const leavePending = leaves.filter(l => l.status === 'PENDING').length;
     const leaveApproved = leaves.filter(l => l.status === 'APPROVED').length;
-    const leaveRejected = leaves.filter(l => l.status === 'REJECTED').length;
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             {/* Header Section */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
                 <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900">My Applications &amp; Registry Letters</h1>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-[#006533] border border-emerald-300">
+                            Staff Self-Service
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">Unified Applications Hub</span>
+                    </div>
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900">My Applications</h1>
                     <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">
-                        Submit official applications directly to Central Registry / HR, track registry electronic stamps, and manage leaves
+                        Draft statutory applications, route memos &ldquo;Through Director&rdquo; to Registrar, lodge direct registry letters, or manage statutory leaves.
                     </p>
                 </div>
+
                 <div className="flex flex-wrap gap-2.5">
                     <button
                         type="button"
-                        onClick={() => router.push('/dashboard/portal/applications')}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md active:scale-95"
-                    >
-                        <FileText size={14} />
-                        <span>Apply &ldquo;Through Director&rdquo; to Registrar</span>
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setIsWriteModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                        onClick={() => {
+                            setWriteModalMode('THROUGH_DIRECTOR');
+                            setIsWriteModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-md active:scale-95"
                     >
                         <Send size={14} />
-                        <span>Write Direct to Registry</span>
+                        <span>Write Application</span>
                     </button>
                     <button
                         type="button"
                         onClick={() => setIsApplyModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs active:scale-95"
                     >
                         <Plus size={14} className="stroke-[2.5]" />
                         <span>Apply for Leave</span>
@@ -236,7 +263,29 @@ function LeavesContent() {
             </div>
 
             {/* Primary Navigation Tabs */}
-            <div className="flex items-center gap-2 border-b border-slate-200/80 pb-1">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 pb-2">
+                <button
+                    onClick={() => setMainTab('institutional')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                        mainTab === 'institutional'
+                            ? 'bg-[#006533] text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    <FileText size={16} />
+                    <span>Through Director &rarr; Registrar</span>
+                    {instTotal > 0 && (
+                        <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                            mainTab === 'institutional' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                            {instTotal}
+                        </span>
+                    )}
+                    {instRewrite > 0 && (
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    )}
+                </button>
+
                 <button
                     onClick={() => setMainTab('official')}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
@@ -246,7 +295,7 @@ function LeavesContent() {
                     }`}
                 >
                     <ShieldCheck size={16} />
-                    <span>Official Applications to Registry</span>
+                    <span>Direct Central Registry Letters</span>
                     {officialTotal > 0 && (
                         <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
                             mainTab === 'official' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
@@ -265,7 +314,7 @@ function LeavesContent() {
                     }`}
                 >
                     <Calendar size={16} />
-                    <span>Leave &amp; Sabbaticals</span>
+                    <span>Leaves &amp; Sabbaticals</span>
                     {leaveTotal > 0 && (
                         <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
                             mainTab === 'leaves' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
@@ -276,15 +325,150 @@ function LeavesContent() {
                 </button>
             </div>
 
-            {/* TAB 1: OFFICIAL APPLICATIONS TO REGISTRY */}
+            {/* TAB 1: THROUGH DIRECTOR TO REGISTRAR */}
+            {mainTab === 'institutional' && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                    {/* Metrics Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-blue-600">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Routed</span>
+                            <span className="text-2xl font-black text-slate-900 block">{instTotal}</span>
+                            <span className="text-[11px] font-semibold text-slate-400">Formal multi-tier applications</span>
+                        </div>
+
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-amber-500">
+                            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block">In Transit</span>
+                            <span className="text-2xl font-black text-amber-600 block">{instPending}</span>
+                            <span className="text-[11px] font-semibold text-amber-600/80">Vetting / Docketing stage</span>
+                        </div>
+
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-orange-500">
+                            <span className="text-[10px] text-orange-600 font-bold uppercase tracking-wider block">Requires Rewrite</span>
+                            <span className="text-2xl font-black text-orange-600 block">{instRewrite}</span>
+                            <span className="text-[11px] font-semibold text-orange-600/80">Director returned for review</span>
+                        </div>
+
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-emerald-600">
+                            <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block">Approved Orders</span>
+                            <span className="text-2xl font-black text-emerald-600 block">{instApproved}</span>
+                            <span className="text-[11px] font-semibold text-emerald-600/80">Sealed by University Registrar</span>
+                        </div>
+                    </div>
+
+                    {/* Applications List */}
+                    {loadingInstApps ? (
+                        <div className="enterprise-card p-12 text-center text-slate-400 space-y-2">
+                            <RefreshCw size={24} className="mx-auto animate-spin text-[#006533]" />
+                            <p className="text-xs font-bold">Loading your applications...</p>
+                        </div>
+                    ) : institutionalApps.length === 0 ? (
+                        <div className="enterprise-card p-12 text-center max-w-xl mx-auto space-y-4">
+                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-[#006533]/20">
+                                <FileText size={28} />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No statutory applications yet</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
+                                    You have not submitted any formal applications routed &ldquo;Through Director&rdquo; to the University Registrar.
+                                </p>
+                            </div>
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setWriteModalMode('THROUGH_DIRECTOR');
+                                        setIsWriteModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition shadow-md active:scale-95"
+                                >
+                                    <Send size={14} />
+                                    <span>Write Your First Application</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {institutionalApps.map((app) => (
+                                <div
+                                    key={app.id}
+                                    className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs hover:border-slate-300 transition-all space-y-4"
+                                >
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-4">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                {app.referenceNumber}
+                                            </span>
+                                            {app.registryDocketNumber && (
+                                                <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                                    Folio: {app.registryDocketNumber}
+                                                </span>
+                                            )}
+                                            <ApplicationStatusBadge status={app.status} />
+                                            <span className="text-xs text-slate-400">
+                                                Submitted: {new Date(app.createdAt).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedInstApp(app);
+                                                    setIsInstDetailsOpen(true);
+                                                }}
+                                                className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition"
+                                            >
+                                                View Dossier
+                                            </button>
+                                            {app.status === 'RETURNED_FOR_REWRITE' && (
+                                                <button
+                                                    onClick={() => {
+                                                        setResubmittingApp(app);
+                                                        setResubmitContent(app.content || '');
+                                                        setResubmitComments('');
+                                                        setResubmitError(null);
+                                                    }}
+                                                    className="text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-lg transition"
+                                                >
+                                                    Edit &amp; Resubmit
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="text-base font-bold text-slate-900">{app.subject}</h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Category: <span className="font-semibold text-slate-700">{app.category.replace(/_/g, ' ')}</span> &middot; 
+                                            Target Directorate: <span className="font-semibold text-slate-700">{app.director?.staffProfile ? `${app.director.staffProfile.firstName} ${app.director.staffProfile.lastName}` : app.director?.email}</span>
+                                        </p>
+                                    </div>
+
+                                    {/* Progress Stepper */}
+                                    <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-100">
+                                        <ApplicationProgressStepper status={app.status} />
+                                    </div>
+
+                                    {/* Alert banner if returned for rewrite */}
+                                    {app.status === 'RETURNED_FOR_REWRITE' && app.directorRemarks && (
+                                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                                            <span className="font-bold">Director Revision Directive:</span> &ldquo;{app.directorRemarks}&rdquo;
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB 2: DIRECT CENTRAL REGISTRY LETTERS */}
             {mainTab === 'official' && (
                 <div className="space-y-5 animate-in fade-in duration-150">
                     {/* Metrics Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="enterprise-card p-5 space-y-1 border-l-4 border-l-blue-600">
-                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Total Applications</span>
+                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Total Lodged</span>
                             <span className="text-3xl font-black text-slate-900 block tracking-tight">{officialTotal}</span>
-                            <span className="text-[11px] font-semibold text-slate-400">All formal letters to HR/Registry</span>
+                            <span className="text-[11px] font-semibold text-slate-400">Formal letters to Central Registry</span>
                         </div>
 
                         <div className="enterprise-card p-5 space-y-1 border-l-4 border-l-amber-500">
@@ -300,31 +484,34 @@ function LeavesContent() {
                         </div>
                     </div>
 
-                    {/* Applications Table / Empty State */}
+                    {/* Applications Table */}
                     {loadingApps ? (
                         <div className="enterprise-card p-12 text-center text-slate-400 space-y-2">
-                            <RefreshCw size={24} className="mx-auto animate-spin text-emerald-700" />
+                            <RefreshCw size={24} className="mx-auto animate-spin text-[#006533]" />
                             <p className="text-xs font-bold">Loading your official applications...</p>
                         </div>
                     ) : officialApps.length === 0 ? (
                         <div className="enterprise-card p-12 text-center max-w-xl mx-auto space-y-4">
-                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-sm border border-[#006533]/20">
-                                <FileText size={28} />
+                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-[#006533]/20">
+                                <ShieldCheck size={28} />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No official applications submitted yet</h3>
+                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No direct letters submitted yet</h3>
                                 <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
-                                    Directorates, Faculties, Departments, Units, and Staff can draft formal letters directly to Central Registry and receive an electronic stamped acknowledgment copy.
+                                    Lodge formal letters directly with Central Registry and receive an electronic stamped acknowledgment receipt.
                                 </p>
                             </div>
                             <div className="pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => setIsWriteModalOpen(true)}
-                                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                                    onClick={() => {
+                                        setWriteModalMode('DIRECT_REGISTRY');
+                                        setIsWriteModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition shadow-md active:scale-95"
                                 >
                                     <Send size={14} />
-                                    <span>Write First Application</span>
+                                    <span>Write Direct Application</span>
                                 </button>
                             </div>
                         </div>
@@ -338,79 +525,57 @@ function LeavesContent() {
                                             <th className="px-6 py-3.5">Subject &amp; Category</th>
                                             <th className="px-6 py-3.5">Directorate / Unit</th>
                                             <th className="px-6 py-3.5">Priority</th>
-                                            <th className="px-6 py-3.5">Registry Acknowledgment</th>
+                                            <th className="px-6 py-3.5">Status</th>
                                             <th className="px-6 py-3.5 text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-xs">
                                         {officialApps.map((app) => {
-                                            const isAck = app.status === 'ACKNOWLEDGED' || !!app.registryStampNumber;
+                                            const isAcknowledged = app.status === 'ACKNOWLEDGED' || !!app.registryStampNumber;
                                             return (
-                                                <tr key={app.id} className="hover:bg-slate-50/80 transition-colors">
-                                                    {/* Reference & Date */}
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="font-mono font-bold text-slate-900">{app.referenceNumber}</div>
-                                                        <div className="text-[11px] text-slate-400 font-medium">
-                                                            {new Date(app.submittedAt || app.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Subject & Category */}
-                                                    <td className="px-6 py-4 max-w-xs">
-                                                        <div className="font-bold text-slate-900 line-clamp-1" title={app.subject}>
-                                                            {app.subject}
-                                                        </div>
-                                                        <span className="inline-block mt-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">
-                                                            {app.category.replace(/_/g, ' ')}
+                                                <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
+                                                    <td className="px-6 py-4 font-mono">
+                                                        <span className="font-bold text-[#006533]">{app.referenceNumber}</span>
+                                                        <span className="block text-[11px] text-slate-400 font-sans mt-0.5">
+                                                            {new Date(app.submittedAt).toLocaleDateString()}
                                                         </span>
                                                     </td>
-
-                                                    {/* Directorate / Unit */}
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="font-semibold text-slate-800">{app.applicantUnit || 'Unit / Directorate'}</div>
-                                                        <div className="text-slate-400 text-[10px]">{app.applicantRank || 'Staff'}</div>
+                                                    <td className="px-6 py-4 max-w-xs">
+                                                        <span className="font-bold text-slate-900 block truncate">{app.subject}</span>
+                                                        <span className="text-[11px] text-slate-500 font-medium">{app.category?.replace(/_/g, ' ')}</span>
                                                     </td>
-
-                                                    {/* Urgency */}
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                            app.urgency === 'HIGH_PRIORITY' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
-                                                            app.urgency === 'URGENT' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                                    <td className="px-6 py-4">
+                                                        <span className="font-semibold text-slate-800">{app.targetDirectorate || 'Registry / HR'}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                            app.urgency === 'HIGH_PRIORITY' ? 'bg-rose-100 text-rose-800' :
+                                                            app.urgency === 'URGENT' ? 'bg-amber-100 text-amber-800' :
                                                             'bg-slate-100 text-slate-700'
                                                         }`}>
                                                             {app.urgency}
                                                         </span>
                                                     </td>
-
-                                                    {/* Status & Stamp */}
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        {isAck ? (
-                                                            <div className="space-y-0.5">
-                                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                                                    <CheckCircle2 size={11} className="text-emerald-700" /> Stamped &amp; Acknowledged
-                                                                </span>
-                                                                <div className="text-[10px] font-mono text-emerald-900 font-semibold">
-                                                                    {app.registryStampNumber}
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                                                <Clock size={11} className="text-amber-700" /> Awaiting Registry Stamp
-                                                            </span>
-                                                        )}
+                                                    <td className="px-6 py-4">
+                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                                            isAcknowledged
+                                                                ? 'bg-emerald-100 text-[#006533] border border-emerald-300'
+                                                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                                        }`}>
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                                                            {isAcknowledged ? 'Stamped' : 'Pending'}
+                                                        </span>
                                                     </td>
-
-                                                    {/* Action */}
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                    <td className="px-6 py-4 text-right">
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedApp(app);
                                                                 setIsStampedViewerOpen(true);
                                                             }}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#006533] hover:text-white text-slate-800 text-xs font-bold transition shadow-xs"
+                                                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-[#006533] hover:text-white bg-emerald-50 hover:bg-[#006533] rounded-lg transition"
                                                         >
                                                             <Eye size={13} />
-                                                            <span>{isAck ? 'View Stamped Copy' : 'View Application'}</span>
+                                                            <span>{isAcknowledged ? 'View Stamped Copy' : 'View Letter'}</span>
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -424,149 +589,65 @@ function LeavesContent() {
                 </div>
             )}
 
-            {/* TAB 2: LEAVE & SABBATICAL APPLICATIONS */}
+            {/* TAB 3: LEAVES & SABBATICALS */}
             {mainTab === 'leaves' && (
                 <div className="space-y-6 animate-in fade-in duration-150">
-                    <div className="flex justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setIsSabbaticalModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-sm active:scale-95"
-                        >
-                            <FileText size={14} />
-                            <span>Sabbatical Apply</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsApplyModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-sm active:scale-95"
-                        >
-                            <Plus size={14} className="stroke-[2.5]" />
-                            <span>Apply for Leave</span>
-                        </button>
-                    </div>
-
-                    {/* Dynamic Statutory Annual Leave Balance Card */}
-                    {(() => {
-                        const annualBalance = balanceData?.balances?.find((b: any) => b.leaveType === 'ANNUAL');
-                        const isPrincipal = balanceData?.staffProfile?.isPrincipalOfficer;
-                        const defaultQuota = isPrincipal ? 42 : 30;
-                        const totalEntitled = annualBalance?.totalDaysEntitled ?? defaultQuota;
-                        const daysUsed = annualBalance?.daysUtilized ?? 0;
-                        const daysAvailable = annualBalance?.daysRemaining ?? defaultQuota;
-
-                        return (
-                            <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-blue-800/40">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[11px] uppercase tracking-widest font-black text-blue-300">
-                                                {balanceData?.staffProfile?.salaryScale || 'CONTISS'} Scale • {isPrincipal ? 'Principal Officer Quota' : 'Statutory Cadre Entitlement'}
-                                            </span>
-                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-500/20 text-blue-200 border border-blue-400/30">
-                                                {balanceData?.year || new Date().getFullYear()} Statutory Cycle
-                                            </span>
-                                        </div>
-                                        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                                            Annual Leave Entitlement Balance
-                                        </h2>
-                                        <p className="text-xs text-blue-200/80 font-medium">
-                                            Net statutory working days (strictly excluding Saturdays, Sundays, and official national holidays)
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3 flex-wrap">
-                                        <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 text-center min-w-[100px]">
-                                            <span className="text-[10px] uppercase font-bold text-blue-200 block">Total Entitled</span>
-                                            <span className="text-2xl font-black text-white">{totalEntitled} Days</span>
-                                        </div>
-                                        <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 text-center min-w-[100px]">
-                                            <span className="text-[10px] uppercase font-bold text-amber-300 block">Days Utilized</span>
-                                            <span className="text-2xl font-black text-amber-300">{daysUsed} Days</span>
-                                        </div>
-                                        <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-2.5 rounded-xl border border-emerald-400/30 text-center min-w-[100px]">
-                                            <span className="text-[10px] uppercase font-bold text-emerald-300 block">Available</span>
-                                            <span className="text-2xl font-black text-emerald-300">{daysAvailable} Days</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Specialized Leave Status Pills */}
-                                {balanceData?.balances && balanceData.balances.length > 1 && (
-                                    <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-xs">
-                                        {balanceData.balances.filter((b: any) => b.leaveType !== 'ANNUAL').map((b: any) => (
-                                            <span key={b.id} className="px-3 py-1 rounded-lg bg-white/10 border border-white/10 font-medium text-slate-200">
-                                                <strong className="text-white">{b.leaveType.replace(/_/g, ' ')}:</strong> {b.daysRemaining} days remaining
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
-
-                    {user?.staffProfile?.status === 'ON_LEAVE' && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm animate-in fade-in">
-                            <div className="flex gap-3.5 items-center">
-                                <div className="h-11 w-11 bg-emerald-600 text-white rounded-xl flex items-center justify-center flex-none shadow-sm">
-                                    <Clock size={22} />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-emerald-950 text-sm">You are currently marked On Leave</h3>
-                                    <p className="text-xs text-emerald-800 font-medium mt-0.5">If you have returned early or officially resumed duty, record your resumption to restore your portal status to Active.</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleResumeFromLeave}
-                                disabled={resuming}
-                                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-400 text-white text-xs font-bold rounded-xl shadow transition-all flex-none active:scale-95"
-                            >
-                                {resuming ? 'Recording Resumption...' : 'Record Resumption'}
-                            </button>
+                    {/* Leave Balances Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-emerald-600">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Annual Leave Balance</span>
+                            <span className="text-2xl font-black text-slate-900 block">
+                                {balanceData?.annualLeaveRemaining ?? 30} Days
+                            </span>
+                            <span className="text-[10px] text-slate-400">Statutory Entitlement</span>
                         </div>
-                    )}
 
-                    {/* Quick Metrics Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="enterprise-card p-5 space-y-1 hover:border-[#006533]/30 transition-all">
-                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Total Applied</span>
-                            <span className="text-3xl font-black text-slate-900 block tracking-tight">{leaveTotal}</span>
-                            <span className="text-[11px] font-semibold text-slate-400">All lifetime submissions</span>
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-blue-600">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Leave Days Taken</span>
+                            <span className="text-2xl font-black text-slate-900 block">
+                                {balanceData?.annualLeaveUsed ?? 0} Days
+                            </span>
+                            <span className="text-[10px] text-slate-400">Current Academic Year</span>
                         </div>
-                        <div className="enterprise-card p-5 space-y-1 hover:border-amber-300 transition-all">
-                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Pending</span>
-                            <span className="text-3xl font-black text-amber-600 block tracking-tight">{leavePending}</span>
-                            <span className="text-[11px] font-semibold text-amber-600/80">Awaiting approval review</span>
+
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-amber-500">
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Pending Approval</span>
+                            <span className="text-2xl font-black text-amber-600 block">{leavePending}</span>
+                            <span className="text-[10px] text-amber-600/80">Under Unit Head / Registry review</span>
                         </div>
-                        <div className="enterprise-card p-5 space-y-1 hover:border-emerald-300 transition-all">
-                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Approved</span>
-                            <span className="text-3xl font-black text-emerald-600 block tracking-tight">{leaveApproved}</span>
-                            <span className="text-[11px] font-semibold text-emerald-600/80">Active &amp; confirmed leaves</span>
-                        </div>
-                        <div className="enterprise-card p-5 space-y-1 hover:border-rose-300 transition-all">
-                            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Rejected</span>
-                            <span className="text-3xl font-black text-rose-600 block tracking-tight">{leaveRejected}</span>
-                            <span className="text-[11px] font-semibold text-rose-600/80">Returned requests</span>
+
+                        <div className="enterprise-card p-4 space-y-1 border-l-4 border-l-purple-600">
+                            <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">Approved Applications</span>
+                            <span className="text-2xl font-black text-purple-600 block">{leaveApproved}</span>
+                            <span className="text-[10px] text-purple-600/80">Statutory clearances granted</span>
                         </div>
                     </div>
 
-                    {/* Main Leaves List */}
-                    {leaves.length === 0 ? (
+                    {/* Active Leaves List */}
+                    {loadingLeaves ? (
+                        <div className="enterprise-card p-12 text-center text-slate-400 space-y-2">
+                            <RefreshCw size={24} className="mx-auto animate-spin text-[#006533]" />
+                            <p className="text-xs font-bold">Loading your leave records...</p>
+                        </div>
+                    ) : leaves.length === 0 ? (
                         <div className="enterprise-card p-12 text-center max-w-xl mx-auto space-y-4">
-                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-sm border border-[#006533]/20">
+                            <div className="w-16 h-16 bg-[#006533]/10 text-[#006533] rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-[#006533]/20">
                                 <Calendar size={28} />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No leave applications yet</h3>
-                                <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">When you submit a leave request, it will appear here with its approval status and stamped certificates.</p>
+                                <h3 className="font-bold text-slate-900 text-base sm:text-lg">No leave applications on file</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
+                                    You have not applied for statutory annual leave, study leave, casual leave, or sabbatical.
+                                </p>
                             </div>
                             <div className="pt-2">
                                 <button
                                     type="button"
                                     onClick={() => setIsApplyModalOpen(true)}
-                                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition shadow-md active:scale-95"
                                 >
-                                    <Plus size={14} className="stroke-[2.5]" />
-                                    <span>Apply Now</span>
+                                    <Plus size={14} />
+                                    <span>Apply for Leave Now</span>
                                 </button>
                             </div>
                         </div>
@@ -576,69 +657,43 @@ function LeavesContent() {
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="sticky top-0 bg-slate-50/95 backdrop-blur-sm text-[11px] font-bold uppercase text-slate-500 tracking-wider border-b border-slate-200/80">
-                                            <th className="px-6 py-3.5">Leave Type</th>
+                                            <th className="px-6 py-3.5">Category</th>
+                                            <th className="px-6 py-3.5">Start Date</th>
+                                            <th className="px-6 py-3.5">End Date</th>
                                             <th className="px-6 py-3.5">Duration</th>
-                                            <th className="px-6 py-3.5">Dates</th>
-                                            <th className="px-6 py-3.5">Reason for Apply</th>
-                                            <th className="px-6 py-3.5">Status</th>
+                                            <th className="px-6 py-3.5">Workflow Status</th>
+                                            <th className="px-6 py-3.5 text-right">Remarks</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {leaves.map((leave) => {
-                                            const duration = leave.durationDays || Math.ceil((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / (1000 * 60 * 60 * 24)) || 1;
-                                            return (
-                                                <tr key={leave.id} className="hover:bg-slate-50/80 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className="font-bold text-slate-900 text-xs sm:text-sm">{leave.type}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className="text-slate-700 font-semibold text-xs sm:text-sm">{duration} Days</span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                                                        <div className="font-bold text-slate-800">
-                                                            {new Date(leave.startDate).toLocaleDateString()}
-                                                        </div>
-                                                        <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                                                            to {new Date(leave.endDate).toLocaleDateString()}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 max-w-xs text-xs text-slate-600 truncate font-medium" title={(leave.reason || '').replace(/<[^>]*>/g, '')}>
-                                                        {(leave.reason || '').replace(/<[^>]*>/g, '') || 'N/A'}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex flex-col gap-1.5 items-start">
-                                                            {getLeaveStatusBadge(leave.status)}
-
-                                                            {/* Signature block */}
-                                                            {(leave.status === 'APPROVED' || leave.status === 'REJECTED') && leave.approvedBy?.staffProfile?.signatureUrl && (
-                                                                <div className="mt-1 flex flex-col gap-1 border border-slate-200/80 bg-slate-50/90 p-2.5 rounded-xl shadow-sm min-w-[130px]">
-                                                                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                                                                        {leave.status === 'APPROVED' ? 'Approved by' : 'Rejected by'}:
-                                                                    </div>
-                                                                    <div className="text-[10px] text-slate-800 font-black truncate max-w-[120px]">
-                                                                        {leave.approvedBy.name}
-                                                                    </div>
-                                                                    <img
-                                                                        src={getImageUrl(leave.approvedBy.staffProfile.signatureUrl)}
-                                                                        alt="Signature"
-                                                                        className="max-h-[26px] object-contain border border-slate-200 bg-white rounded p-0.5 shadow-2xs"
-                                                                    />
-                                                                    <div className="text-[9px] text-slate-400 font-medium">
-                                                                        {leave.updatedAt ? new Date(leave.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {leave.status === 'REJECTED' && leave.rejectionReason && (
-                                                                <span className="text-[11px] text-rose-600 max-w-[200px] whitespace-normal leading-tight italic font-medium">
-                                                                    &quot;{leave.rejectionReason}&quot;
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                        {leaves.map((leave: any) => (
+                                            <tr key={leave.id} className="hover:bg-slate-50/60 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-900">
+                                                    {(leave.type || leave.leaveType || 'ANNUAL').replace(/_/g, ' ')}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600">
+                                                    {new Date(leave.startDate).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600">
+                                                    {new Date(leave.endDate).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 font-semibold text-slate-800">
+                                                    {leave.days || leave.durationDays || leave.workingDaysCount || 'N/A'} Days
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                                        leave.status === 'APPROVED' ? 'bg-emerald-100 text-[#006533]' :
+                                                        leave.status === 'REJECTED' ? 'bg-rose-100 text-rose-800' :
+                                                        'bg-amber-100 text-amber-800'
+                                                    }`}>
+                                                        {leave.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-slate-500 italic max-w-xs truncate">
+                                                    {leave.comment || leave.rejectionReason || '—'}
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -647,25 +702,111 @@ function LeavesContent() {
                 </div>
             )}
 
-            {/* Modals */}
+            {/* Unified Write Application Modal */}
             <WriteOfficialApplicationModal
                 isOpen={isWriteModalOpen}
                 onClose={() => setIsWriteModalOpen(false)}
-                onSuccess={fetchOfficialApps}
+                onSuccess={() => {
+                    fetchInstitutionalApps();
+                    fetchOfficialApps();
+                }}
+                initialMode={writeModalMode}
             />
 
+            {/* Institutional Application Details Dossier Modal */}
+            <ApplicationDetailsModal
+                application={selectedInstApp}
+                isOpen={isInstDetailsOpen}
+                onClose={() => setIsInstDetailsOpen(false)}
+            />
+
+            {/* Resubmit Modal for Institutional Applications */}
+            {resubmittingApp && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="relative bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Revise &amp; Resubmit Application</h3>
+                                <p className="text-xs text-gray-500 font-mono">{resubmittingApp.referenceNumber}</p>
+                            </div>
+                            <button
+                                onClick={() => setResubmittingApp(null)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {resubmitError && (
+                            <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-semibold">
+                                {resubmitError}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleExecuteResubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                    Updated Application Content *
+                                </label>
+                                <textarea
+                                    required
+                                    rows={8}
+                                    value={resubmitContent}
+                                    onChange={(e) => setResubmitContent(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 font-sans"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                    Notes / Response to Director
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Attached requested admission letter and adjusted resumption dates."
+                                    value={resubmitComments}
+                                    onChange={(e) => setResubmitComments(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-3 border-t">
+                                <button
+                                    type="button"
+                                    onClick={() => setResubmittingApp(null)}
+                                    disabled={isResubmitting}
+                                    className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isResubmitting}
+                                    className="px-5 py-2 text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition shadow-xs flex items-center gap-2"
+                                >
+                                    {isResubmitting ? 'Resubmitting...' : 'Resubmit to Director'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Direct Official Stamped Application Viewer */}
             <StampedAcknowledgmentModal
                 isOpen={isStampedViewerOpen}
                 onClose={() => setIsStampedViewerOpen(false)}
                 application={selectedApp}
             />
 
+            {/* Apply Leave Modal */}
             <ApplyLeaveModal
                 isOpen={isApplyModalOpen}
                 onClose={() => setIsApplyModalOpen(false)}
                 onSuccess={fetchMyLeaves}
             />
 
+            {/* Sabbatical Modal */}
             <ApplySabbaticalModal
                 isOpen={isSabbaticalModalOpen}
                 onClose={() => setIsSabbaticalModalOpen(false)}

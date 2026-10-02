@@ -248,8 +248,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 )}
                 <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
-                <LinkItem href="/dashboard/portal/applications" icon={FileText} label="Institutional Applications" badge="Through Director" />
-                <LinkItem href="/dashboard/leaves" icon={Calendar} label="My Leaves" />
+                <LinkItem href="/dashboard/leaves" icon={FileText} label="My Applications" badge="Registry & Leaves" />
 
                 {/* System Administration */}
                 {isAdmin && (
