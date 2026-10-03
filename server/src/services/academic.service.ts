@@ -1,4 +1,6 @@
 import prisma from '../prisma';
+import { getCachedQuery, buildDbCacheKey } from '../utils/dbCache';
+import { cacheInvalidationService } from './cacheInvalidationService';
 
 export class AcademicService {
 
@@ -66,11 +68,19 @@ export class AcademicService {
 
     // Teaching Allocation
     static async getTeachingWorkload(staffId: string) {
-        return prisma.teachingAllocation.findMany({
-            where: { staffId },
-            include: { course: true }, // Join course details
-            orderBy: { session: 'desc' }
-        });
+        const cacheKey = buildDbCacheKey('academic:workload', staffId);
+        return getCachedQuery(
+            cacheKey,
+            300, // 5 minutes TTL
+            async () => {
+                return prisma.teachingAllocation.findMany({
+                    where: { staffId },
+                    include: { course: true }, // Join course details
+                    orderBy: { session: 'desc' }
+                });
+            },
+            ['tag:workload_all', `tag:workload_${staffId}`, 'tag:dean_workload_docket']
+        );
     }
 
     static async allocateTeaching(data: { staffId: string, courseCode: string, session: string, students: number }) {
@@ -87,7 +97,7 @@ export class AcademicService {
         });
 
         // 2. Create Allocation
-        return prisma.teachingAllocation.create({
+        const allocation = await prisma.teachingAllocation.create({
             data: {
                 staffId: data.staffId,
                 courseId: course.id,
@@ -95,5 +105,10 @@ export class AcademicService {
                 students: data.students
             }
         });
+
+        // 3. Event-Driven Cache Invalidation
+        await cacheInvalidationService.invalidateWorkload();
+
+        return allocation;
     }
 }

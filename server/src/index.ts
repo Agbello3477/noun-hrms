@@ -48,6 +48,8 @@ import officialApplicationRoutes from './routes/official-application.routes';
 import docketRoutes from './routes/applications/docket.routes';
 import fileRequisitionRegistryRoutes from './routes/registry/fileRequisition.routes';
 import fileRequisitionRegistrarRoutes from './routes/registrar/fileRequisition.routes';
+import metaRoutes from './routes/meta.routes';
+import { edgeCacheControlMiddleware } from './middleware/edgeCacheControl.middleware';
 import { setDocketSocketIO } from './services/docketNotification.service';
 import { observabilityMiddleware } from './middleware/observability.middleware';
 import { jobQueueService } from './services/jobQueue.service';
@@ -137,7 +139,10 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 // 6. Mount Application-Level WAF Stage 2 (Body Inspector: Deep SQLi, XSS, NoSQL, Prototype Pollution, Cmd Injection)
 app.use(createWafBodyInspectorMiddleware({ sentinelInstance: sentinel }));
 
-// Serve Uploads with explicit Cross-Origin and Byte-Range headers for smooth audio/video streaming
+// 7. Layer 1: CDN & Edge Caching Header Enforcement (Zero-Trust Security & Public Metadata Acceleration)
+app.use(edgeCacheControlMiddleware);
+
+// Serve Uploads with explicit Cross-Origin, Immutable Caching, and Byte-Range headers for smooth audio/video streaming
 const uploadDirs = [
     path.join(process.cwd(), 'uploads'),
     path.join(__dirname, '../uploads'),
@@ -154,6 +159,7 @@ app.use('/uploads', (req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
     }
@@ -218,6 +224,14 @@ app.use('/api/v1/registry/file-requests', fileRequisitionRegistryRoutes);
 app.use('/api/registry/file-requests', fileRequisitionRegistryRoutes);
 app.use('/api/v1/registrar/file-requests', fileRequisitionRegistrarRoutes);
 app.use('/api/registrar/file-requests', fileRequisitionRegistrarRoutes);
+
+// Public University Metadata & Shared Catalog Endpoints (Edge & In-Memory Accelerated)
+app.use('/api/v1/meta', metaRoutes);
+app.use('/api/meta', metaRoutes);
+app.use('/api/v1/academic/programmes', (req, res, next) => {
+    req.url = '/programmes';
+    metaRoutes(req, res, next);
+});
 
 import prisma from './prisma';
 import { redisService } from './services/redis.service';

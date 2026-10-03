@@ -4,6 +4,7 @@ import { requireImputerRole, Permission, requirePermission } from '../../middlew
 import prisma from '../../prisma';
 import { Role, TransferStatus, StaffStatus } from '@prisma/client';
 import { calculateNextPromotionMaturity } from '../../utils/promotionCalculator';
+import { cacheInvalidationService } from '../../services/cacheInvalidationService';
 import bcrypt from 'bcryptjs';
 
 const router = Router();
@@ -134,6 +135,9 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
                 }
             }).catch(() => {});
         }
+
+        // Invalidate staff postings docket cache
+        await cacheInvalidationService.invalidateStaffPostings();
 
         res.status(201).json({
             message: 'Staff posting drafted successfully and staged for Registrar authorization.',
@@ -349,6 +353,9 @@ router.post('/files/initiate', requirePermission(Permission.CAN_IMPUTE_STAFF_FIL
             }).catch(() => {});
         }
 
+        await cacheInvalidationService.invalidateStaffRoster();
+        await cacheInvalidationService.invalidateFileRequisitions();
+
         res.status(201).json({
             message: 'Staff file initiated successfully and staged for Registrar clearance.',
             staffId: generatedStaffId,
@@ -440,6 +447,8 @@ router.post('/promotions/request-override', requirePermission(Permission.CAN_REQ
                 }
             }).catch(() => {});
         }
+
+        await cacheInvalidationService.invalidatePromotions();
 
         res.json({
             message: 'Promotion override request staged for Registrar review.',

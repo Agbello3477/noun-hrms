@@ -8,6 +8,7 @@ import {
   sendRegistrarFinalDeterminationEmail,
 } from '../services/docketNotification.service';
 import { notifyUser } from './notification.controller';
+import { cacheInvalidationService } from '../services/cacheInvalidationService';
 import { ApplicationCategory } from '@prisma/client';
 
 /**
@@ -206,6 +207,8 @@ export async function submitApplication(req: Request, res: Response) {
       actionUrl: '/director/applications/pending',
     });
 
+    await cacheInvalidationService.invalidateInstitutionalApplications();
+
     return res.status(201).json({
       success: true,
       message: 'Application successfully submitted and routed to Director.',
@@ -320,6 +323,8 @@ export async function resubmitApplication(req: Request, res: Response) {
       remarks: applicantRemarks || 'Revised by applicant',
       actionUrl: '/director/applications/pending',
     });
+
+    await cacheInvalidationService.invalidateInstitutionalApplications();
 
     return res.status(200).json({
       success: true,
@@ -498,6 +503,8 @@ export async function directorAction(req: Request, res: Response) {
       actionUrl: '/portal/applications/my-applications',
     });
 
+    await cacheInvalidationService.invalidateInstitutionalApplications();
+
     return res.status(200).json({
       success: true,
       message: `Application successfully ${decision.toLowerCase()}ed by Director.`,
@@ -635,6 +642,8 @@ export async function registryAcknowledge(req: Request, res: Response) {
       remarks: `Folio stamped: ${folioNumber}`,
       actionUrl: '/registrar-cockpit/applications',
     });
+
+    await cacheInvalidationService.invalidateInstitutionalApplications();
 
     return res.status(200).json({
       success: true,
@@ -850,6 +859,8 @@ export async function registrarDecision(req: Request, res: Response) {
       remarks: registrarRemarks,
       actionUrl: '/portal/applications/my-applications',
     });
+
+    await cacheInvalidationService.invalidateInstitutionalApplications();
 
     return res.status(200).json({
       success: true,

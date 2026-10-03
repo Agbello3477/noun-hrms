@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { redisService } from '../services/redis.service';
+import { cacheInvalidationService } from '../services/cacheInvalidationService';
 
 export async function authorizeStaffPostingHandler(req: Request, res: Response) {
   const authorizerId = (req as any).user.id;
@@ -88,8 +89,10 @@ export async function authorizeStaffPostingHandler(req: Request, res: Response) 
       return updatedPosting;
     });
 
-    // Invalidate caches
+    // Invalidate caches atomically using tags and user session purges
     await Promise.all([
+      cacheInvalidationService.invalidateStaffPostings(),
+      cacheInvalidationService.invalidateUserCache(result.staffId),
       redisService.clearPattern('staff:*'),
       redisService.clearPattern('registrar:*'),
       redisService.clearPattern('analytics:*')

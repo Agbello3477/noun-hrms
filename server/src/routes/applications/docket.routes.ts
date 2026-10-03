@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/requireRole';
+import { cacheMiddleware } from '../../middleware/cacheMiddleware';
 import {
   submitApplication,
   resubmitApplication,
@@ -31,11 +32,11 @@ router.post('/submit', submitApplication);
 // Resubmit application after Director rewrite request
 router.put('/:id/resubmit', resubmitApplication);
 
-// Fetch my submitted applications
-router.get('/my-applications', getMyApplications);
+// Fetch my submitted applications (Session-isolated 15s cache)
+router.get('/my-applications', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getMyApplications);
 
-// Fetch eligible Directors for submission dropdown
-router.get('/directors', getEligibleDirectors);
+// Fetch eligible Directors for submission dropdown (60s cache)
+router.get('/directors', cacheMiddleware(60, { tags: ['tag:staff_roster'] }), getEligibleDirectors);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 2: DIRECTORATE VETTING
@@ -48,10 +49,11 @@ router.put(
   directorAction
 );
 
-// Director pending queue
+// Director pending queue (10s active docket cache)
 router.get(
   '/director-queue',
   requireRole(['UNIT_HEAD', 'DIRECTOR', 'DEAN', 'SUPER_USER', 'VICE_CHANCELLOR'] as any),
+  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
   getDirectorQueue
 );
 
@@ -66,10 +68,11 @@ router.put(
   registryAcknowledge
 );
 
-// Registry Inward Desk queue
+// Registry Inward Desk queue (10s active docket cache)
 router.get(
   '/registry-queue',
   requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'REGISTRAR'] as any),
+  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
   getRegistryQueue
 );
 
@@ -84,10 +87,11 @@ router.put(
   registrarDecision
 );
 
-// Registrar Executive application queue
+// Registrar Executive application queue (10s active docket cache)
 router.get(
   '/registrar-queue',
   requireRole(['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
+  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
   getRegistrarQueue
 );
 
@@ -95,10 +99,10 @@ router.get(
 // MASTER ARCHIVE & DETAIL LOOKUP
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Registry Permanent Master Application Archive
-router.get('/archive', getMasterArchive);
+// Registry Permanent Master Application Archive (30s cache)
+router.get('/archive', cacheMiddleware(30, { tags: ['tag:institutional_applications'] }), getMasterArchive);
 
-// Application details by ID with complete revision audit trail
-router.get('/:id', getApplicationById);
+// Application details by ID with complete revision audit trail (15s cache)
+router.get('/:id', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getApplicationById);
 
 export default router;

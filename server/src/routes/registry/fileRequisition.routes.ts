@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/requireRole';
+import { cacheMiddleware } from '../../middleware/cacheMiddleware';
 import {
   lodgeRequisition,
   acknowledgeRequisition,
@@ -21,12 +22,13 @@ router.use(verifyToken);
 
 // ─── TIER 1: LODGE REQUISITION & PERSONAL VIEWS ──────────────────────────────
 router.post('/lodge', lodgeRequisition);
-router.get('/my', getMyRequisitions);
+router.get('/my', cacheMiddleware(15, { tags: ['tag:file_requisitions'] }), getMyRequisitions);
 
 // ─── TIER 2: REGISTRY INTAKE & QUEUES ────────────────────────────────────────
 router.get(
   '/inward',
   requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
+  cacheMiddleware(10, { tags: ['tag:file_requisitions', 'tag:pending_file_docket'] }),
   getRegistryInwardQueue
 );
 
@@ -40,6 +42,7 @@ router.post(
 router.get(
   '/ready-for-dispatch',
   requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
+  cacheMiddleware(10, { tags: ['tag:file_requisitions', 'tag:pending_file_docket'] }),
   getReadyForDispatchQueue
 );
 
@@ -60,10 +63,11 @@ router.post(
 router.get(
   '/audit-ledger',
   requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
+  cacheMiddleware(15, { tags: ['tag:file_requisitions'] }),
   getCustodyAuditLedger
 );
 
 router.get('/:id/digital-view', getDigitalTranscript);
-router.get('/:id', getRequisitionById);
+router.get('/:id', cacheMiddleware(10, { tags: ['tag:file_requisitions'] }), getRequisitionById);
 
 export default router;

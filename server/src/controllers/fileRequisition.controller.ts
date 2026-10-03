@@ -9,6 +9,7 @@ import {
   Role,
 } from '@prisma/client';
 import { notifyUser } from './notification.controller';
+import { cacheInvalidationService } from '../services/cacheInvalidationService';
 
 /**
  * Generate unique Requisition Number: NOUN/REQ/FILE/YYYY/NNNNN
@@ -191,6 +192,8 @@ export async function lodgeRequisition(req: Request, res: Response) {
       `/registry/file-requests/inward`
     );
 
+    await cacheInvalidationService.invalidateFileRequisitions();
+
     return res.status(201).json({
       success: true,
       data: result,
@@ -348,6 +351,8 @@ export async function acknowledgeRequisition(req: Request, res: Response) {
       'INFO',
       `/registry/file-requests/my`
     );
+
+    await cacheInvalidationService.invalidateFileRequisitions();
 
     return res.status(200).json({
       success: true,
@@ -533,6 +538,8 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
       `/registry/file-requests/my`
     );
 
+    await cacheInvalidationService.invalidateFileRequisitions();
+
     return res.status(200).json({
       success: true,
       data: updated,
@@ -642,6 +649,8 @@ export async function dispatchRequisition(req: Request, res: Response) {
       `/registry/file-requests/my`
     );
 
+    await cacheInvalidationService.invalidateFileRequisitions();
+
     return res.status(200).json({
       success: true,
       data: updated,
@@ -727,6 +736,8 @@ export async function returnRequisition(req: Request, res: Response) {
       'INFO',
       `/registry/file-requests/my`
     );
+
+    await cacheInvalidationService.invalidateFileRequisitions();
 
     return res.status(200).json({
       success: true,

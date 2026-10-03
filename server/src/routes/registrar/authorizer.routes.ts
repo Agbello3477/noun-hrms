@@ -7,6 +7,7 @@ import { Role, TransferStatus, AuthorizationEntityType, AuthorizationActionTaken
 import { sendAccountCreatedNotification } from '../../services/email.service';
 import { notifyUser } from '../../controllers/notification.controller';
 import { redisService } from '../../services/redis.service';
+import { cacheInvalidationService } from '../../services/cacheInvalidationService';
 import crypto from 'crypto';
 
 const router = Router();
@@ -257,8 +258,10 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
                 ).catch(() => {});
             }
 
-            // Invalidate Caches
+            // Invalidate Caches atomically via tags and user session purges
             await Promise.all([
+                cacheInvalidationService.invalidateStaffPostings(),
+                cacheInvalidationService.invalidateUserCache(posting.staffId),
                 redisService.clearPattern('staff:*'),
                 redisService.clearPattern('analytics:*'),
                 redisService.clearPattern('hr:analytics:*'),
@@ -337,6 +340,7 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
             }
 
             await Promise.all([
+                cacheInvalidationService.invalidateStaffPostings(),
                 redisService.clearPattern('staff:*'),
                 redisService.clearPattern('analytics:*'),
                 redisService.clearPattern('registrar:*')
@@ -388,6 +392,7 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
             }
 
             await Promise.all([
+                cacheInvalidationService.invalidateStaffPostings(),
                 redisService.clearPattern('staff:*'),
                 redisService.clearPattern('registrar:*')
             ]).catch(() => {});

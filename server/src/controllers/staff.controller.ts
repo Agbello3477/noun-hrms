@@ -10,6 +10,8 @@ import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
 import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
 import { PromotionService } from '../services/promotion.service';
+import { getCachedQuery, buildDbCacheKey } from '../utils/dbCache';
+import { cacheInvalidationService } from '../services/cacheInvalidationService';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
@@ -1300,44 +1302,54 @@ export const getDueForPromotion = async (req: Request, res: Response) => {
             };
         }
 
-        const [logs, total] = await Promise.all([
-            prisma.promotionLog.findMany({
-                where,
-                skip,
-                take,
-                orderBy: { cronExecutedAt: 'desc' },
-                include: {
-                    staffProfile: {
-                        select: {
-                            staffId:       true,
-                            surname:       true,
-                            otherNames:    true,
-                            title:         true,
-                            rank:          true,
-                            level:         true,
-                            step:          true,
-                            cadre:         true,
-                            department:    true,
-                            isDueForPromotion: true,
-                            promotionFlaggedAt: true,
-                            dateOfLastPromotion: true,
-                            unit:          { select: { name: true } },
-                            studyCenter:   { select: { name: true } },
-                            user:          { select: { email: true } },
+        const cacheKey = buildDbCacheKey('staff:promotions:due', calendarYear, String(page || '1'), take, String(search || 'all'));
+        const result = await getCachedQuery(
+            cacheKey,
+            120, // 2 minutes TTL
+            async () => {
+                const [logs, total] = await Promise.all([
+                    prisma.promotionLog.findMany({
+                        where,
+                        skip,
+                        take,
+                        orderBy: { cronExecutedAt: 'desc' },
+                        include: {
+                            staffProfile: {
+                                select: {
+                                    staffId:       true,
+                                    surname:       true,
+                                    otherNames:    true,
+                                    title:         true,
+                                    rank:          true,
+                                    level:         true,
+                                    step:          true,
+                                    cadre:         true,
+                                    department:    true,
+                                    isDueForPromotion: true,
+                                    promotionFlaggedAt: true,
+                                    dateOfLastPromotion: true,
+                                    unit:          { select: { name: true } },
+                                    studyCenter:   { select: { name: true } },
+                                    user:          { select: { email: true } },
+                                }
+                            }
                         }
-                    }
-                }
-            }),
-            prisma.promotionLog.count({ where })
-        ]);
+                    }),
+                    prisma.promotionLog.count({ where })
+                ]);
 
-        res.json({
-            data: logs,
-            total,
-            page:  parseInt(String(page)),
-            pages: Math.ceil(total / take),
-            year:  calendarYear,
-        });
+                return {
+                    data: logs,
+                    total,
+                    page:  parseInt(String(page)),
+                    pages: Math.ceil(total / take),
+                    year:  calendarYear,
+                };
+            },
+            ['tag:due_for_promotion', 'tag:promotion_records']
+        );
+
+        res.json(result);
     } catch (error) {
         console.error('getDueForPromotion error:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -1382,6 +1394,9 @@ export const flagForPromotion = async (req: Request, res: Response) => {
         const staffName = `${profile.surname || ''} ${profile.otherNames || ''}`.trim();
         const action = isDue ? 'flagged as DUE for promotion' : 'cleared from promotion list';
         console.log(`[PROMOTION] ${staffName} (${profile.staffId}) was ${action} by user ${requesterId}`);
+
+        // Invalidate promotion caches
+        await cacheInvalidationService.invalidatePromotions();
 
         res.json({ message: `Staff member ${action} successfully.`, profile: updated });
     } catch (error) {
