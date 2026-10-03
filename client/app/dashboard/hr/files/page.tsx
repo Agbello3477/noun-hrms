@@ -184,14 +184,14 @@ export default function FileRegistryPage() {
                 </div>
                 <div className="flex flex-wrap gap-2.5 items-center">
                     <button
-                        onClick={() => router.push('/registry/file-requests/inward')}
+                        onClick={() => router.push('/dashboard/registry/file-requests/inward')}
                         className="flex items-center gap-2 px-3.5 py-2 border border-emerald-400 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-xs text-sm font-semibold transition"
                     >
                         <FolderOpen size={16} />
                         File Intake &amp; Folio Desk
                     </button>
                     <button
-                        onClick={() => router.push('/registry/file-requests/ready-for-dispatch')}
+                        onClick={() => router.push('/dashboard/registry/file-requests/ready-for-dispatch')}
                         className="flex items-center gap-2 px-3.5 py-2 border border-blue-400 bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-xs text-sm font-semibold transition"
                     >
                         <PackageCheck size={16} />

@@ -12,7 +12,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!isLoading && user) {
-            const isHR = user.role === 'HR_ADMIN' || user.role === 'SUPER_USER' || user.role === 'ADMIN';
+            const isHR = ['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR'].includes(user.role || '');
             const isUnitHead = user.role === 'UNIT_HEAD' || user.role === 'STUDY_CENTER_MANAGER' || user.role === 'UNIT_ADMIN';
             
             if (isUnitHead && !isHR) {

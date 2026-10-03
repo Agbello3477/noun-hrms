@@ -222,13 +222,13 @@ export default function RegistryFileRequestsGatewayPage() {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <Link
-            href="/registry/file-requests/inward"
+            href="/dashboard/registry/file-requests/inward"
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
           >
             <FolderOpen className="w-3.5 h-3.5 text-emerald-700" /> Inward Desk Page
           </Link>
           <Link
-            href="/registry/file-requests/ready-for-dispatch"
+            href="/dashboard/registry/file-requests/ready-for-dispatch"
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
           >
             <PackageCheck className="w-3.5 h-3.5 text-blue-700" /> Dispatch Board Page
