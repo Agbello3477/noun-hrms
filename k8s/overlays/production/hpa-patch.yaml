@@ -1,0 +1,15 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: noun-backend-hpa
+spec:
+  minReplicas: 4
+  maxReplicas: 25
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: noun-frontend-hpa
+spec:
+  minReplicas: 3
+  maxReplicas: 15

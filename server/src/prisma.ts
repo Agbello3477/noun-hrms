@@ -120,8 +120,8 @@ function isRetryableError(error: any): boolean {
  * Creates a stabilized Prisma client with automatic exponential backoff retry
  * for cloud databases, connection poolers, and cold starts.
  */
-function createPrismaClient(): PrismaClient {
-  const optimizedUrl = buildOptimizedDatabaseUrl();
+export function createPrismaClient(customUrl?: string): PrismaClient {
+  const optimizedUrl = buildOptimizedDatabaseUrl(customUrl);
 
   const baseClient = new PrismaClient({
     datasources: {

@@ -35,12 +35,6 @@ class JobQueueService {
     }
 
     startWorker(): void {
-        const isOnline = redisService.isOnline();
-        if (!isOnline) {
-            logger.warn('[Queue] Redis is offline. Background worker will not start.');
-            return;
-        }
-
         if (this.isRunning) return;
         this.isRunning = true;
         logger.info('[Queue] Background job worker started.');
@@ -48,6 +42,13 @@ class JobQueueService {
         const workerLoop = async () => {
             while (this.isRunning) {
                 try {
+                    const isOnline = redisService.isOnline();
+                    if (!isOnline) {
+                        // Sleep if Redis is disconnected to avoid busy-polling log spam
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        continue;
+                    }
+
                     // Block for up to 5 seconds waiting for a new job in the list
                     const result = await redisService.brpop(this.queueKey, 5);
                     if (result) {
@@ -57,11 +58,14 @@ class JobQueueService {
 
                         logger.info(`[Queue] Worker picking up job: ${jobType}`);
                         await this.processJob(jobType, payload);
+                    } else {
+                        // Idle backoff when queue is empty
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 } catch (error: any) {
                     logger.error('[Queue] Background worker encountered error in loop', { error: error.message });
                     // Sleep to prevent infinite hot loop crash
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                 }
             }
         };

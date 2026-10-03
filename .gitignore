@@ -35,3 +35,8 @@ Thumbs.db
 # Playwright Test Artifacts
 playwright-report/
 test-results/
+
+# Temporary uploads and cache
+server/uploads/
+.firebase/
+

@@ -46,28 +46,26 @@ export async function getCachedQuery<T>(
     // 2. Cache MISS or failed: execute database query
     const result = await queryExecutionFn();
 
-    // 3. Cache the computed result asynchronously (non-blocking)
+    // 3. Cache the computed result
     if (result !== undefined && result !== null) {
-        (async () => {
-            try {
-                await redisService.set(cacheKey, result, ttlSeconds);
+        try {
+            await redisService.set(cacheKey, result, ttlSeconds);
 
-                // Index key under tags for atomic event-driven invalidation
-                if (options.tags && options.tags.length > 0) {
-                    for (const tag of options.tags) {
-                        const normalizedTag = tag.startsWith('tag:') ? tag : `tag:${tag}`;
-                        await redisService.sadd(normalizedTag, cacheKey);
-                        // Ensure tag set stays alive at least as long as the key TTL
-                        await redisService.expire(normalizedTag, ttlSeconds * 2);
-                    }
+            // Index key under tags for atomic event-driven invalidation
+            if (options.tags && options.tags.length > 0) {
+                for (const tag of options.tags) {
+                    const normalizedTag = tag.startsWith('tag:') ? tag : `tag:${tag}`;
+                    await redisService.sadd(normalizedTag, cacheKey);
+                    // Ensure tag set stays alive at least as long as the key TTL
+                    await redisService.expire(normalizedTag, ttlSeconds * 2);
                 }
-            } catch (cacheErr: any) {
-                logger.warn('dbCache write failed', {
-                    key: cacheKey,
-                    error: cacheErr?.message
-                });
             }
-        })().catch(() => {});
+        } catch (cacheErr: any) {
+            logger.warn('dbCache write failed', {
+                key: cacheKey,
+                error: cacheErr?.message
+            });
+        }
     }
 
     return result;

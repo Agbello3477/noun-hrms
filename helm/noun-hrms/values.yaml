@@ -1,0 +1,92 @@
+# Default values for noun-hrms Helm Chart
+
+global:
+  environment: production
+  imagePullPolicy: IfNotPresent
+
+backend:
+  replicaCount: 3
+  image:
+    repository: ghcr.io/agbello3477/noun-hrms/server
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 5055
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 70
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/agbello3477/noun-hrms/client
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "NOUN_STICKY"
+  hosts:
+    - host: hrms.noun.edu.ng
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /socket.io
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls: []
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+database:
+  # Connection string for Managed Cloud Database (Cloud SQL, AWS RDS, Azure Database for PostgreSQL, Supabase)
+  managed: true
+  url: "postgresql://postgres:password@noun-db-cluster.postgres.database.azure.com:5432/noun_hrms?sslmode=require&connection_limit=50&pool_timeout=15"
+  readReplicaUrl: "postgresql://postgres:password@noun-db-replica.postgres.database.azure.com:5432/noun_hrms?sslmode=require&connection_limit=50&pool_timeout=15"

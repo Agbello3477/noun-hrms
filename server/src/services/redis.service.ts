@@ -33,6 +33,14 @@ class RedisService {
                     this.isEnabled = false;
                 });
 
+                this.client.on('close', () => {
+                    this.isEnabled = false;
+                });
+
+                this.client.on('ready', () => {
+                    this.isEnabled = true;
+                });
+
                 this.client.on('connect', () => {
                     this.isEnabled = true;
                 });
@@ -292,11 +300,11 @@ class RedisService {
     }
 
     isOnline(): boolean {
-        return this.isEnabled && this.client !== null;
+        return this.isEnabled && this.client !== null && (this.client as any).status === 'ready';
     }
 
     async lpush(key: string, value: string): Promise<number | null> {
-        if (!this.isEnabled || !this.client) return null;
+        if (!this.isEnabled || !this.client || (this.client as any).status !== 'ready') return null;
         try {
             return await this.withTimeout(this.client.lpush(key, value));
         } catch {
@@ -305,11 +313,16 @@ class RedisService {
     }
 
     async brpop(key: string, timeoutSeconds: number): Promise<[string, string] | null> {
-        if (!this.isEnabled || !this.client) return null;
+        if (!this.isEnabled || !this.client || (this.client as any).status !== 'ready') return null;
         try {
             return await this.client.brpop(key, timeoutSeconds);
         } catch (error) {
-            if (!(error instanceof Error && error.message.includes('Connection is closed'))) {
+            const msg = error instanceof Error ? error.message : String(error);
+            if (
+                !msg.includes('Connection is closed') &&
+                !msg.includes("Stream isn't writeable") &&
+                !msg.includes('enableOfflineQueue')
+            ) {
                 console.error('Redis brpop error:', error);
             }
             return null;

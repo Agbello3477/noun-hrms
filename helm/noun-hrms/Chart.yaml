@@ -1,0 +1,9 @@
+apiVersion: v2
+name: noun-hrms
+description: Enterprise Helm chart for National Open University of Nigeria (NOUN) Unified HRMS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: NOUN Directorate of MIS & ICT
+    email: mis@noun.edu.ng
