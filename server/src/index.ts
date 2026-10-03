@@ -163,8 +163,60 @@ app.use('/uploads', (req, res, next) => {
     if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
     }
+
+    const requestedFilename = decodeURIComponent(req.path.replace(/^\/+/, ''));
+    if (!requestedFilename) return next();
+
+    // Check all possible upload directories
+    for (const uDir of uploadDirs) {
+        const fullPath = path.join(uDir, requestedFilename);
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+            // Detect MIME type
+            const ext = path.extname(fullPath).toLowerCase();
+            let mimeType = 'application/octet-stream';
+
+            if (ext === '.pdf') {
+                mimeType = 'application/pdf';
+            } else if (ext === '.jpg' || ext === '.jpeg') {
+                mimeType = 'image/jpeg';
+            } else if (ext === '.png') {
+                mimeType = 'image/png';
+            } else if (ext === '.gif') {
+                mimeType = 'image/gif';
+            } else if (ext === '.svg') {
+                mimeType = 'image/svg+xml';
+            } else if (ext === '.webp') {
+                mimeType = 'image/webp';
+            } else if (ext === '.doc') {
+                mimeType = 'application/msword';
+            } else if (ext === '.docx') {
+                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            } else {
+                // Peek magic bytes for extensionless files (e.g. legacy Multer hex hashes)
+                try {
+                    const fd = fs.openSync(fullPath, 'r');
+                    const buffer = Buffer.alloc(16);
+                    fs.readSync(fd, buffer, 0, 16, 0);
+                    fs.closeSync(fd);
+
+                    if (buffer.toString('utf8', 0, 4) === '%PDF') {
+                        mimeType = 'application/pdf';
+                    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+                        mimeType = 'image/jpeg';
+                    } else if (buffer[0] === 0x89 && buffer.toString('utf8', 1, 4) === 'PNG') {
+                        mimeType = 'image/png';
+                    }
+                } catch {}
+            }
+
+            res.setHeader('Content-Type', mimeType);
+            res.setHeader('Content-Disposition', 'inline');
+            return res.sendFile(fullPath);
+        }
+    }
+
     next();
-}, express.static(path.join(process.cwd(), 'uploads')), express.static(path.join(__dirname, '../uploads')));
+});
 
 // Routes (Authenticated & Rate Limited)
 app.use('/api/auth', authRateLimit, authRoutes);

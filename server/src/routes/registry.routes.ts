@@ -28,10 +28,10 @@ import {
     getStaffMovementAuditReport
 } from '../controllers/registryReport.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { upload } from '../middleware/upload.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
-const upload = multer({ dest: 'uploads/' });
 
 router.use(verifyToken);
 

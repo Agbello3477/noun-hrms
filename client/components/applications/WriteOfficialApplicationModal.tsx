@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
     X, Send, Paperclip, AlertCircle, Building, User, Tag, Clock, 
-    FileText, CheckCircle2, ShieldCheck, ChevronRight, Info
+    FileText, CheckCircle2, ShieldCheck, ChevronRight, Info, Sparkles, Lock
 } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -40,9 +40,40 @@ interface DirectorOption {
     id: string;
     name: string;
     email: string;
+    role?: string;
     unit?: string;
     department?: string;
+    staffProfile?: {
+        rank?: string;
+        title?: string;
+        unit?: { id: string; name: string };
+        studyCenter?: { id: string; name: string };
+    };
 }
+
+interface DesignatedDirectorInfo {
+    id: string;
+    name: string;
+    email: string;
+    unit?: string;
+    role?: string;
+    reason?: string;
+}
+
+const LEADERSHIP_ROLES = [
+    'DIRECTOR',
+    'UNIT_HEAD',
+    'HOD',
+    'DEAN',
+    'HEAD_OF_ADMIN',
+    'REGISTRAR',
+    'HR_ADMIN',
+    'REGISTRY_ADMIN',
+    'SUPER_USER',
+    'ADMIN',
+    'STUDY_CENTER_MANAGER',
+    'VICE_CHANCELLOR'
+];
 
 export default function WriteOfficialApplicationModal({
     isOpen,
@@ -51,6 +82,7 @@ export default function WriteOfficialApplicationModal({
     initialMode = 'THROUGH_DIRECTOR'
 }: WriteOfficialApplicationModalProps) {
     const { user } = useAuth();
+    const isLeadership = Boolean(user && LEADERSHIP_ROLES.includes(user.role as string));
 
     // Routing Mode toggle: 'THROUGH_DIRECTOR' (Statutory) vs 'DIRECT_REGISTRY' (Desk/Stamp)
     const [routingMode, setRoutingMode] = useState<'THROUGH_DIRECTOR' | 'DIRECT_REGISTRY'>(initialMode);
@@ -58,11 +90,13 @@ export default function WriteOfficialApplicationModal({
     // Directors list for Through Director mode
     const [directors, setDirectors] = useState<DirectorOption[]>([]);
     const [directorId, setDirectorId] = useState('');
+    const [designatedDirector, setDesignatedDirector] = useState<DesignatedDirectorInfo | null>(null);
     const [loadingDirectors, setLoadingDirectors] = useState(false);
 
     // Form fields
     const [subject, setSubject] = useState('');
-    const [category, setCategory] = useState(STATUTORY_CATEGORIES[0].value);
+    const [category, setCategory] = useState(isLeadership ? STATUTORY_CATEGORIES[0].value : '');
+    const [customCategory, setCustomCategory] = useState('');
     const [urgency, setUrgency] = useState('NORMAL');
     const [content, setContent] = useState('');
     const [customUnit, setCustomUnit] = useState('');
@@ -76,18 +110,24 @@ export default function WriteOfficialApplicationModal({
         if (isOpen) {
             setRoutingMode(initialMode);
             loadEligibleDirectors();
+            if (!isLeadership) {
+                setUrgency('NORMAL');
+            }
         }
-    }, [isOpen, initialMode]);
+    }, [isOpen, initialMode, isLeadership]);
 
     const loadEligibleDirectors = async () => {
         try {
             setLoadingDirectors(true);
             const res = await api.get('/api/v1/applications/eligible-directors');
-            if (res.data?.success && res.data.directors) {
-                setDirectors(res.data.directors);
-                if (res.data.directors.length > 0 && !directorId) {
-                    setDirectorId(res.data.directors[0].id);
-                }
+            const directorList: DirectorOption[] = res.data?.directors || res.data?.data || [];
+            setDirectors(directorList);
+
+            if (res.data?.designatedDirector) {
+                setDesignatedDirector(res.data.designatedDirector);
+                setDirectorId(res.data.designatedDirector.id);
+            } else if (directorList.length > 0 && !directorId) {
+                setDirectorId(directorList[0].id);
             }
         } catch (err) {
             console.warn('Could not load directors list:', err);
@@ -145,6 +185,8 @@ I write officially to lodge this application with Central Registry...
 
 [Provide specific details, justification, and background here]
 
+Thank you.
+
 Yours faithfully,
 
 ${user.name}
@@ -167,10 +209,17 @@ ${defaultUnit}`
             return;
         }
 
+        if (!isLeadership && !customCategory.trim()) {
+            setError('Please write your application category.');
+            return;
+        }
+
         if (!content.trim()) {
             setError('Please provide the application letter content.');
             return;
         }
+
+        const effectiveCategory = isLeadership ? category : (customCategory.trim() || 'General Application');
 
         setSubmitting(true);
         try {
@@ -178,7 +227,8 @@ ${defaultUnit}`
                 // Submit to the Statutory Multi-Tier Institutional Workflow
                 const payload: any = {
                     subject: subject.trim(),
-                    category,
+                    category: effectiveCategory,
+                    urgency: isLeadership ? urgency : 'NORMAL',
                     content: content.trim(),
                     attachmentUrls: []
                 };
@@ -187,12 +237,12 @@ ${defaultUnit}`
                     payload.directorId = directorId;
                 }
 
-                // If file attached, we can upload or submit
+                // If file attached, upload first
                 if (file) {
                     const uploadData = new FormData();
                     uploadData.append('file', file);
                     try {
-                        const uploadRes = await api.post('/api/upload', uploadData, {
+                        const uploadRes = await api.post('/api/registry/upload', uploadData, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                         });
                         if (uploadRes.data?.url) {
@@ -218,8 +268,8 @@ ${defaultUnit}`
                 // Submit Direct to Registry (Stamped Docket)
                 const formData = new FormData();
                 formData.append('subject', subject.trim());
-                formData.append('category', category);
-                formData.append('urgency', urgency);
+                formData.append('category', effectiveCategory);
+                formData.append('urgency', isLeadership ? urgency : 'NORMAL');
                 formData.append('content', content.trim());
                 if (customUnit) formData.append('customUnit', customUnit.trim());
                 if (customRank) formData.append('customRank', customRank.trim());
@@ -366,6 +416,24 @@ ${defaultUnit}`
                         </div>
                     </div>
 
+                    {/* Auto-Detected Unit Head / Director Card */}
+                    {routingMode === 'THROUGH_DIRECTOR' && designatedDirector && (
+                        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5">
+                            <Sparkles className="w-5 h-5 text-emerald-700 flex-shrink-0 mt-0.5" />
+                            <div className="text-xs">
+                                <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                                    Designated Unit Head Auto-Detected
+                                    <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-bold">
+                                        AUTOMATIC
+                                    </span>
+                                </div>
+                                <p className="text-emerald-700 mt-0.5">
+                                    Routing automatically to <strong className="text-emerald-950">{designatedDirector.name}</strong> ({designatedDirector.unit || 'Directorate'}).
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Through Director Target selector (shown when mode is THROUGH_DIRECTOR) */}
                     {routingMode === 'THROUGH_DIRECTOR' && (
                         <div>
@@ -379,12 +447,18 @@ ${defaultUnit}`
                                 disabled={loadingDirectors}
                                 className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
                             >
-                                <option value="">-- Automatically Route to my Unit/Department Head --</option>
-                                {directors.map((d) => (
-                                    <option key={d.id} value={d.id}>
-                                        {d.name} {d.unit ? `(${d.unit})` : d.department ? `(${d.department})` : ''}
+                                {designatedDirector && (
+                                    <option value={designatedDirector.id}>
+                                        ✨ {designatedDirector.name} - {designatedDirector.unit || 'Designated Head'} (Auto-Detected)
                                     </option>
-                                ))}
+                                )}
+                                {directors
+                                    .filter((d) => !designatedDirector || d.id !== designatedDirector.id)
+                                    .map((d) => (
+                                        <option key={d.id} value={d.id}>
+                                            {d.name} {d.staffProfile?.unit?.name ? `(${d.staffProfile.unit.name})` : d.unit ? `(${d.unit})` : ''}
+                                        </option>
+                                    ))}
                             </select>
                             <p className="text-[10px] text-slate-400 mt-1">
                                 Your application will land on the Director&apos;s vetting cockpit for recommendation before forward transit to Registry.
@@ -398,30 +472,67 @@ ${defaultUnit}`
                             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                                 <Tag size={13} className="text-[#006533]" /> Application Category *
                             </label>
-                            <select
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
-                            >
-                                {STATUTORY_CATEGORIES.map((cat) => (
-                                    <option key={cat.value} value={cat.value}>{cat.label}</option>
-                                ))}
-                            </select>
+                            {isLeadership ? (
+                                <select
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
+                                >
+                                    {STATUTORY_CATEGORIES.map((cat) => (
+                                        <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <div>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Sabbatical Leave, Office Transfer, Study Fellowship..."
+                                        value={customCategory}
+                                        onChange={(e) => setCustomCategory(e.target.value)}
+                                        className="w-full bg-blue-50/40 border border-blue-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
+                                    />
+                                    <p className="text-[10px] text-blue-600 mt-1">
+                                        Write your official application category or purpose.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                                <Clock size={13} className="text-[#006533]" /> Priority / Urgency *
+                            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                    <Clock size={13} className="text-[#006533]" /> Priority / Urgency *
+                                </span>
+                                {!isLeadership && (
+                                    <span className="text-[10px] text-slate-400 font-normal flex items-center gap-0.5">
+                                        <Lock size={10} /> Leadership Only
+                                    </span>
+                                )}
                             </label>
-                            <select
-                                value={urgency}
-                                onChange={(e) => setUrgency(e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
-                            >
-                                {URGENCIES.map((u) => (
-                                    <option key={u.value} value={u.value}>{u.label}</option>
-                                ))}
-                            </select>
+                            {isLeadership ? (
+                                <select
+                                    value={urgency}
+                                    onChange={(e) => setUrgency(e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
+                                >
+                                    {URGENCIES.map((u) => (
+                                        <option key={u.value} value={u.value}>{u.label}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <div>
+                                    <input
+                                        type="text"
+                                        disabled
+                                        value="Normal (Standard Processing)"
+                                        className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-500 cursor-not-allowed"
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                        Priority selection is managed by Unit Heads & Deans.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -452,63 +563,51 @@ ${defaultUnit}`
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             rows={9}
-                            className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs font-mono text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#006533]"
-                            placeholder="Type your official letter here..."
+                            className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs font-mono leading-relaxed text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
                             required
                         />
                     </div>
 
-                    {/* Attachment Upload */}
+                    {/* File Attachment */}
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                            <Paperclip size={13} className="text-[#006533]" /> Supporting Document / Attachment (Optional)
+                            <Paperclip size={13} className="text-[#006533]" /> Attach Supporting Scanned Document (Optional)
                         </label>
-                        <div className="border border-dashed border-slate-300 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between">
-                            <input
-                                type="file"
-                                accept=".pdf,.doc,.docx,image/*"
-                                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                                className="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-100 file:text-emerald-800 hover:file:bg-emerald-200 cursor-pointer"
-                            />
-                            {file && (
-                                <button
-                                    type="button"
-                                    onClick={() => setFile(null)}
-                                    className="text-xs text-rose-600 hover:text-rose-800 font-bold"
-                                >
-                                    Remove
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Accepted: PDF, Word Documents (.doc, .docx), Images up to 10MB.</p>
+                        <input
+                            type="file"
+                            onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
+                            className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-[#006533] hover:file:bg-emerald-100 cursor-pointer"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            Accepted: PDF, Word, JPG, PNG (Max 10MB).
+                        </p>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                    {/* Footer Actions */}
+                    <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                         <button
                             type="button"
                             onClick={onClose}
                             disabled={submitting}
-                            className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition"
+                            className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#006533] hover:bg-[#004d26] text-white text-xs font-bold transition shadow-md active:scale-95 disabled:opacity-50"
+                            className="px-5 py-2 text-xs font-bold text-white bg-[#006533] hover:bg-emerald-800 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                         >
                             {submitting ? (
                                 <>
                                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    <span>Routing Application...</span>
+                                    Submitting Application...
                                 </>
                             ) : (
                                 <>
-                                    <Send size={14} />
-                                    <span>
-                                        {routingMode === 'THROUGH_DIRECTOR' ? 'Submit "Through Director"' : 'Submit to Registry'}
-                                    </span>
+                                    <Send size={13} />
+                                    {routingMode === 'THROUGH_DIRECTOR' ? 'Submit Through Director' : 'Submit to Registry'}
                                 </>
                             )}
                         </button>

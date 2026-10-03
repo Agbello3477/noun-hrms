@@ -2,13 +2,31 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { Sparkles, ShieldCheck, Lock, Info, CheckCircle2 } from 'lucide-react';
 
 interface DirectorOption {
   id: string;
   name: string;
   email: string;
+  role?: string;
   unit?: string;
   department?: string;
+  staffProfile?: {
+    rank?: string;
+    title?: string;
+    unit?: { id: string; name: string };
+    studyCenter?: { id: string; name: string };
+  };
+}
+
+interface DesignatedDirectorInfo {
+  id: string;
+  name: string;
+  email: string;
+  unit?: string;
+  role?: string;
+  reason?: string;
 }
 
 interface Props {
@@ -26,10 +44,37 @@ const CATEGORIES = [
   { value: 'ADMINISTRATIVE_APPEAL', label: 'Administrative Appeal' }
 ];
 
+const URGENCIES = [
+  { value: 'NORMAL', label: 'Normal / Routine (Standard Processing)' },
+  { value: 'URGENT', label: 'Urgent (24-48 Hours Vetting)' },
+  { value: 'HIGH_PRIORITY', label: 'High Priority / Immediate Action' }
+];
+
+const LEADERSHIP_ROLES = [
+  'DIRECTOR',
+  'UNIT_HEAD',
+  'HOD',
+  'DEAN',
+  'HEAD_OF_ADMIN',
+  'REGISTRAR',
+  'HR_ADMIN',
+  'REGISTRY_ADMIN',
+  'SUPER_USER',
+  'ADMIN',
+  'STUDY_CENTER_MANAGER',
+  'VICE_CHANCELLOR'
+];
+
 export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Props) {
+  const { user } = useAuth();
+  const isLeadership = Boolean(user && LEADERSHIP_ROLES.includes(user.role as string));
+
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0].value);
+  const [category, setCategory] = useState(isLeadership ? CATEGORIES[0].value : '');
+  const [customCategory, setCustomCategory] = useState('');
+  const [urgency, setUrgency] = useState('NORMAL');
   const [directorId, setDirectorId] = useState('');
+  const [designatedDirector, setDesignatedDirector] = useState<DesignatedDirectorInfo | null>(null);
   const [content, setContent] = useState('');
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
   const [newAttachment, setNewAttachment] = useState('');
@@ -42,18 +87,24 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
     if (isOpen) {
       loadDirectors();
       setError(null);
+      if (!isLeadership) {
+        setUrgency('NORMAL');
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, isLeadership]);
 
   const loadDirectors = async () => {
     try {
       setLoadingDirectors(true);
       const res = await api.get('/api/v1/applications/eligible-directors');
-      if (res.data?.success) {
-        setDirectors(res.data.directors || []);
-        if (res.data.directors?.length > 0) {
-          setDirectorId(res.data.directors[0].id);
-        }
+      const directorList: DirectorOption[] = res.data?.directors || res.data?.data || [];
+      setDirectors(directorList);
+
+      if (res.data?.designatedDirector) {
+        setDesignatedDirector(res.data.designatedDirector);
+        setDirectorId(res.data.designatedDirector.id);
+      } else if (directorList.length > 0 && !directorId) {
+        setDirectorId(directorList[0].id);
       }
     } catch (err: any) {
       console.error('Failed to load eligible directors:', err);
@@ -77,8 +128,15 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
     e.preventDefault();
     setError(null);
 
+    const effectiveCategory = isLeadership ? category : (customCategory.trim() || 'General Application');
+
     if (!subject.trim() || !content.trim()) {
       setError('Please provide both a subject and application content.');
+      return;
+    }
+
+    if (!isLeadership && !customCategory.trim()) {
+      setError('Please write your application category.');
       return;
     }
 
@@ -86,7 +144,8 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
       setSubmitting(true);
       const payload: any = {
         subject: subject.trim(),
-        category,
+        category: effectiveCategory,
+        urgency: isLeadership ? urgency : 'NORMAL',
         content: content.trim(),
         attachmentUrls
       };
@@ -98,9 +157,9 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
       const res = await api.post('/api/v1/applications/submit', payload);
 
       if (res.data?.success) {
-        // Reset form
         setSubject('');
         setContent('');
+        setCustomCategory('');
         setAttachmentUrls([]);
         onSuccess();
         onClose();
@@ -125,7 +184,7 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
           <div>
             <h2 className="text-lg font-bold text-gray-900">New Institutional Application</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Initiate statutory routing: Staff → Designated Director → Registry Inward Desk → Registrar
+              Statutory Routing: Staff &rarr; Designated Directorate Head &rarr; Registry Inward Desk &rarr; Registrar
             </p>
           </div>
           <button
@@ -145,26 +204,29 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
-              Application Category *
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Auto-Detected Unit Head / Director Notification Card */}
+          {designatedDirector && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5">
+              <Sparkles className="w-5 h-5 text-emerald-700 flex-shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                  Designated Unit Head Auto-Detected
+                  <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-bold">
+                    AUTOMATIC
+                  </span>
+                </div>
+                <p className="text-emerald-700 mt-0.5">
+                  Routing automatically to <strong className="text-emerald-950">{designatedDirector.name}</strong> ({designatedDirector.unit || 'Directorate'}).
+                </p>
+              </div>
+            </div>
+          )}
 
+          {/* Designated Unit Head / Director Selector */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
-              Through Director (Designated Unit Head)
+            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1 flex items-center gap-1">
+              <ShieldCheck size={14} className="text-emerald-700" />
+              Through Director (Designated Unit Head) *
             </label>
             <select
               value={directorId}
@@ -172,16 +234,98 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
               disabled={loadingDirectors}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
             >
-              <option value="">-- Auto-detect from my Department/Unit --</option>
-              {directors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} {d.unit ? `(${d.unit})` : d.department ? `(${d.department})` : ''}
+              {designatedDirector && (
+                <option value={designatedDirector.id}>
+                  ✨ {designatedDirector.name} - {designatedDirector.unit || 'Designated Head'} (Auto-Detected)
                 </option>
-              ))}
+              )}
+              {directors
+                .filter((d) => !designatedDirector || d.id !== designatedDirector.id)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} {d.staffProfile?.unit?.name ? `(${d.staffProfile.unit.name})` : d.unit ? `(${d.unit})` : ''}
+                  </option>
+                ))}
             </select>
             <p className="text-[11px] text-gray-500 mt-1">
-              If left blank, the system will route to your designated Unit/Department Head automatically.
+              The system automatically pre-selects your Directorate / Unit Head for statutory vetting.
             </p>
+          </div>
+
+          {/* Category & Urgency Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Category Field */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                Application Category *
+              </label>
+              {isLeadership ? (
+                /* Dropdown for Leadership */
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                /* Free Text for Regular Staff */
+                <div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sabbatical Leave, Office Transfer, Study Fellowship..."
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-blue-200 bg-blue-50/40 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                  />
+                  <p className="text-[10px] text-blue-600 mt-1">
+                    Write your official category or purpose freely.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Priority / Urgency Field */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase mb-1 flex items-center justify-between">
+                <span>Priority / Urgency</span>
+                {!isLeadership && (
+                  <span className="text-[10px] text-gray-400 font-normal flex items-center gap-0.5">
+                    <Lock size={10} /> Leadership Only
+                  </span>
+                )}
+              </label>
+              {isLeadership ? (
+                <select
+                  value={urgency}
+                  onChange={(e) => setUrgency(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {URGENCIES.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div>
+                  <input
+                    type="text"
+                    disabled
+                    value="Routine / Normal (Standard Processing)"
+                    className="w-full px-3 py-2 border border-gray-200 bg-gray-100 text-gray-500 rounded-lg text-sm cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Standard statutory timeline. Priority escalation is managed by Unit Heads & Deans.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <div>

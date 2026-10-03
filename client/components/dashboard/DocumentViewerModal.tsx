@@ -13,37 +13,85 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
     const [blobUrl, setBlobUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-
-    const ext = document.url.split('.').pop()?.toLowerCase() || '';
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext);
-    const isPDF = ext === 'pdf';
+    const [docType, setDocType] = useState<'pdf' | 'image' | 'other'>('pdf');
+    const [fileExt, setFileExt] = useState<string>('pdf');
 
     useEffect(() => {
+        let active = true;
         const fetchFile = async () => {
             try {
-                // Fetch as blob using the authenticated API instance
-                const response = await api.get(document.url, { responseType: 'blob' });
-                
-                // Determine mime type from extension or fallback
-                let mimeType = 'application/pdf'; // Default assumption
-                if (document.url.match(/\.(jpg|jpeg|png)$/i)) {
+                setLoading(true);
+                setError('');
+                // Fetch as arraybuffer/blob using the authenticated API instance
+                const response = await api.get(document.url, { responseType: 'arraybuffer' });
+                if (!active) return;
+
+                const buffer = new Uint8Array(response.data);
+                const headerContentType = (response.headers['content-type'] || '').toLowerCase();
+
+                let mimeType = 'application/pdf';
+                let detected: 'pdf' | 'image' | 'other' = 'pdf';
+                let ext = 'pdf';
+
+                // Check magic bytes
+                if (buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+                    // %PDF
+                    mimeType = 'application/pdf';
+                    detected = 'pdf';
+                    ext = 'pdf';
+                } else if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+                    // JPEG
                     mimeType = 'image/jpeg';
+                    detected = 'image';
+                    ext = 'jpg';
+                } else if (buffer.length >= 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+                    // PNG
+                    mimeType = 'image/png';
+                    detected = 'image';
+                    ext = 'png';
+                } else if (headerContentType.includes('image')) {
+                    mimeType = headerContentType;
+                    detected = 'image';
+                    ext = headerContentType.split('/')[1] || 'jpg';
+                } else if (headerContentType.includes('pdf')) {
+                    mimeType = 'application/pdf';
+                    detected = 'pdf';
+                    ext = 'pdf';
+                } else if (document.url.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+                    mimeType = 'image/jpeg';
+                    detected = 'image';
+                    ext = document.url.split('.').pop()?.toLowerCase() || 'jpg';
+                } else if (document.url.match(/\.pdf$/i)) {
+                    mimeType = 'application/pdf';
+                    detected = 'pdf';
+                    ext = 'pdf';
+                } else {
+                    // Fallback to PDF if title mentions certificate/letter/dossier/credential
+                    mimeType = 'application/pdf';
+                    detected = 'pdf';
+                    ext = 'pdf';
                 }
-                
+
+                setDocType(detected);
+                setFileExt(ext);
+
                 const blob = new Blob([response.data], { type: mimeType });
                 const objUrl = URL.createObjectURL(blob);
                 setBlobUrl(objUrl);
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Failed to fetch document", err);
-                setError('Failed to load document. Please try again.');
+                if (active) {
+                    setError('Failed to load document preview. Please check permissions or download the file.');
+                }
             } finally {
-                setLoading(false);
+                if (active) setLoading(false);
             }
         };
+
         fetchFile();
 
-        // Cleanup
         return () => {
+            active = false;
             if (blobUrl) URL.revokeObjectURL(blobUrl);
         };
     }, [document.url]);
@@ -52,11 +100,7 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
         if (!blobUrl) return;
         const link = window.document.createElement('a');
         link.href = blobUrl;
-        
-        // Extract extension from url or fallback to pdf
-        const ext = document.url.split('.').pop() || 'pdf';
-        link.download = `${document.title.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
-        
+        link.download = `${document.title.replace(/[^a-z0-9]/gi, '_')}.${fileExt}`;
         window.document.body.appendChild(link);
         link.click();
         window.document.body.removeChild(link);
@@ -64,9 +108,6 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
 
     const handlePrint = () => {
         if (!blobUrl) return;
-        
-        // For images, we can open a new window to print. For PDFs, the object viewer usually has a print button.
-        // But to explicitly force print via JS:
         const printWindow = window.open(blobUrl, '_blank');
         if (printWindow) {
             printWindow.onload = () => {
@@ -88,9 +129,9 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={handlePrint}
-                            disabled={loading || !!error || (!isImage && !isPDF)}
+                            disabled={loading || !!error || (docType !== 'image' && docType !== 'pdf')}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium"
-                            title={(!isImage && !isPDF) ? "Print is only supported for PDFs and images" : ""}
+                            title={(docType !== 'image' && docType !== 'pdf') ? "Print is only supported for PDFs and images" : ""}
                         >
                             <Printer size={16} /> Print
                         </button>
@@ -121,16 +162,24 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                     )}
                     
                     {error && (
-                        <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200 text-center">
-                            <p className="font-bold mb-1">Error</p>
-                            <p className="text-sm">{error}</p>
+                        <div className="bg-red-50 text-red-600 p-6 rounded-xl border border-red-200 text-center max-w-md">
+                            <p className="font-bold mb-2">Notice</p>
+                            <p className="text-sm mb-4">{error}</p>
+                            <a
+                                href={document.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-nounGreen text-white rounded-lg text-xs font-bold hover:bg-green-800"
+                            >
+                                <Download size={14} /> Open Direct File Link
+                            </a>
                         </div>
                     )}
                     
                     {!loading && !error && blobUrl && (
-                        isImage ? (
+                        docType === 'image' ? (
                             <img src={blobUrl} alt={document.title} className="w-full h-full object-contain" />
-                        ) : isPDF ? (
+                        ) : docType === 'pdf' ? (
                             <object data={blobUrl} type="application/pdf" className="w-full h-full">
                                 <div className="flex flex-col items-center justify-center h-full text-gray-300">
                                     <p>Your browser does not support inline PDFs.</p>
@@ -145,13 +194,13 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                                 <div className="space-y-1">
                                     <h4 className="font-bold text-lg text-white">Preview Not Available</h4>
                                     <p className="text-sm text-gray-400">
-                                        This file type ({ext.toUpperCase()}) cannot be previewed directly in the web browser. Please download it to view the content.
+                                        This file type ({fileExt.toUpperCase()}) cannot be previewed directly in the web browser. Please download it to view the content.
                                     </p>
                                 </div>
                                 <button 
                                     type="button"
                                     onClick={handleDownload} 
-                                    className="mt-2 bg-nounGreen hover:bg-green-800 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow flex items-center gap-2 mx-auto animate-pulse"
+                                    className="mt-2 bg-nounGreen hover:bg-green-800 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow flex items-center gap-2 mx-auto"
                                 >
                                     <Download size={16} />
                                     Download Document

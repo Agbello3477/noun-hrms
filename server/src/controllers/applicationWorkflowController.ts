@@ -79,7 +79,7 @@ export async function submitApplication(req: Request, res: Response) {
       });
     }
 
-    // Validate category enum
+    // Validate category enum or handle custom written category for regular staff
     const validCategories = [
       'POSTING_REQUEST',
       'CONCURRENCE',
@@ -88,11 +88,16 @@ export async function submitApplication(req: Request, res: Response) {
       'GENERAL_MEMORANDUM',
       'ADMINISTRATIVE_APPEAL',
     ];
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid application category. Must be one of: ${validCategories.join(', ')}`,
-      });
+    let sanitizedCategory: ApplicationCategory = 'GENERAL_MEMORANDUM';
+    let effectiveSubject = subject.trim();
+
+    if (validCategories.includes(category)) {
+      sanitizedCategory = category as ApplicationCategory;
+    } else if (typeof category === 'string' && category.trim()) {
+      sanitizedCategory = 'GENERAL_MEMORANDUM';
+      if (!effectiveSubject.toLowerCase().includes(category.trim().toLowerCase())) {
+        effectiveSubject = `[${category.trim()}] ${effectiveSubject}`;
+      }
     }
 
     // Resolve designated Director / Directorate Head
@@ -108,10 +113,10 @@ export async function submitApplication(req: Request, res: Response) {
       if (profile?.unit?.headId && profile.unit.headId !== applicantId) {
         resolvedDirectorId = profile.unit.headId;
       } else {
-        // Find any active user with role UNIT_HEAD
+        // Find any active user with role UNIT_HEAD, DEAN, HOD, DIRECTOR, or SUPER_USER
         const unitHeadUser = await prisma.user.findFirst({
           where: {
-            role: 'UNIT_HEAD',
+            role: { in: ['UNIT_HEAD', 'DEAN', 'HOD', 'DIRECTOR', 'SUPER_USER'] as any },
             isActive: true,
             id: { not: applicantId },
           },
@@ -151,8 +156,8 @@ export async function submitApplication(req: Request, res: Response) {
           referenceNumber,
           applicantId,
           directorId: resolvedDirectorId,
-          subject: subject.trim(),
-          category: category as ApplicationCategory,
+          subject: effectiveSubject,
+          category: sanitizedCategory,
           content: content.trim(),
           attachmentUrls: cleanAttachments,
           status: 'SUBMITTED_TO_DIRECTOR',
@@ -1099,15 +1104,17 @@ export async function getMasterArchive(req: Request, res: Response) {
  */
 export async function getEligibleDirectors(req: Request, res: Response) {
   try {
+    const callerId = (req as any).user?.id;
     const directors = await prisma.user.findMany({
       where: {
-        role: { in: ['UNIT_HEAD', 'SUPER_USER'] },
+        role: { in: ['UNIT_HEAD', 'SUPER_USER', 'DEAN', 'HOD', 'DIRECTOR', 'HEAD_OF_ADMIN', 'STUDY_CENTER_MANAGER', 'ADMIN'] as any },
         isActive: true,
       },
       select: {
         id: true,
         name: true,
         email: true,
+        role: true,
         staffProfile: {
           select: {
             rank: true,
@@ -1120,7 +1127,88 @@ export async function getEligibleDirectors(req: Request, res: Response) {
       orderBy: { name: 'asc' },
     });
 
-    return res.status(200).json({ success: true, data: directors });
+    let designatedDirector: any = null;
+    if (callerId) {
+      const callerProfile = await prisma.staffProfile.findUnique({
+        where: { userId: callerId },
+        include: {
+          unit: {
+            include: {
+              head: { select: { id: true, name: true, email: true, role: true } }
+            }
+          },
+          studyCenter: true
+        }
+      });
+
+      if (callerProfile?.unit?.head && callerProfile.unit.head.id !== callerId) {
+        designatedDirector = {
+          id: callerProfile.unit.head.id,
+          name: callerProfile.unit.head.name || callerProfile.unit.head.email,
+          email: callerProfile.unit.head.email,
+          unit: callerProfile.unit.name,
+          role: callerProfile.unit.head.role,
+          reason: `Designated Unit Head for ${callerProfile.unit.name}`
+        };
+      } else if (callerProfile?.studyCenter) {
+        const centerManager = await prisma.user.findFirst({
+          where: {
+            role: 'STUDY_CENTER_MANAGER',
+            staffProfile: { centerId: callerProfile.centerId },
+            isActive: true,
+            id: { not: callerId }
+          }
+        });
+        if (centerManager) {
+          designatedDirector = {
+            id: centerManager.id,
+            name: centerManager.name || centerManager.email,
+            email: centerManager.email,
+            unit: callerProfile.studyCenter.name,
+            role: 'STUDY_CENTER_MANAGER',
+            reason: `Study Center Director for ${callerProfile.studyCenter.name}`
+          };
+        }
+      }
+
+      if (!designatedDirector && directors.length > 0) {
+        // Find best match in directors list
+        const unitMatch = directors.find(d => 
+          d.id !== callerId && 
+          callerProfile?.unit?.name && 
+          d.staffProfile?.unit?.name?.toLowerCase() === callerProfile.unit.name.toLowerCase()
+        );
+        if (unitMatch) {
+          designatedDirector = {
+            id: unitMatch.id,
+            name: unitMatch.name || unitMatch.email,
+            email: unitMatch.email,
+            unit: unitMatch.staffProfile?.unit?.name || 'Unit',
+            role: unitMatch.role,
+            reason: `Designated Head for ${unitMatch.staffProfile?.unit?.name}`
+          };
+        } else {
+          const fallback = directors.find(d => d.id !== callerId);
+          if (fallback) {
+            designatedDirector = {
+              id: fallback.id,
+              name: fallback.name || fallback.email,
+              email: fallback.email,
+              unit: fallback.staffProfile?.unit?.name || 'Directorate',
+              role: fallback.role,
+              reason: 'Institutional Directorate Leadership'
+            };
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      directors, 
+      data: directors,
+      designatedDirector 
+    });
   } catch (error: any) {
     console.error('Error in getEligibleDirectors:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch directors.' });

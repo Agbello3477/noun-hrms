@@ -166,8 +166,8 @@ export default function MyApplicationsPage() {
               <div>
                 <h3 className="text-base font-bold text-gray-900">{app.subject}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Category: <span className="font-medium text-gray-700">{app.category.replace(/_/g, ' ')}</span> · 
-                  Director: <span className="font-medium text-gray-700">{app.director?.staffProfile ? `${app.director.staffProfile.firstName} ${app.director.staffProfile.lastName}` : app.director?.email}</span>
+                  Category: <span className="font-medium text-gray-700">{app.category ? String(app.category).replace(/_/g, ' ') : 'General Application'}</span> · 
+                  Director: <span className="font-medium text-gray-700">{app.director?.staffProfile ? `${app.director.staffProfile.firstName || ''} ${app.director.staffProfile.lastName || ''}`.trim() : app.director?.name || app.director?.email || 'Directorate'}</span>
                 </p>
               </div>
 
