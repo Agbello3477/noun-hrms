@@ -27,7 +27,7 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                 if (!active) return;
 
                 const buffer = new Uint8Array(response.data);
-                const headerContentType = (response.headers['content-type'] || '').toLowerCase();
+                const headerContentType = String(response.headers['content-type'] || '').toLowerCase();
 
                 let mimeType = 'application/pdf';
                 let detected: 'pdf' | 'image' | 'other' = 'pdf';
