@@ -124,8 +124,19 @@ export default function WriteOfficialApplicationModal({
             setDirectors(directorList);
 
             if (res.data?.designatedDirector) {
-                setDesignatedDirector(res.data.designatedDirector);
-                setDirectorId(res.data.designatedDirector.id);
+                const detected = res.data.designatedDirector;
+                setDesignatedDirector(detected);
+                setDirectorId(detected.id);
+
+                // Dynamically update the Through line in template if it has the generic placeholder
+                setContent((prevContent) => {
+                    const throughLine = `Through: ${detected.name} (${detected.unit || 'Designated Head / Director'})`;
+                    if (!prevContent || prevContent.includes('Through: The Director / Head of Unit')) {
+                        if (!prevContent) return prevContent;
+                        return prevContent.replace('Through: The Director / Head of Unit', throughLine);
+                    }
+                    return prevContent;
+                });
             } else if (directorList.length > 0 && !directorId) {
                 setDirectorId(directorList[0].id);
             }
@@ -144,6 +155,10 @@ export default function WriteOfficialApplicationModal({
             setCustomUnit(defaultUnit);
             setCustomRank(defaultRank);
 
+            const throughLine = designatedDirector
+                ? `Through: ${designatedDirector.name} (${designatedDirector.unit || 'Designated Head / Director'})`
+                : 'Through: The Director / Head of Unit';
+
             if (!content) {
                 if (routingMode === 'THROUGH_DIRECTOR') {
                     setContent(
@@ -152,7 +167,7 @@ National Open University of Nigeria (NOUN),
 University Village, Plot 91, Cadastral Zone,
 Nnamdi Azikiwe Expressway, Jabi, Abuja.
 
-Through: The Director / Head of Unit
+${throughLine}
 
 Dear Sir/Madam,
 
@@ -196,7 +211,7 @@ ${defaultUnit}`
                 }
             }
         }
-    }, [isOpen, user, routingMode]);
+    }, [isOpen, user, routingMode, designatedDirector]);
 
     if (!isOpen) return null;
 
