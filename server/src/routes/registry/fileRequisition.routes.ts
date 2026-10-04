@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import { cacheMiddleware } from '../../middleware/cacheMiddleware';
 import {
   lodgeRequisition,
+  getEligibleStaffForRequisition,
   acknowledgeRequisition,
   dispatchRequisition,
   returnRequisition,
@@ -20,9 +21,44 @@ const router = Router();
 // Apply Authentication guard to all routes
 router.use(verifyToken);
 
+// Roles authorized to lodge or view personal/unit file requisitions (Excludes regular STAFF)
+const AUTHORIZED_FILE_REQUISITION_ROLES = [
+  'UNIT_HEAD',
+  'STUDY_CENTER_MANAGER',
+  'UNIT_ADMIN',
+  'HR_ADMIN',
+  'REGISTRY_ADMIN',
+  'REGISTRAR',
+  'DEPUTY_REGISTRAR',
+  'BURSARY',
+  'AUDIT',
+  'SUPER_USER',
+  'ADMIN',
+  'VICE_CHANCELLOR',
+  'CLINIC_HEAD',
+  'CLINIC_DOCTOR',
+  'SECURITY_HEAD',
+];
+
 // ─── TIER 1: LODGE REQUISITION & PERSONAL VIEWS ──────────────────────────────
-router.post('/lodge', lodgeRequisition);
-router.get('/my', cacheMiddleware(15, { tags: ['tag:file_requisitions'] }), getMyRequisitions);
+router.get(
+  '/eligible-staff',
+  requireRole(AUTHORIZED_FILE_REQUISITION_ROLES as any),
+  getEligibleStaffForRequisition
+);
+
+router.post(
+  '/lodge',
+  requireRole(AUTHORIZED_FILE_REQUISITION_ROLES as any),
+  lodgeRequisition
+);
+
+router.get(
+  '/my',
+  requireRole(AUTHORIZED_FILE_REQUISITION_ROLES as any),
+  cacheMiddleware(15, { tags: ['tag:file_requisitions'] }),
+  getMyRequisitions
+);
 
 // ─── TIER 2: REGISTRY INTAKE & QUEUES ────────────────────────────────────────
 router.get(

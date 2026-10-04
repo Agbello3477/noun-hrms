@@ -41,7 +41,13 @@ const CATEGORIES = [
   { value: 'STUDY_FELLOWSHIP', label: 'Study Fellowship / Training Leave' },
   { value: 'SPECIAL_CLEARANCE', label: 'Special Clearance' },
   { value: 'GENERAL_MEMORANDUM', label: 'General Memorandum' },
-  { value: 'ADMINISTRATIVE_APPEAL', label: 'Administrative Appeal' }
+  { value: 'ADMINISTRATIVE_APPEAL', label: 'Administrative Appeal' },
+  { value: 'GENERAL_REQUEST', label: 'General Administrative Request' },
+  { value: 'STAFFING_REQUEST', label: 'Staffing & Manpower Request' },
+  { value: 'FACILITY_RESOURCE', label: 'Facility & Resource Request' },
+  { value: 'CONFIRMATION_REQUEST', label: 'Staff Confirmation / Regularization' },
+  { value: 'EXEMPTION_REQUEST', label: 'Duty Exemption / Official Permission' },
+  { value: 'OTHER', label: 'Other Official Application' }
 ];
 
 const URGENCIES = [
@@ -128,15 +134,27 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
     e.preventDefault();
     setError(null);
 
-    const effectiveCategory = isLeadership ? category : (customCategory.trim() || 'General Application');
+    let effectiveCategory = '';
+    if (isLeadership) {
+      if (category === 'OTHER') {
+        if (!customCategory.trim()) {
+          setError('Please write and specify your official application category.');
+          return;
+        }
+        effectiveCategory = customCategory.trim();
+      } else {
+        effectiveCategory = category;
+      }
+    } else {
+      if (!customCategory.trim()) {
+        setError('Please write your application category.');
+        return;
+      }
+      effectiveCategory = customCategory.trim();
+    }
 
     if (!subject.trim() || !content.trim()) {
       setError('Please provide both a subject and application content.');
-      return;
-    }
-
-    if (!isLeadership && !customCategory.trim()) {
-      setError('Please write your application category.');
       return;
     }
 
@@ -261,17 +279,37 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
               </label>
               {isLeadership ? (
                 /* Dropdown for Leadership */
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                  {category === 'OTHER' && (
+                    <div className="mt-2.5">
+                      <label className="block text-xs font-semibold text-emerald-800 mb-1">
+                        Specify Official Application Category *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Special Duty Allowance, Facility Reallocation, Overtime Clearance..."
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/40 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-900"
+                      />
+                      <p className="text-[10px] text-emerald-700 mt-1">
+                        Clearly specify the statutory purpose or category for this official application.
+                      </p>
+                    </div>
+                  )}
+                </div>
               ) : (
                 /* Free Text for Regular Staff */
                 <div>

@@ -61,6 +61,6 @@ router.put('/:id/return',
 );
 
 // Get my requests (or HR incoming)
-router.get('/', verifyToken, getRequests);
+router.get('/', verifyToken, requireRole(requestRoles), getRequests);
 
 export default router;

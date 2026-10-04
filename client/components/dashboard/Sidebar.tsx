@@ -241,7 +241,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 <LinkItem href="/dashboard/profile" icon={Users} label="My Profile" />
                 <LinkItem href="/dashboard/documents" icon={FileText} label="My Dossier" />
                 <LinkItem href="/dashboard/payslips" icon={DollarSign} label="My Payslips" />
-                <LinkItem href="/dashboard/services/file-requests" icon={Briefcase} label="File Requisitions" />
+                {role !== 'STAFF' && (
+                    <LinkItem href="/dashboard/services/file-requests" icon={Briefcase} label="File Requisitions" />
+                )}
                 {role !== 'STAFF' && (
                     <LinkItem href="/dashboard/received-files" icon={FolderOpen} label="Received Files" />
                 )}

@@ -90,11 +90,184 @@ async function notifyRoleUsers(roles: Role[], title: string, message: string, li
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIER 1: LODGE FILE REQUISITION
+// TIER 1: LODGE FILE REQUISITION & ELIGIBLE STAFF DIRECTORY
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * GET /api/v1/registry/file-requests/eligible-staff
+ * Returns auto-detected requesting department and staff options within requester's unit/study center/faculty
+ */
+export async function getEligibleStaffForRequisition(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        staffProfile: {
+          include: {
+            unit: true,
+            studyCenter: true,
+          },
+        },
+      },
+    });
+
+    if (!requester) {
+      return res.status(404).json({ success: false, error: 'User profile not found.' });
+    }
+
+    // Auto-detect Requesting Department / Unit
+    let requestingDepartment = requester.staffProfile?.unit?.name ||
+      requester.staffProfile?.studyCenter?.name ||
+      requester.staffProfile?.department ||
+      'National Open University of Nigeria';
+
+    const unitId = requester.staffProfile?.unitId;
+    const centerId = requester.staffProfile?.centerId;
+    const userRole = requester.role;
+
+    // Check if requester is Head of Unit (e.g., unit.headId === userId)
+    let unitHeadUnits: string[] = [];
+    if (unitId) {
+      unitHeadUnits.push(unitId);
+    }
+    const headedUnits = await prisma.unit.findMany({
+      where: { headId: userId },
+      select: { id: true, name: true },
+    });
+    headedUnits.forEach((u) => {
+      if (!unitHeadUnits.includes(u.id)) {
+        unitHeadUnits.push(u.id);
+      }
+    });
+
+    let staffList: any[] = [];
+
+    // If unit or study center is defined for this leader/officer
+    if (unitHeadUnits.length > 0) {
+      staffList = await prisma.staffProfile.findMany({
+        where: {
+          unitId: { in: unitHeadUnits },
+        },
+        select: {
+          id: true,
+          staffId: true,
+          rank: true,
+          title: true,
+          surname: true,
+          otherNames: true,
+          department: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+          unit: {
+            select: { id: true, name: true, type: true },
+          },
+          studyCenter: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: {
+          user: { name: 'asc' },
+        },
+      });
+    } else if (centerId) {
+      staffList = await prisma.staffProfile.findMany({
+        where: {
+          centerId: centerId,
+        },
+        select: {
+          id: true,
+          staffId: true,
+          rank: true,
+          title: true,
+          surname: true,
+          otherNames: true,
+          department: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+          unit: {
+            select: { id: true, name: true, type: true },
+          },
+          studyCenter: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: {
+          user: { name: 'asc' },
+        },
+      });
+    }
+
+    // If staff list is empty or user is university-wide admin (HR_ADMIN, REGISTRY_ADMIN, REGISTRAR, VC, SUPER_USER)
+    if (
+      staffList.length === 0 ||
+      ['HR_ADMIN', 'REGISTRY_ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(userRole)
+    ) {
+      const allStaff = await prisma.staffProfile.findMany({
+        take: 300,
+        select: {
+          id: true,
+          staffId: true,
+          rank: true,
+          title: true,
+          surname: true,
+          otherNames: true,
+          department: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+          unit: {
+            select: { id: true, name: true, type: true },
+          },
+          studyCenter: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: {
+          user: { name: 'asc' },
+        },
+      });
+      if (staffList.length === 0) {
+        staffList = allStaff;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      requestingDepartment,
+      unitScope: requester.staffProfile?.unit || requester.staffProfile?.studyCenter || null,
+      staff: staffList,
+    });
+  } catch (err: any) {
+    console.error('Error in getEligibleStaffForRequisition:', err);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve eligible staff list.' });
+  }
+}
+
+/**
  * POST /api/v1/registry/file-requests/lodge
+ * Supports both single staff requisition and batch multi-staff requisitions
  */
 export async function lodgeRequisition(req: Request, res: Response) {
   try {
@@ -105,6 +278,7 @@ export async function lodgeRequisition(req: Request, res: Response) {
 
     const {
       staffProfileId,
+      staffProfileIds: rawStaffProfileIds,
       requesterDepartment,
       purposeOfRequest,
       urgencyLevel = 'ROUTINE',
@@ -112,83 +286,101 @@ export async function lodgeRequisition(req: Request, res: Response) {
       expectedReturnDate,
     } = req.body;
 
-    if (!staffProfileId || !requesterDepartment || !purposeOfRequest) {
+    const staffProfileIds: string[] =
+      Array.isArray(rawStaffProfileIds) && rawStaffProfileIds.length > 0
+        ? rawStaffProfileIds
+        : staffProfileId
+        ? [staffProfileId]
+        : [];
+
+    if (staffProfileIds.length === 0 || !requesterDepartment || !purposeOfRequest) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: staffProfileId, requesterDepartment, and purposeOfRequest are mandatory.',
+        error: 'Missing required fields: at least one Subject Personnel Record, requesterDepartment, and purposeOfRequest are mandatory.',
       });
     }
 
-    // Verify target staff profile exists
-    const targetStaff = await prisma.staffProfile.findUnique({
-      where: { id: staffProfileId },
+    // Verify all target staff profiles exist
+    const targetStaffProfiles = await prisma.staffProfile.findMany({
+      where: { id: { in: staffProfileIds } },
       include: { user: { select: { name: true, email: true } } },
     });
 
-    if (!targetStaff) {
+    if (targetStaffProfiles.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Target staff record could not be found.',
+        error: 'Target staff record(s) could not be found.',
       });
     }
 
-    const requisitionNumber = await generateRequisitionNumber();
     const { ipAddress, userAgent } = getClientMeta(req);
 
-    const result = await prisma.$transaction(async (tx) => {
-      const requisition = await tx.fileRequisition.create({
-        data: {
-          requisitionNumber,
-          staffProfileId,
-          requesterId,
-          requesterDepartment,
-          purposeOfRequest,
-          urgencyLevel: urgencyLevel as FileRequisitionUrgency,
-          requestedFileFormat: requestedFileFormat as FileRequestedFormat,
-          expectedReturnDate: expectedReturnDate ? new Date(expectedReturnDate) : null,
-          status: FileRequisitionStatus.SUBMITTED,
-        },
-        include: {
-          staffProfile: {
-            select: {
-              id: true,
-              staffId: true,
-              rank: true,
-              department: true,
-              user: { select: { name: true, email: true } },
+    const createdRequisitions = await prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const targetStaff of targetStaffProfiles) {
+        const requisitionNumber = await generateRequisitionNumber();
+        const requisition = await tx.fileRequisition.create({
+          data: {
+            requisitionNumber,
+            staffProfileId: targetStaff.id,
+            requesterId,
+            requesterDepartment,
+            purposeOfRequest,
+            urgencyLevel: urgencyLevel as FileRequisitionUrgency,
+            requestedFileFormat: requestedFileFormat as FileRequestedFormat,
+            expectedReturnDate: expectedReturnDate ? new Date(expectedReturnDate) : null,
+            status: FileRequisitionStatus.SUBMITTED,
+          },
+          include: {
+            staffProfile: {
+              select: {
+                id: true,
+                staffId: true,
+                rank: true,
+                department: true,
+                user: { select: { name: true, email: true } },
+              },
+            },
+            requester: {
+              select: { id: true, name: true, email: true, role: true },
             },
           },
-          requester: {
-            select: { id: true, name: true, email: true, role: true },
-          },
-        },
-      });
+        });
 
-      await tx.fileCustodyAuditTrail.create({
-        data: {
-          requisitionId: requisition.id,
-          action: FileCustodyAction.REQUISITION_SUBMITTED,
-          actorId: requesterId,
-          details: `Requisition lodged for staff file: ${targetStaff.staffId || 'N/A'} (${targetStaff.user?.name || 'Staff'}). Urgency: ${urgencyLevel}. Format: ${requestedFileFormat}.`,
-          ipAddress,
-          userAgent,
-          metadata: {
-            purpose: purposeOfRequest,
-            requesterDepartment,
-            urgencyLevel,
-            requestedFileFormat,
+        await tx.fileCustodyAuditTrail.create({
+          data: {
+            requisitionId: requisition.id,
+            action: FileCustodyAction.REQUISITION_SUBMITTED,
+            actorId: requesterId,
+            details: `Requisition lodged for staff file: ${targetStaff.staffId || 'N/A'} (${targetStaff.user?.name || 'Staff'}). Urgency: ${urgencyLevel}. Format: ${requestedFileFormat}.`,
+            ipAddress,
+            userAgent,
+            metadata: {
+              purpose: purposeOfRequest,
+              requesterDepartment,
+              urgencyLevel,
+              requestedFileFormat,
+            },
           },
-        },
-      });
+        });
 
-      return requisition;
+        results.push(requisition);
+      }
+      return results;
     });
 
     // Alert Registry Records Desk
+    const staffNames = targetStaffProfiles
+      .map((s) => s.user?.name || s.staffId || 'Staff')
+      .slice(0, 3)
+      .join(', ');
+    const countText =
+      targetStaffProfiles.length > 1 ? ` (${targetStaffProfiles.length} staff files)` : '';
+
     notifyRoleUsers(
       [Role.REGISTRY_ADMIN, Role.HR_ADMIN, Role.SUPER_USER],
       'New Personnel File Requisition Lodged',
-      `File requisition ${result.requisitionNumber} for ${targetStaff.user?.name || 'Staff'} has been submitted for intake review.`,
+      `File requisition lodged for ${staffNames}${countText} by ${requesterDepartment}.`,
       `/registry/file-requests/inward`
     );
 
@@ -196,8 +388,10 @@ export async function lodgeRequisition(req: Request, res: Response) {
 
     return res.status(201).json({
       success: true,
-      data: result,
-      message: 'File requisition successfully lodged and submitted to Registry Records desk.',
+      data: createdRequisitions[0],
+      requisitions: createdRequisitions,
+      count: createdRequisitions.length,
+      message: `${createdRequisitions.length} file requisition(s) successfully lodged and submitted to Registry Records desk.`,
     });
   } catch (error: any) {
     console.error('Error lodging file requisition:', error);

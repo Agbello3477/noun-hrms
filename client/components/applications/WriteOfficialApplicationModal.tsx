@@ -209,17 +209,24 @@ ${defaultUnit}`
             return;
         }
 
-        if (!isLeadership && !customCategory.trim()) {
-            setError('Please write your application category.');
-            return;
+        let effectiveCategory = '';
+        if (isLeadership) {
+            if (category === 'OTHER') {
+                if (!customCategory.trim()) {
+                    setError('Please write and specify your official application category.');
+                    return;
+                }
+                effectiveCategory = customCategory.trim();
+            } else {
+                effectiveCategory = category;
+            }
+        } else {
+            if (!customCategory.trim()) {
+                setError('Please write your application category.');
+                return;
+            }
+            effectiveCategory = customCategory.trim();
         }
-
-        if (!content.trim()) {
-            setError('Please provide the application letter content.');
-            return;
-        }
-
-        const effectiveCategory = isLeadership ? category : (customCategory.trim() || 'General Application');
 
         setSubmitting(true);
         try {
@@ -473,15 +480,35 @@ ${defaultUnit}`
                                 <Tag size={13} className="text-[#006533]" /> Application Category *
                             </label>
                             {isLeadership ? (
-                                <select
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value)}
-                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
-                                >
-                                    {STATUTORY_CATEGORIES.map((cat) => (
-                                        <option key={cat.value} value={cat.value}>{cat.label}</option>
-                                    ))}
-                                </select>
+                                <div>
+                                    <select
+                                        value={category}
+                                        onChange={(e) => setCategory(e.target.value)}
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
+                                    >
+                                        {STATUTORY_CATEGORIES.map((cat) => (
+                                            <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                        ))}
+                                    </select>
+                                    {category === 'OTHER' && (
+                                        <div className="mt-2.5">
+                                            <label className="block text-xs font-bold text-emerald-800 mb-1">
+                                                Specify Official Application Category *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="e.g. Special Duty Allowance, Overtime Clearance, Facility Reallocation..."
+                                                value={customCategory}
+                                                onChange={(e) => setCustomCategory(e.target.value)}
+                                                className="w-full bg-emerald-50/40 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006533]"
+                                            />
+                                            <p className="text-[10px] text-emerald-700 mt-1">
+                                                Clearly specify the statutory purpose or category for this official application.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             ) : (
                                 <div>
                                     <input

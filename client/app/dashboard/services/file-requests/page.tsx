@@ -35,6 +35,10 @@ export default function MyFileRequisitionsPage() {
   const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
 
   const fetchMyRequisitions = async () => {
+    if (user?.role === 'STAFF') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.get('/api/v1/registry/file-requests/my');
@@ -50,7 +54,31 @@ export default function MyFileRequisitionsPage() {
 
   useEffect(() => {
     fetchMyRequisitions();
-  }, []);
+  }, [user]);
+
+  if (user && user.role === 'STAFF') {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Restricted Statutory Access</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Personnel File Requisitions are restricted to Unit Heads, Deans, Directors, Study Centre Managers, and Registry Vault Officers. Regular staff are not authorized to requisition confidential personnel files.
+          </p>
+          <div className="pt-2">
+            <a
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-xl bg-[#006533] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors"
+            >
+              Return to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 space-y-6">
