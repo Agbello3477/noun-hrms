@@ -691,6 +691,29 @@ export async function directorAction(req: Request, res: Response) {
       ).catch(() => {});
     }
 
+    if (decision === 'RECOMMEND') {
+      prisma.user
+        .findMany({
+          where: {
+            role: { in: ['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] },
+            isActive: true,
+          },
+          select: { id: true },
+        })
+        .then((registryUsers) => {
+          for (const regUser of registryUsers) {
+            notifyUser(
+              regUser.id,
+              '📥 New Directorate Endorsement for Inward Docketing',
+              `Director ${directorName} has endorsed application ${application.referenceNumber} (${application.subject}) for staff ${applicantName}. Awaiting Registry Folio docketing.`,
+              'INFO',
+              '/dashboard/registry/inward-docket'
+            ).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+
     emitApplicationStatusChanged({
       applicationId: updated.id,
       refNo: updated.referenceNumber,
@@ -830,6 +853,28 @@ export async function registryAcknowledge(req: Request, res: Response) {
         application.subject
       ).catch(() => {});
     }
+
+    // Notify Registrar & Deputy Registrar for Executive Adjudication
+    prisma.user
+      .findMany({
+        where: {
+          role: { in: ['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] },
+          isActive: true,
+        },
+        select: { id: true },
+      })
+      .then((registrarUsers) => {
+        for (const regUser of registrarUsers) {
+          notifyUser(
+            regUser.id,
+            '📜 Docketed Application Awaiting Determination',
+            `Application ${application.referenceNumber} (Folio: ${folioNumber}) from ${applicantName} has been received and docketed by Registry Inward Desk.`,
+            'INFO',
+            '/registrar-cockpit/applications'
+          ).catch(() => {});
+        }
+      })
+      .catch(() => {});
 
     emitApplicationStatusChanged({
       applicationId: updated.id,
@@ -1288,14 +1333,20 @@ export async function getDirectorQueue(req: Request, res: Response) {
  */
 export async function getRegistryQueue(req: Request, res: Response) {
   try {
-    const { filter } = req.query; // 'pending' (recommended), 'docketed', or 'all'
+    const rawFilter = req.query.filter || req.query.status || 'ALL';
+    const filter = String(rawFilter).toUpperCase().trim();
 
     const whereClause: any = {};
-    if (filter === 'pending') {
+    if (filter === 'AWAITING' || filter === 'PENDING' || filter === 'RECOMMENDED' || filter === 'RECOMMENDED_TO_REGISTRY') {
       whereClause.status = 'RECOMMENDED_TO_REGISTRY';
-    } else if (filter === 'docketed') {
+    } else if (filter === 'DOCKETED' || filter === 'DOCKETED_PENDING_REGISTRAR') {
       whereClause.status = 'DOCKETED_PENDING_REGISTRAR';
+    } else if (filter === 'APPROVED' || filter === 'APPROVED_BY_REGISTRAR') {
+      whereClause.status = 'APPROVED_BY_REGISTRAR';
+    } else if (filter === 'DECLINED' || filter === 'REJECTED' || filter === 'DECLINED_BY_REGISTRAR') {
+      whereClause.status = 'DECLINED_BY_REGISTRAR';
     } else {
+      // Default / ALL: all applications that have reached Registry stage
       whereClause.status = {
         in: ['RECOMMENDED_TO_REGISTRY', 'DOCKETED_PENDING_REGISTRAR', 'APPROVED_BY_REGISTRAR', 'DECLINED_BY_REGISTRAR'],
       };
@@ -1309,15 +1360,74 @@ export async function getRegistryQueue(req: Request, res: Response) {
             id: true,
             name: true,
             email: true,
-            staffProfile: { select: { staffId: true, rank: true, surname: true, otherNames: true, title: true } },
+            staffProfile: {
+              select: {
+                id: true,
+                staffId: true,
+                rank: true,
+                surname: true,
+                otherNames: true,
+                title: true,
+                department: true,
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+              },
+            },
           },
         },
-        director: { select: { id: true, name: true, email: true } },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                title: true,
+                surname: true,
+                otherNames: true,
+                rank: true,
+                unit: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        registryClerk: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        revisions: { orderBy: { createdAt: 'desc' } },
       },
       orderBy: { updatedAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications, applications });
+    // Summary counts for filter tabs
+    const allRegistryApps = await prisma.institutionalApplication.findMany({
+      where: {
+        status: {
+          in: ['RECOMMENDED_TO_REGISTRY', 'DOCKETED_PENDING_REGISTRAR', 'APPROVED_BY_REGISTRAR', 'DECLINED_BY_REGISTRAR'],
+        },
+      },
+      select: { id: true, status: true },
+    });
+
+    const summary = {
+      total: allRegistryApps.length,
+      awaiting: allRegistryApps.filter((a) => a.status === 'RECOMMENDED_TO_REGISTRY').length,
+      docketed: allRegistryApps.filter((a) => a.status === 'DOCKETED_PENDING_REGISTRAR').length,
+      approved: allRegistryApps.filter((a) => a.status === 'APPROVED_BY_REGISTRAR').length,
+      declined: allRegistryApps.filter((a) => a.status === 'DECLINED_BY_REGISTRAR').length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: applications,
+      applications,
+      summary,
+    });
   } catch (error: any) {
     console.error('Error in getRegistryQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Registry queue.' });
@@ -1329,8 +1439,22 @@ export async function getRegistryQueue(req: Request, res: Response) {
  */
 export async function getRegistrarQueue(req: Request, res: Response) {
   try {
+    const rawFilter = req.query.filter || req.query.status || 'PENDING';
+    const filter = String(rawFilter).toUpperCase().trim();
+
+    const whereClause: any = {};
+    if (filter === 'PENDING' || filter === 'DOCKETED') {
+      whereClause.status = 'DOCKETED_PENDING_REGISTRAR';
+    } else if (filter === 'APPROVED' || filter === 'APPROVED_BY_REGISTRAR') {
+      whereClause.status = 'APPROVED_BY_REGISTRAR';
+    } else if (filter === 'DECLINED' || filter === 'REJECTED' || filter === 'DECLINED_BY_REGISTRAR') {
+      whereClause.status = 'DECLINED_BY_REGISTRAR';
+    } else if (filter !== 'ALL') {
+      whereClause.status = filter;
+    }
+
     const applications = await prisma.institutionalApplication.findMany({
-      where: { status: 'DOCKETED_PENDING_REGISTRAR' },
+      where: whereClause,
       include: {
         applicant: {
           select: {
@@ -1346,18 +1470,64 @@ export async function getRegistrarQueue(req: Request, res: Response) {
                 otherNames: true,
                 title: true,
                 highestQualification: true,
+                department: true,
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                title: true,
+                surname: true,
+                otherNames: true,
+                rank: true,
                 unit: { select: { id: true, name: true } },
               },
             },
           },
         },
-        director: { select: { id: true, name: true, email: true } },
+        registryClerk: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
         revisions: { orderBy: { createdAt: 'desc' } },
       },
       orderBy: { updatedAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications, applications });
+    const allRegistrarApps = await prisma.institutionalApplication.findMany({
+      where: {
+        status: {
+          in: ['DOCKETED_PENDING_REGISTRAR', 'APPROVED_BY_REGISTRAR', 'DECLINED_BY_REGISTRAR'],
+        },
+      },
+      select: { id: true, status: true },
+    });
+
+    const summary = {
+      total: allRegistrarApps.length,
+      pending: allRegistrarApps.filter((a) => a.status === 'DOCKETED_PENDING_REGISTRAR').length,
+      approved: allRegistrarApps.filter((a) => a.status === 'APPROVED_BY_REGISTRAR').length,
+      declined: allRegistrarApps.filter((a) => a.status === 'DECLINED_BY_REGISTRAR').length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: applications,
+      applications,
+      summary,
+    });
   } catch (error: any) {
     console.error('Error in getRegistrarQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Registrar queue.' });
