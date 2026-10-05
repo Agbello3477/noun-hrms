@@ -206,10 +206,23 @@ export default function MasterApplicationArchivePage() {
                     <td className="p-3.5 text-right">
                       <button
                         onClick={() => {
-                          setSelectedApp(app);
+                          const fullApp = {
+                            ...(app || {}),
+                            id: app?.id || item.id,
+                            referenceNumber: app?.referenceNumber || item.archivedDocketNumber || 'N/A',
+                            registryDocketNumber: app?.registryDocketNumber || item.archivedDocketNumber,
+                            subject: app?.subject || item.subject || 'Archived Institutional Dossier',
+                            category: app?.category || 'INSTITUTIONAL_APPLICATION',
+                            status: app?.status || (item.finalStatus === 'APPROVED' ? 'APPROVED_BY_REGISTRAR' : item.finalStatus === 'DECLINED' ? 'DECLINED_BY_REGISTRAR' : item.finalStatus || 'APPROVED_BY_REGISTRAR'),
+                            content: app?.content || item.content || 'Archived record stored in Registry permanent repository.',
+                            attachmentUrls: app?.attachmentUrls || item.attachmentUrls || [],
+                            createdAt: app?.createdAt || item.archivedAt,
+                            archive: item,
+                          };
+                          setSelectedApp(fullApp);
                           setIsDetailsModalOpen(true);
                         }}
-                        className="px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                        className="px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors shadow-2xs"
                       >
                         Audit Dossier
                       </button>

@@ -62,8 +62,9 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
 };
 
 export default function ApplicationStatusBadge({ status, size = 'sm' }: Props) {
-  const config = STATUS_CONFIG[status] || {
-    label: status.replace(/_/g, ' '),
+  const safeStatus = status || 'UNKNOWN';
+  const config = STATUS_CONFIG[safeStatus] || {
+    label: safeStatus.replace(/_/g, ' '),
     bg: 'bg-gray-50',
     text: 'text-gray-700',
     border: 'border-gray-200'

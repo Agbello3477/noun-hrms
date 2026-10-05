@@ -106,16 +106,16 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                {application.referenceNumber}
+                {application.referenceNumber || 'N/A'}
               </span>
               {application.registryDocketNumber && (
                 <span className="font-mono text-sm font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                   Folio: {application.registryDocketNumber}
                 </span>
               )}
-              <ApplicationStatusBadge status={application.status} />
+              <ApplicationStatusBadge status={application.status || 'APPROVED_BY_REGISTRAR'} />
             </div>
-            <h2 className="text-lg font-bold text-gray-900 mt-1">{application.subject}</h2>
+            <h2 className="text-lg font-bold text-gray-900 mt-1">{application.subject || 'Institutional Application'}</h2>
           </div>
           <button
             onClick={onClose}
@@ -157,9 +157,9 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">Category & Date</p>
-              <p className="font-semibold text-gray-900">{application.category.replace(/_/g, ' ')}</p>
+              <p className="font-semibold text-gray-900">{(application.category || 'INSTITUTIONAL_APPLICATION').replace(/_/g, ' ')}</p>
               <p className="text-xs text-gray-500">
-                Submitted: {new Date(application.createdAt).toLocaleDateString()}
+                Submitted: {application.createdAt ? new Date(application.createdAt).toLocaleDateString() : 'N/A'}
               </p>
             </div>
           </div>
