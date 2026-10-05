@@ -27,9 +27,18 @@ export default function MasterApplicationArchivePage() {
       if (statusFilter) params.append('status', statusFilter);
       if (search.trim()) params.append('search', search.trim());
 
-      const res = await api.get(`/api/v1/applications/archive/master?${params.toString()}`);
+      let res;
+      try {
+        res = await api.get(`/api/v1/applications/archive/master?${params.toString()}`);
+      } catch {
+        try {
+          res = await api.get(`/api/v1/applications/archive?${params.toString()}`);
+        } catch {
+          res = await api.get(`/api/applications/archive?${params.toString()}`);
+        }
+      }
       if (res.data?.success) {
-        setArchives(res.data.archives || []);
+        setArchives(res.data.data || res.data.archives || res.data.applications || []);
       }
     } catch (err) {
       console.error('Failed to load master archive:', err);

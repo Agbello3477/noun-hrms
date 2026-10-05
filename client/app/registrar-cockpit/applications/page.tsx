@@ -25,9 +25,18 @@ export default function RegistrarApplicationsPage() {
   const loadRegistrarQueue = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/v1/applications/registrar/queue');
+      let res;
+      try {
+        res = await api.get('/api/v1/applications/registrar/queue');
+      } catch {
+        try {
+          res = await api.get('/api/v1/applications/registrar-queue');
+        } catch {
+          res = await api.get('/api/applications/registrar-queue');
+        }
+      }
       if (res.data?.success) {
-        setApplications(res.data.applications || []);
+        setApplications(res.data.data || res.data.applications || []);
       }
     } catch (err) {
       console.error('Failed to load registrar docket:', err);

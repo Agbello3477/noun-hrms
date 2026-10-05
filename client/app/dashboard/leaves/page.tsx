@@ -99,9 +99,14 @@ function LeavesContent() {
     const fetchInstitutionalApps = useCallback(async () => {
         setLoadingInstApps(true);
         try {
-            const res = await api.get('/api/v1/applications/my-applications');
+            let res;
+            try {
+                res = await api.get('/api/v1/applications/my-applications');
+            } catch {
+                res = await api.get('/api/applications/my-applications');
+            }
             if (res.data?.success) {
-                setInstitutionalApps(res.data.applications || []);
+                setInstitutionalApps(res.data.data || res.data.applications || []);
             }
         } catch (err) {
             console.warn('Failed to load institutional applications:', err);

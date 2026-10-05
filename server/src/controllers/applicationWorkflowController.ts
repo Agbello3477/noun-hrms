@@ -519,7 +519,10 @@ export async function directorAction(req: Request, res: Response) {
     const callerId = (req as any).user?.id;
     const callerRole = (req as any).user?.role;
     const { id } = req.params;
-    const { decision, directorRemarks } = req.body;
+    const rawDecision = req.body.decision || req.body.action;
+    const decision = rawDecision ? String(rawDecision).toUpperCase().trim() : '';
+    const rawRemarks = req.body.directorRemarks || req.body.remarks || req.body.comment || '';
+    const directorRemarks = typeof rawRemarks === 'string' ? rawRemarks.trim() : '';
 
     if (!['RECOMMEND', 'REWRITE', 'REJECT'].includes(decision)) {
       return res.status(400).json({
@@ -530,7 +533,17 @@ export async function directorAction(req: Request, res: Response) {
 
     const application = await prisma.institutionalApplication.findUnique({
       where: { id },
-      include: { applicant: true, director: true, revisions: true },
+      include: {
+        applicant: {
+          include: {
+            staffProfile: {
+              include: { unit: true, studyCenter: true },
+            },
+          },
+        },
+        director: true,
+        revisions: true,
+      },
     });
 
     if (!application) {
@@ -538,13 +551,27 @@ export async function directorAction(req: Request, res: Response) {
     }
 
     // Guard: Caller must be the assigned director OR hold UNIT_HEAD/leadership role OR SUPER_USER
-    const isDesignatedDirector = application.directorId === callerId;
+    let callerProfile = await prisma.staffProfile.findFirst({
+      where: { OR: [{ userId: callerId }, { id: callerId }] },
+      select: { id: true, userId: true, unitId: true, centerId: true },
+    });
+
+    const isDesignatedDirector =
+      application.directorId === callerId ||
+      (callerProfile && application.directorId === callerProfile.userId) ||
+      (callerProfile && application.directorId === callerProfile.id) ||
+      (callerProfile?.unitId && application.applicant?.staffProfile?.unitId === callerProfile.unitId) ||
+      (callerProfile?.centerId && application.applicant?.staffProfile?.centerId === callerProfile.centerId);
+
     const hasDirectorPrivileges =
       callerRole === 'UNIT_HEAD' ||
       callerRole === 'STUDY_CENTER_MANAGER' ||
       callerRole === 'SUPER_USER' ||
       callerRole === 'ADMIN' ||
       callerRole === 'REGISTRAR' ||
+      callerRole === 'DEPUTY_REGISTRAR' ||
+      callerRole === 'CLINIC_HEAD' ||
+      callerRole === 'SECURITY_HEAD' ||
       callerRole === 'VICE_CHANCELLOR';
 
     if (!isDesignatedDirector && !hasDirectorPrivileges) {
@@ -1057,41 +1084,25 @@ export async function registrarDecision(req: Request, res: Response) {
  */
 export async function getMyApplications(req: Request, res: Response) {
   try {
-    const applicantId = (req as any).user?.id;
+    const callerId = (req as any).user?.id;
     const { status, category } = req.query;
 
-    const whereClause: any = { applicantId };
-    if (status) whereClause.status = status;
-    if (category) whereClause.category = category;
-
-    const applications = await prisma.institutionalApplication.findMany({
-      where: whereClause,
-      include: {
-        director: { select: { id: true, name: true, email: true } },
-        revisions: { orderBy: { createdAt: 'desc' }, take: 1 },
-      },
-      orderBy: { createdAt: 'desc' },
+    let applicantUserIds = [callerId];
+    const staffProfile = await prisma.staffProfile.findFirst({
+      where: { OR: [{ userId: callerId }, { id: callerId }] },
+      select: { id: true, userId: true },
     });
-
-    return res.status(200).json({ success: true, data: applications });
-  } catch (error: any) {
-    console.error('Error in getMyApplications:', error);
-    return res.status(500).json({ success: false, error: 'Failed to fetch applications.' });
-  }
-}
-
-/**
- * GET /api/v1/applications/director-queue
- */
-export async function getDirectorQueue(req: Request, res: Response) {
-  try {
-    const directorId = (req as any).user?.id;
-    const { status } = req.query;
+    if (staffProfile) {
+      if (staffProfile.userId) applicantUserIds.push(staffProfile.userId);
+      if (staffProfile.id) applicantUserIds.push(staffProfile.id);
+    }
+    applicantUserIds = Array.from(new Set(applicantUserIds.filter(Boolean)));
 
     const whereClause: any = {
-      directorId,
-      status: (status as any) || 'SUBMITTED_TO_DIRECTOR',
+      applicantId: { in: applicantUserIds },
     };
+    if (status) whereClause.status = status;
+    if (category) whereClause.category = category;
 
     const applications = await prisma.institutionalApplication.findMany({
       where: whereClause,
@@ -1105,6 +1116,125 @@ export async function getDirectorQueue(req: Request, res: Response) {
               select: {
                 id: true,
                 staffId: true,
+                surname: true,
+                otherNames: true,
+                title: true,
+                rank: true,
+                department: true,
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                surname: true,
+                otherNames: true,
+                title: true,
+                rank: true,
+                department: true,
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        revisions: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.status(200).json({ success: true, data: applications, applications });
+  } catch (error: any) {
+    console.error('Error in getMyApplications:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch applications.' });
+  }
+}
+
+/**
+ * GET /api/v1/applications/director-queue
+ */
+export async function getDirectorQueue(req: Request, res: Response) {
+  try {
+    const callerId = (req as any).user?.id;
+    const callerRole = (req as any).user?.role;
+    const { status } = req.query;
+
+    let directorUserIds = [callerId];
+    const directorProfile = await prisma.staffProfile.findFirst({
+      where: { OR: [{ userId: callerId }, { id: callerId }] },
+      select: { id: true, userId: true, unitId: true, centerId: true },
+    });
+    if (directorProfile) {
+      if (directorProfile.userId) directorUserIds.push(directorProfile.userId);
+      if (directorProfile.id) directorUserIds.push(directorProfile.id);
+    }
+    directorUserIds = Array.from(new Set(directorUserIds.filter(Boolean)));
+
+    const statusFilter = (status as any) || 'SUBMITTED_TO_DIRECTOR';
+
+    let whereClause: any;
+    if (callerRole === 'SUPER_USER' || callerRole === 'ADMIN' || callerRole === 'VICE_CHANCELLOR') {
+      whereClause = {
+        status: statusFilter,
+        OR: [
+          { directorId: { in: directorUserIds } },
+          { directorId: { not: '' } },
+          ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
+        ],
+      };
+    } else {
+      whereClause = {
+        status: statusFilter,
+        OR: [
+          { directorId: { in: directorUserIds } },
+          ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
+          ...(directorProfile?.centerId ? [{ applicant: { staffProfile: { centerId: directorProfile.centerId } } }] : []),
+        ],
+      };
+    }
+
+    const applications = await prisma.institutionalApplication.findMany({
+      where: whereClause,
+      include: {
+        applicant: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                staffId: true,
+                surname: true,
+                otherNames: true,
+                title: true,
+                rank: true,
+                department: true,
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                surname: true,
+                otherNames: true,
+                title: true,
                 rank: true,
                 department: true,
                 unit: { select: { id: true, name: true } },
@@ -1117,7 +1247,7 @@ export async function getDirectorQueue(req: Request, res: Response) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications });
+    return res.status(200).json({ success: true, data: applications, applications });
   } catch (error: any) {
     console.error('Error in getDirectorQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Director queue.' });
@@ -1150,7 +1280,7 @@ export async function getRegistryQueue(req: Request, res: Response) {
             id: true,
             name: true,
             email: true,
-            staffProfile: { select: { staffId: true, rank: true } },
+            staffProfile: { select: { staffId: true, rank: true, surname: true, otherNames: true, title: true } },
           },
         },
         director: { select: { id: true, name: true, email: true } },
@@ -1158,7 +1288,7 @@ export async function getRegistryQueue(req: Request, res: Response) {
       orderBy: { updatedAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications });
+    return res.status(200).json({ success: true, data: applications, applications });
   } catch (error: any) {
     console.error('Error in getRegistryQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Registry queue.' });
@@ -1183,6 +1313,9 @@ export async function getRegistrarQueue(req: Request, res: Response) {
                 id: true,
                 staffId: true,
                 rank: true,
+                surname: true,
+                otherNames: true,
+                title: true,
                 highestQualification: true,
                 unit: { select: { id: true, name: true } },
               },
@@ -1195,7 +1328,7 @@ export async function getRegistrarQueue(req: Request, res: Response) {
       orderBy: { updatedAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications });
+    return res.status(200).json({ success: true, data: applications, applications });
   } catch (error: any) {
     console.error('Error in getRegistrarQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Registrar queue.' });
@@ -1258,7 +1391,7 @@ export async function getMasterArchive(req: Request, res: Response) {
       );
     }
 
-    return res.status(200).json({ success: true, data: results });
+    return res.status(200).json({ success: true, data: results, archives: results, applications: results });
   } catch (error: any) {
     console.error('Error in getMasterArchive:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Registry archive.' });

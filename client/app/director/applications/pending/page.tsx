@@ -25,9 +25,18 @@ export default function DirectorPendingApplicationsPage() {
   const loadDirectorQueue = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/v1/applications/director/queue');
+      let res;
+      try {
+        res = await api.get('/api/v1/applications/director-queue');
+      } catch {
+        try {
+          res = await api.get('/api/v1/applications/director/queue');
+        } catch {
+          res = await api.get('/api/applications/director-queue');
+        }
+      }
       if (res.data?.success) {
-        setQueue(res.data.applications || []);
+        setQueue(res.data.data || res.data.applications || []);
       }
     } catch (err) {
       console.error('Failed to load director queue:', err);
@@ -56,10 +65,19 @@ export default function DirectorPendingApplicationsPage() {
       setActionLoading(true);
       setActionError(null);
 
-      const res = await api.post(`/api/v1/applications/${actionApp.id}/director-action`, {
+      const payload = {
+        decision: actionType,
         action: actionType,
-        remarks: remarks.trim()
-      });
+        directorRemarks: remarks.trim(),
+        remarks: remarks.trim(),
+      };
+
+      let res;
+      try {
+        res = await api.put(`/api/v1/applications/${actionApp.id}/director-action`, payload);
+      } catch {
+        res = await api.post(`/api/v1/applications/${actionApp.id}/director-action`, payload);
+      }
 
       if (res.data?.success) {
         setActionApp(null);

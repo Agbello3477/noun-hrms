@@ -25,9 +25,18 @@ export default function RegistryInwardDocketPage() {
   const loadRegistryQueue = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/api/v1/applications/registry/queue?filter=${filter}`);
+      let res;
+      try {
+        res = await api.get(`/api/v1/applications/registry/queue?filter=${filter}`);
+      } catch {
+        try {
+          res = await api.get(`/api/v1/applications/registry-queue?filter=${filter}`);
+        } catch {
+          res = await api.get(`/api/applications/registry-queue?filter=${filter}`);
+        }
+      }
       if (res.data?.success) {
-        setApplications(res.data.applications || []);
+        setApplications(res.data.data || res.data.applications || []);
       }
     } catch (err) {
       console.error('Failed to load registry queue:', err);
