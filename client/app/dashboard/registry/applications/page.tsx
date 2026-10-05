@@ -193,6 +193,26 @@ export default function RegistryApplicationsPage() {
                 </div>
             </div>
 
+            {/* Inward Docket Gateway Banner */}
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-purple-100 text-purple-700">
+                        <Stamp size={22} />
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-bold text-purple-950">Directorate Endorsed Applications (Inward Docket &amp; Folio Desk)</h4>
+                        <p className="text-xs text-purple-700">Review staff applications endorsed by Directors/Deans, stamp statutory Folio numbers, and route to the Registrar.</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => router.push('/dashboard/registry/inward-docket')}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl transition shadow-sm whitespace-nowrap flex items-center gap-1.5"
+                >
+                    <span>Open Inward Docket Desk</span>
+                    <ChevronRight size={14} />
+                </button>
+            </div>
+
             {/* Stats Overview */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="enterprise-card p-5 border-l-4 border-l-blue-600 space-y-1">

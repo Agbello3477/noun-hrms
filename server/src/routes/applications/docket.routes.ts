@@ -34,8 +34,8 @@ router.put('/:id/resubmit', resubmitApplication);
 router.post('/:id/resubmit', resubmitApplication);
 
 // Fetch my submitted applications (supports /my-applications and /my)
-router.get('/my-applications', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getMyApplications);
-router.get('/my', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getMyApplications);
+router.get('/my-applications', getMyApplications);
+router.get('/my', getMyApplications);
 
 // Fetch eligible Directors and caller's auto-detected designated Unit Head / Director
 router.get('/eligible-directors', getEligibleDirectors);
@@ -49,77 +49,51 @@ router.get('/directors', getEligibleDirectors);
 router.put('/:id/director-action', directorAction);
 router.post('/:id/director-action', directorAction);
 
-// Director pending queue (supports /director-queue and /director/queue)
-router.get(
-  '/director-queue',
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getDirectorQueue
-);
-router.get(
-  '/director/queue',
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getDirectorQueue
-);
+// Director pending queue (supports /director-queue and /director/queue) - Real-time live queue
+router.get('/director-queue', getDirectorQueue);
+router.get('/director/queue', getDirectorQueue);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 3: REGISTRY INWARD DESK (DOCKETING & ACKNOWLEDGMENT)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Registry Inward Desk folio stamping & acknowledgment (supports both PUT and POST)
-router.put(
-  '/:id/registry-acknowledge',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
-  registryAcknowledge
-);
-router.post(
-  '/:id/registry-acknowledge',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
-  registryAcknowledge
-);
+const REGISTRY_ALLOWED_ROLES = [
+  'REGISTRY_ADMIN',
+  'HR_ADMIN',
+  'SUPER_USER',
+  'ADMIN',
+  'REGISTRAR',
+  'DEPUTY_REGISTRAR',
+  'VICE_CHANCELLOR',
+] as any;
 
-// Registry Inward Desk queue (supports /registry-queue and /registry/queue)
-router.get(
-  '/registry-queue',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'REGISTRAR'] as any),
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getRegistryQueue
-);
-router.get(
-  '/registry/queue',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER', 'REGISTRAR'] as any),
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getRegistryQueue
-);
+// Registry Inward Desk folio stamping & acknowledgment (supports both PUT and POST)
+router.put('/:id/registry-acknowledge', requireRole(REGISTRY_ALLOWED_ROLES), registryAcknowledge);
+router.post('/:id/registry-acknowledge', requireRole(REGISTRY_ALLOWED_ROLES), registryAcknowledge);
+
+// Registry Inward Desk queue (supports /registry-queue and /registry/queue) - Real-time live queue
+router.get('/registry-queue', requireRole(REGISTRY_ALLOWED_ROLES), getRegistryQueue);
+router.get('/registry/queue', requireRole(REGISTRY_ALLOWED_ROLES), getRegistryQueue);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 4: REGISTRAR FINAL DETERMINATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Registrar executive final determination (supports both PUT and POST)
-router.put(
-  '/:id/registrar-decision',
-  requireRole(['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
-  registrarDecision
-);
-router.post(
-  '/:id/registrar-decision',
-  requireRole(['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
-  registrarDecision
-);
+const REGISTRAR_ALLOWED_ROLES = [
+  'REGISTRAR',
+  'DEPUTY_REGISTRAR',
+  'SUPER_USER',
+  'ADMIN',
+  'VICE_CHANCELLOR',
+] as any;
 
-// Registrar Executive application queue (supports /registrar-queue and /registrar/queue)
-router.get(
-  '/registrar-queue',
-  requireRole(['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getRegistrarQueue
-);
-router.get(
-  '/registrar/queue',
-  requireRole(['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
-  cacheMiddleware(10, { tags: ['tag:institutional_applications', 'tag:pending_applications_docket'] }),
-  getRegistrarQueue
-);
+// Registrar executive final determination (supports both PUT and POST)
+router.put('/:id/registrar-decision', requireRole(REGISTRAR_ALLOWED_ROLES), registrarDecision);
+router.post('/:id/registrar-decision', requireRole(REGISTRAR_ALLOWED_ROLES), registrarDecision);
+
+// Registrar Executive application queue (supports /registrar-queue and /registrar/queue) - Real-time live queue
+router.get('/registrar-queue', requireRole(REGISTRAR_ALLOWED_ROLES), getRegistrarQueue);
+router.get('/registrar/queue', requireRole(REGISTRAR_ALLOWED_ROLES), getRegistrarQueue);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MASTER ARCHIVE & DETAIL LOOKUP
@@ -130,6 +104,6 @@ router.get('/archive', cacheMiddleware(30, { tags: ['tag:institutional_applicati
 router.get('/archive/master', cacheMiddleware(30, { tags: ['tag:institutional_applications'] }), getMasterArchive);
 
 // Application details by ID with complete revision audit trail
-router.get('/:id', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getApplicationById);
+router.get('/:id', getApplicationById);
 
 export default router;

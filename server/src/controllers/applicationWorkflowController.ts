@@ -755,8 +755,16 @@ export async function registryAcknowledge(req: Request, res: Response) {
     const { id } = req.params;
     const { customFolioNumber, remarks } = req.body;
 
-    // Guard: REGISTRY_ADMIN, HR_ADMIN, or SUPER_USER
-    const allowedRoles = ['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'];
+    // Guard: Registry Inward Desk Officers, HR Admins, Super Users, Admins, Registrar
+    const allowedRoles = [
+      'REGISTRY_ADMIN',
+      'HR_ADMIN',
+      'SUPER_USER',
+      'ADMIN',
+      'REGISTRAR',
+      'DEPUTY_REGISTRAR',
+      'VICE_CHANCELLOR',
+    ];
     if (!allowedRoles.includes(clerkRole)) {
       return res.status(403).json({
         success: false,
