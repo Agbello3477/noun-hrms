@@ -33,7 +33,7 @@ export default function RegistrarCockpitPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits' | 'file-releases'>('queue');
+    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits' | 'file-releases' | 'applications'>('queue');
     const [queueSummary, setQueueSummary] = useState({
         totalPending: 0,
         postings: 0,
@@ -41,7 +41,8 @@ export default function RegistrarCockpitPage() {
         promotionOverrides: 0,
         disciplinaryQueries: 0,
         roleChanges: 0,
-        fileReleases: 0
+        fileReleases: 0,
+        applications: 0
     });
 
     const [pendingPostings, setPendingPostings] = useState<any[]>([]);
@@ -49,6 +50,7 @@ export default function RegistrarCockpitPage() {
     const [pendingOverrides, setPendingOverrides] = useState<any[]>([]);
     const [pendingRoleChanges, setPendingRoleChanges] = useState<any[]>([]);
     const [pendingFileReleases, setPendingFileReleases] = useState<any[]>([]);
+    const [pendingApplications, setPendingApplications] = useState<any[]>([]);
     const [audits, setAudits] = useState<any[]>([]);
 
     const [loadingQueue, setLoadingQueue] = useState(true);
@@ -60,14 +62,15 @@ export default function RegistrarCockpitPage() {
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
     const [selectedOverride, setSelectedOverride] = useState<any | null>(null);
     const [selectedFileRelease, setSelectedFileRelease] = useState<any | null>(null);
+    const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
 
     // Decision modal / input state
     const [decisionRemarks, setDecisionRemarks] = useState('');
 
-    // Role Guard: Only Registrar, Deputy Registrar, or VC
+    // Role Guard: Only Registrar, Deputy Registrar, VC, Super User, Admin
     useEffect(() => {
         if (!authLoading && user) {
-            const isAuthorized = ['REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER'].includes(user.role);
+            const isAuthorized = ['REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'].includes(user.role);
             if (!isAuthorized) {
                 router.replace('/registry-workspace');
             }
@@ -84,19 +87,22 @@ export default function RegistrarCockpitPage() {
     const loadCockpitData = async () => {
         setLoadingQueue(true);
         try {
-            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes, fileReleasesRes] = await Promise.all([
-                api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0, roleChanges: 0 } } })),
+            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes, fileReleasesRes, applicationsRes] = await Promise.all([
+                api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0, roleChanges: 0, applications: 0, fileReleases: 0 } } })),
                 api.get('/api/v1/registrar/postings/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/files/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/promotions/pending-overrides').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/role-changes/pending').catch(() => ({ data: [] })),
-                api.get('/api/v1/registrar/file-requests/pending').catch(() => ({ data: { data: [] } }))
+                api.get('/api/v1/registrar/file-requests/pending').catch(() => ({ data: { data: [] } })),
+                api.get('/api/v1/applications/registrar/queue').catch(() => ({ data: { data: [] } }))
             ]);
 
             const releases = fileReleasesRes.data?.data || [];
+            const apps = applicationsRes.data?.data || applicationsRes.data?.applications || [];
             const summary = {
                 ...queueRes.data.queueSummary,
-                fileReleases: releases.length
+                fileReleases: releases.length,
+                applications: apps.length
             };
             setQueueSummary(summary);
             setPendingPostings(postingsRes.data || []);
@@ -104,6 +110,7 @@ export default function RegistrarCockpitPage() {
             setPendingOverrides(overridesRes.data || []);
             setPendingRoleChanges(roleChangesRes.data || []);
             setPendingFileReleases(releases);
+            setPendingApplications(apps);
 
             if (postingsRes.data && postingsRes.data.length > 0) {
                 setSelectedPosting(postingsRes.data[0]);
@@ -117,10 +124,40 @@ export default function RegistrarCockpitPage() {
             if (releases && releases.length > 0) {
                 setSelectedFileRelease(releases[0]);
             }
+            if (apps && apps.length > 0) {
+                setSelectedApplication(apps[0]);
+            }
         } catch (err: any) {
             console.error('Failed to load cockpit data', err);
         } finally {
             setLoadingQueue(false);
+        }
+    };
+
+    // Institutional Application Decision Handler
+    const handleApplicationDecision = async (applicationId: string, decision: 'APPROVED' | 'DECLINED') => {
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const remarksTrimmed = decisionRemarks?.trim() || (decision === 'APPROVED' ? 'Executive clearance granted pursuant to institutional regulations.' : '');
+            if (decision === 'DECLINED' && !remarksTrimmed) {
+                setFeedback({ type: 'error', message: 'Executive determination remarks are required when declining an application.' });
+                setActionLoading(false);
+                return;
+            }
+            const res = await api.post(`/api/v1/applications/${applicationId}/registrar-decision`, {
+                decision,
+                action: decision,
+                remarks: remarksTrimmed,
+                registrarRemarks: remarksTrimmed
+            });
+            setFeedback({ type: 'success', message: res.data?.message || 'Application determination recorded successfully.' });
+            setDecisionRemarks('');
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.error || err.response?.data?.message || 'Application determination failed.' });
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -341,7 +378,7 @@ export default function RegistrarCockpitPage() {
             )}
 
             {/* Metrics KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-6">
                 <div
                     onClick={() => setActiveSection('queue')}
                     className={`cursor-pointer p-4 rounded-2xl border transition-all ${
@@ -354,6 +391,20 @@ export default function RegistrarCockpitPage() {
                     </div>
                     <div className="text-2xl font-black text-slate-900">{queueSummary.totalPending + (pendingFileReleases?.length || 0)}</div>
                     <div className="text-[10px] text-slate-400 mt-1">Pending across all queues</div>
+                </div>
+
+                <div
+                    onClick={() => setActiveSection('applications')}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                        activeSection === 'applications' ? 'bg-white border-[#006533] ring-2 ring-[#006533]/20 shadow-xs' : 'bg-white border-slate-200/80 hover:border-slate-300'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                        <span className="text-xs font-semibold">Staff Applications</span>
+                        <FileText size={16} className="text-emerald-700" />
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{pendingApplications.length}</div>
+                    <div className="text-[10px] text-emerald-700 font-semibold mt-1">Docketed by Registry</div>
                 </div>
 
                 <div
@@ -436,6 +487,14 @@ export default function RegistrarCockpitPage() {
                     }`}
                 >
                     Executive Authorization Queue
+                </button>
+                <button
+                    onClick={() => setActiveSection('applications')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'applications' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Applications Docket ({pendingApplications.length})
                 </button>
                 <button
                     onClick={() => setActiveSection('postings')}
@@ -1193,6 +1252,204 @@ export default function RegistrarCockpitPage() {
                         ) : (
                             <div className="py-12 text-center text-slate-400 text-xs">
                                 Select a file release requisition from the left pane to review and authorize.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Section: Institutional Staff Applications Docket */}
+            {activeSection === 'applications' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Pane: Applications Queue List */}
+                    <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <FileText size={16} className="text-emerald-700" />
+                                Institutional Applications Docket
+                            </h2>
+                            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                {pendingApplications.length} Pending
+                            </span>
+                        </div>
+
+                        {pendingApplications.length === 0 ? (
+                            <div className="py-12 text-center text-slate-400 text-xs">
+                                <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-600 opacity-60" />
+                                <p className="font-semibold text-slate-600">No applications pending executive determination</p>
+                                <p className="text-[11px] text-slate-400 mt-1">Applications endorsed by Directors and stamped by Registry will appear here.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto pr-1">
+                                {pendingApplications.map((app) => {
+                                    const applicant = app.applicant?.staffProfile;
+                                    const applicantName = applicant
+                                        ? `${applicant.surname || ''} ${applicant.otherNames || ''}`.trim() || app.applicant?.name
+                                        : app.applicant?.name;
+                                    const isSelected = selectedApplication?.id === app.id;
+
+                                    return (
+                                        <div
+                                            key={app.id}
+                                            onClick={() => setSelectedApplication(app)}
+                                            className={`p-3.5 rounded-xl cursor-pointer transition-all mb-2 ${
+                                                isSelected
+                                                    ? 'bg-emerald-50/80 border border-emerald-200 shadow-2xs'
+                                                    : 'hover:bg-slate-50 border border-transparent'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-xs font-bold text-emerald-800">
+                                                    {app.referenceNumber}
+                                                </span>
+                                                {app.registryDocketNumber && (
+                                                    <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-200">
+                                                        Folio: {app.registryDocketNumber}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs font-bold text-slate-900 mt-1 truncate">
+                                                {app.subject}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center justify-between">
+                                                <span>{applicantName}</span>
+                                                <span className="text-slate-400">
+                                                    {app.registryAcknowledgedAt
+                                                        ? new Date(app.registryAcknowledgedAt).toLocaleDateString('en-GB')
+                                                        : new Date(app.createdAt).toLocaleDateString('en-GB')}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right Pane: Selected Application Review & Action */}
+                    <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                        {selectedApplication ? (
+                            <div>
+                                {(() => {
+                                    const applicant = selectedApplication.applicant?.staffProfile;
+                                    const applicantName = applicant
+                                        ? `${applicant.surname || ''} ${applicant.otherNames || ''}`.trim() || selectedApplication.applicant?.name
+                                        : selectedApplication.applicant?.name;
+                                    const director = selectedApplication.director?.staffProfile;
+                                    const directorName = director
+                                        ? `${director.surname || ''} ${director.otherNames || ''}`.trim() || selectedApplication.director?.name
+                                        : selectedApplication.director?.name;
+
+                                    const isApplicant = selectedApplication.applicantId === user?.id;
+
+                                    return (
+                                        <>
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                            {selectedApplication.referenceNumber}
+                                                        </span>
+                                                        {selectedApplication.registryDocketNumber && (
+                                                            <span className="font-mono text-xs font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                                                Folio: {selectedApplication.registryDocketNumber}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <h3 className="text-base font-bold text-slate-900 mt-1">
+                                                        {selectedApplication.subject}
+                                                    </h3>
+                                                </div>
+                                            </div>
+
+                                            {isApplicant && (
+                                                <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs text-rose-800 font-medium">
+                                                    <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+                                                    <span>
+                                                        <strong>Dual-Control Maker-Checker Restriction:</strong> You cannot authorize this application because you are the applicant. Another Principal Officer must conduct this review.
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
+                                                    <div className="font-bold text-slate-700 uppercase text-[10px] mb-1">Applicant Profile</div>
+                                                    <div><span className="text-slate-400">Name:</span> <span className="font-semibold text-slate-800">{applicantName}</span></div>
+                                                    <div><span className="text-slate-400">Staff ID:</span> <span className="font-mono text-slate-800">{applicant?.staffId || 'N/A'}</span></div>
+                                                    <div><span className="text-slate-400">Department:</span> <span className="font-semibold text-slate-800">{applicant?.department || 'Registry'}</span></div>
+                                                    <div><span className="text-slate-400">Rank:</span> <span className="font-semibold text-slate-800">{applicant?.rank || 'Staff'}</span></div>
+                                                </div>
+
+                                                <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 space-y-1.5 text-xs">
+                                                    <div className="font-bold text-amber-900 uppercase text-[10px] mb-1">Directorate Endorsement</div>
+                                                    <div><span className="text-amber-700">Director:</span> <span className="font-semibold text-slate-800">{directorName}</span></div>
+                                                    <div><span className="text-amber-700">Status:</span> <span className="font-bold text-emerald-800">RECOMMENDED</span></div>
+                                                    {selectedApplication.directorRemarks && (
+                                                        <div className="p-2 bg-white rounded border border-amber-200/60 text-[11px] text-slate-700 italic mt-1">
+                                                            &ldquo;{selectedApplication.directorRemarks}&rdquo;
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/30 mb-4 text-xs">
+                                                <div className="font-bold text-slate-700 uppercase text-[10px] mb-1.5">Application Content</div>
+                                                <p className="text-slate-800 leading-relaxed whitespace-pre-line text-xs font-serif bg-white p-3 rounded-lg border border-slate-100 max-h-48 overflow-y-auto">
+                                                    {selectedApplication.content}
+                                                </p>
+                                            </div>
+
+                                            <div className="border-t border-slate-100 pt-4">
+                                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                    Registrar Minute &amp; Executive Directive (Required for Decline)
+                                                </label>
+                                                <textarea
+                                                    rows={2}
+                                                    value={decisionRemarks}
+                                                    onChange={(e) => setDecisionRemarks(e.target.value)}
+                                                    placeholder="Enter official minute directives or refusal grounds..."
+                                                    className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#006533] mb-3 bg-slate-50/50"
+                                                />
+
+                                                <div className="flex items-center justify-between pt-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => router.push('/registrar-cockpit/applications')}
+                                                        className="text-xs text-slate-500"
+                                                    >
+                                                        Open Full Executive Docket View
+                                                    </Button>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            disabled={actionLoading || isApplicant}
+                                                            isLoading={actionLoading}
+                                                            onClick={() => handleApplicationDecision(selectedApplication.id, 'DECLINED')}
+                                                        >
+                                                            Decline Application
+                                                        </Button>
+                                                        <Button
+                                                            variant="emerald"
+                                                            size="sm"
+                                                            disabled={actionLoading || isApplicant}
+                                                            isLoading={actionLoading}
+                                                            onClick={() => handleApplicationDecision(selectedApplication.id, 'APPROVED')}
+                                                        >
+                                                            Grant Executive Approval
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="py-12 text-center text-slate-400 text-xs">
+                                Select an application from the left docket to review and adjudicate.
                             </div>
                         )}
                     </div>

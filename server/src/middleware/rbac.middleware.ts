@@ -59,6 +59,16 @@ export const ROLE_PERMISSIONS: Partial<Record<Role, Permission[]>> = {
         Permission.CAN_APPROVE_PROMOTION_OVERRIDE,
         Permission.CAN_RATIFY_DISCIPLINARY_SANCTION,
     ],
+    [Role.ADMIN]: [
+        Permission.CAN_IMPUTE_POSTING,
+        Permission.CAN_AUTHORIZE_POSTING,
+        Permission.CAN_IMPUTE_STAFF_FILE,
+        Permission.CAN_CLEAR_STAFF_FILE,
+        Permission.CAN_REQUEST_PROMOTION_OVERRIDE,
+        Permission.CAN_APPROVE_PROMOTION_OVERRIDE,
+        Permission.CAN_ISSUE_DISCIPLINARY_QUERY,
+        Permission.CAN_RATIFY_DISCIPLINARY_SANCTION,
+    ],
 };
 
 /**
@@ -151,7 +161,8 @@ export const requireAuthorizerRole = (req: Request, res: Response, next: NextFun
         role === Role.REGISTRAR ||
         role === Role.DEPUTY_REGISTRAR ||
         role === Role.VICE_CHANCELLOR ||
-        role === Role.SUPER_USER
+        role === Role.SUPER_USER ||
+        role === Role.ADMIN
     ) {
         return next();
     }

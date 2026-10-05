@@ -866,7 +866,7 @@ export async function registryAcknowledge(req: Request, res: Response) {
     prisma.user
       .findMany({
         where: {
-          role: { in: ['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] },
+          role: { in: ['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'] },
           isActive: true,
         },
         select: { id: true },
@@ -924,24 +924,29 @@ export async function registrarDecision(req: Request, res: Response) {
     const registrarId = (req as any).user?.id;
     const registrarRole = (req as any).user?.role;
     const { id } = req.params;
-    const { decision, registrarRemarks } = req.body;
+    const rawDecision = req.body.decision || req.body.action;
+    const decision = rawDecision ? String(rawDecision).trim().toUpperCase() : '';
+    const rawRemarks = req.body.registrarRemarks || req.body.remarks || req.body.minute || req.body.comments || '';
+    const registrarRemarks = typeof rawRemarks === 'string' ? rawRemarks.trim() : '';
 
-    if (!['APPROVED', 'DECLINED'].includes(decision)) {
+    if (!['APPROVED', 'DECLINED', 'APPROVE', 'DECLINE'].includes(decision)) {
       return res.status(400).json({
         success: false,
         error: "Decision must be 'APPROVED' or 'DECLINED'.",
       });
     }
 
-    if (!registrarRemarks || !registrarRemarks.trim()) {
+    const normalizedDecision = ['APPROVED', 'APPROVE'].includes(decision) ? 'APPROVED' : 'DECLINED';
+
+    if (!registrarRemarks) {
       return res.status(400).json({
         success: false,
         error: 'Mandatory executive remarks are required for Registrar final determination.',
       });
     }
 
-    // Role Guard: REGISTRAR, DEPUTY_REGISTRAR, or SUPER_USER
-    const allowedRoles = ['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'];
+    // Role Guard: REGISTRAR, DEPUTY_REGISTRAR, SUPER_USER, ADMIN, or VICE_CHANCELLOR
+    const allowedRoles = ['REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'];
     if (!allowedRoles.includes(registrarRole)) {
       return res.status(403).json({
         success: false,
@@ -979,7 +984,7 @@ export async function registrarDecision(req: Request, res: Response) {
     }
 
     const now = new Date();
-    const isApproved = decision === 'APPROVED';
+    const isApproved = normalizedDecision === 'APPROVED';
     const newStatus: any = isApproved ? 'APPROVED_BY_REGISTRAR' : 'DECLINED_BY_REGISTRAR';
     const finalArchiveStatus: any = isApproved ? 'APPROVED' : 'DECLINED';
     const docketFolio = application.registryDocketNumber || application.referenceNumber;
@@ -1035,7 +1040,7 @@ export async function registrarDecision(req: Request, res: Response) {
         },
         registrar: {
           registrarId,
-          decision,
+          decision: normalizedDecision,
           remarks: registrarRemarks.trim(),
           decidedAt: now,
         },
@@ -1084,7 +1089,7 @@ export async function registrarDecision(req: Request, res: Response) {
         applicantName,
         application.referenceNumber,
         docketFolio,
-        decision,
+        normalizedDecision,
         registrarRemarks
       ).catch(() => {});
     }
@@ -1096,7 +1101,7 @@ export async function registrarDecision(req: Request, res: Response) {
         applicantName,
         application.referenceNumber,
         docketFolio,
-        decision,
+        normalizedDecision,
         registrarRemarks
       ).catch(() => {});
     }

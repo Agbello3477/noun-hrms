@@ -22,7 +22,7 @@ router.use(requireAuthorizerRole);
  */
 router.get('/queue', async (req: Request, res: Response) => {
     try {
-        const [pendingPostings, pendingFiles, pendingOverrides, pendingQueries, pendingRoleChanges] = await Promise.all([
+        const [pendingPostings, pendingFiles, pendingOverrides, pendingQueries, pendingRoleChanges, pendingApplications, pendingFileReleases] = await Promise.all([
             prisma.transferLog.count({
                 where: {
                     status: {
@@ -51,17 +51,29 @@ router.get('/queue', async (req: Request, res: Response) => {
                 where: {
                     roleChangeStatus: 'PENDING_REGISTRAR_APPROVAL'
                 }
+            }),
+            prisma.institutionalApplication.count({
+                where: {
+                    status: 'DOCKETED_PENDING_REGISTRAR'
+                }
+            }),
+            prisma.fileRequisition.count({
+                where: {
+                    status: 'ACKNOWLEDGED_PENDING_REGISTRAR'
+                }
             })
         ]);
 
         res.json({
             queueSummary: {
-                totalPending: pendingPostings + pendingFiles + pendingOverrides + pendingQueries + pendingRoleChanges,
+                totalPending: pendingPostings + pendingFiles + pendingOverrides + pendingQueries + pendingRoleChanges + pendingApplications + pendingFileReleases,
                 postings: pendingPostings,
                 files: pendingFiles,
                 promotionOverrides: pendingOverrides,
                 disciplinaryQueries: pendingQueries,
-                roleChanges: pendingRoleChanges
+                roleChanges: pendingRoleChanges,
+                applications: pendingApplications,
+                fileReleases: pendingFileReleases
             }
         });
     } catch (error: any) {

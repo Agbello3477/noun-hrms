@@ -65,9 +65,11 @@ export default function RegistrarApplicationsPage() {
       setSubmitting(true);
       setError(null);
 
+      const trimmedRemarks = executiveMinute.trim();
       const res = await api.post(`/api/v1/applications/${decisionApp.id}/registrar-decision`, {
         decision: decisionType,
-        remarks: executiveMinute.trim()
+        remarks: trimmedRemarks,
+        registrarRemarks: trimmedRemarks
       });
 
       if (res.data?.success) {
