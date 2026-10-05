@@ -50,16 +50,21 @@ async function startWorker() {
 
     while (true) {
         try {
-            // Block pop is ideal: blocks connection until a job becomes available, consuming 0% CPU idle time
-            const result = await redis.brpop(QUEUE_KEY, 0);
-            if (result && result.length === 2) {
-                const jobData = JSON.parse(result[1]);
+            const item = await redis.rpop(QUEUE_KEY);
+            if (item) {
+                const jobData = JSON.parse(item);
                 await processJob(jobData);
+            } else {
+                // Queue is empty: sleep 1s to avoid busy polling
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
-        } catch (error) {
-            console.error('[Worker Daemon] Error during job retrieval loop:', error);
+        } catch (error: any) {
+            const msg = error instanceof Error ? error.message : String(error);
+            if (!msg.includes('timed out')) {
+                console.error('[Worker Daemon] Error during job retrieval loop:', error);
+            }
             // Backoff delay before retry to prevent infinite looping crash
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
 }

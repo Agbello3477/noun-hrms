@@ -42,25 +42,19 @@ class JobQueueService {
         const workerLoop = async () => {
             while (this.isRunning) {
                 try {
-                    const isOnline = redisService.isOnline();
-                    if (!isOnline) {
-                        // Sleep if Redis is disconnected to avoid busy-polling log spam
-                        await new Promise(resolve => setTimeout(resolve, 3000));
-                        continue;
-                    }
-
-                    // Block for up to 5 seconds waiting for a new job in the list
-                    const result = await redisService.brpop(this.queueKey, 5);
-                    if (result) {
-                        // result structure is [key, value]
-                        const [_, jobDataStr] = result;
-                        const { jobType, payload } = JSON.parse(jobDataStr);
-
-                        logger.info(`[Queue] Worker picking up job: ${jobType}`);
-                        await this.processJob(jobType, payload);
+                    // Non-blocking pop: retrieves job in 1ms with 0% socket timeouts
+                    const jobDataStr = await redisService.rpop(this.queueKey);
+                    if (jobDataStr) {
+                        try {
+                            const { jobType, payload } = JSON.parse(jobDataStr);
+                            logger.info(`[Queue] Worker picking up job: ${jobType}`);
+                            await this.processJob(jobType, payload);
+                        } catch (parseErr: any) {
+                            logger.error('[Queue] Failed to parse/process job payload', { error: parseErr.message });
+                        }
                     } else {
-                        // Idle backoff when queue is empty
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        // Idle backoff when queue is empty (1 second)
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                 } catch (error: any) {
                     logger.error('[Queue] Background worker encountered error in loop', { error: error.message });

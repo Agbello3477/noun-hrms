@@ -11,6 +11,7 @@ class RedisService {
     // Resilient in-memory fallback for offline/disconnected states and zero-crash operation
     private memoryCache: Map<string, CacheEntry> = new Map();
     private memorySets: Map<string, Set<string>> = new Map();
+    private memoryQueues: Map<string, string[]> = new Map();
     private readonly defaultTimeoutMs = 50;
 
     constructor() {
@@ -304,29 +305,45 @@ class RedisService {
     }
 
     async lpush(key: string, value: string): Promise<number | null> {
-        if (!this.isEnabled || !this.client || (this.client as any).status !== 'ready') return null;
-        try {
-            return await this.withTimeout(this.client.lpush(key, value));
-        } catch {
-            return null;
+        if (this.isEnabled && this.client && (this.client as any).status === 'ready') {
+            try {
+                return await this.withTimeout(this.client.lpush(key, value));
+            } catch {
+                // fall through to in-memory queue fallback
+            }
         }
+        let queue = this.memoryQueues.get(key);
+        if (!queue) {
+            queue = [];
+            this.memoryQueues.set(key, queue);
+        }
+        queue.unshift(value);
+        return queue.length;
     }
 
-    async brpop(key: string, timeoutSeconds: number): Promise<[string, string] | null> {
-        if (!this.isEnabled || !this.client || (this.client as any).status !== 'ready') return null;
-        try {
-            return await this.client.brpop(key, timeoutSeconds);
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            if (
-                !msg.includes('Connection is closed') &&
-                !msg.includes("Stream isn't writeable") &&
-                !msg.includes('enableOfflineQueue')
-            ) {
-                console.error('Redis brpop error:', error);
+    async rpop(key: string): Promise<string | null> {
+        if (this.isEnabled && this.client && (this.client as any).status === 'ready') {
+            try {
+                const item = await this.withTimeout(this.client.rpop(key));
+                if (item) return item;
+            } catch {
+                // fall through to in-memory queue fallback
             }
-            return null;
         }
+        const queue = this.memoryQueues.get(key);
+        if (queue && queue.length > 0) {
+            return queue.pop() || null;
+        }
+        return null;
+    }
+
+    async brpop(key: string, timeoutSeconds: number = 0): Promise<[string, string] | null> {
+        // Use non-blocking rpop to avoid TCP socket timeouts on shared client
+        const item = await this.rpop(key);
+        if (item) {
+            return [key, item];
+        }
+        return null;
     }
 
     /**
@@ -335,6 +352,7 @@ class RedisService {
     flushMemory(): void {
         this.memoryCache.clear();
         this.memorySets.clear();
+        this.memoryQueues.clear();
     }
 }
 
