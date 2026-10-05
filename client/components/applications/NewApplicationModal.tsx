@@ -181,7 +181,16 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
         payload.directorId = directorId;
       }
 
-      const res = await api.post('/api/v1/applications/submit', payload);
+      let res: any;
+      try {
+        res = await api.post('/api/v1/applications/submit', payload);
+      } catch (firstErr) {
+        try {
+          res = await api.post('/api/applications/submit', payload);
+        } catch (fallbackErr: any) {
+          throw fallbackErr?.response ? fallbackErr : firstErr;
+        }
+      }
 
       if (res.data?.success) {
         setSubject('');
@@ -191,10 +200,10 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
         onSuccess();
         onClose();
       } else {
-        setError(res.data?.error || 'Failed to submit application.');
+        setError(res.data?.error || res.data?.message || 'Failed to submit application.');
       }
     } catch (err: any) {
-      setError(err?.response?.data?.error || err.message || 'Submission failed');
+      setError(err?.response?.data?.error || err?.response?.data?.message || err.message || 'Submission failed');
     } finally {
       setSubmitting(false);
     }

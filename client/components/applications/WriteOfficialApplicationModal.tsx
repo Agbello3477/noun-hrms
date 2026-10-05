@@ -284,7 +284,17 @@ ${defaultUnit}`
                     }
                 }
 
-                const res = await api.post('/api/v1/applications/submit', payload);
+                let res: any;
+                try {
+                    res = await api.post('/api/v1/applications/submit', payload);
+                } catch (firstErr) {
+                    try {
+                        res = await api.post('/api/applications/submit', payload);
+                    } catch (fallbackErr: any) {
+                        throw fallbackErr?.response ? fallbackErr : firstErr;
+                    }
+                }
+
                 if (res.data?.success) {
                     setSuccessMessage('Application submitted successfully! It has been routed to your Director for statutory vetting.');
                     setTimeout(() => {
@@ -293,7 +303,7 @@ ${defaultUnit}`
                         if (onSuccess) onSuccess();
                     }, 1400);
                 } else {
-                    setError(res.data?.error || 'Failed to submit application.');
+                    setError(res.data?.error || res.data?.message || 'Failed to submit application.');
                 }
             } else {
                 // Submit Direct to Registry (Stamped Docket)
@@ -321,7 +331,8 @@ ${defaultUnit}`
             }
         } catch (err: any) {
             console.error('Failed to submit application:', err);
-            setError(err.response?.data?.message || err.response?.data?.error || 'Failed to submit official application. Please try again.');
+            const errMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to submit official application. Please try again.';
+            setError(errMsg);
         } finally {
             setSubmitting(false);
         }
