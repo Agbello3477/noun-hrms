@@ -40,6 +40,16 @@ const AUTHORIZED_FILE_REQUISITION_ROLES = [
   'SECURITY_HEAD',
 ];
 
+const REGISTRY_ALLOWED_ROLES = [
+  'REGISTRY_ADMIN',
+  'HR_ADMIN',
+  'SUPER_USER',
+  'ADMIN',
+  'REGISTRAR',
+  'DEPUTY_REGISTRAR',
+  'VICE_CHANCELLOR',
+] as any;
+
 // ─── TIER 1: LODGE REQUISITION & PERSONAL VIEWS ──────────────────────────────
 router.get(
   '/eligible-staff',
@@ -53,57 +63,56 @@ router.post(
   lodgeRequisition
 );
 
+// Real-time live personal requisition queue
 router.get(
   '/my',
   requireRole(AUTHORIZED_FILE_REQUISITION_ROLES as any),
-  cacheMiddleware(15, { tags: ['tag:file_requisitions'] }),
   getMyRequisitions
 );
 
 // ─── TIER 2: REGISTRY INTAKE & QUEUES ────────────────────────────────────────
+// Real-time live Registry intake queue (Zero-cache)
 router.get(
   '/inward',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
-  cacheMiddleware(10, { tags: ['tag:file_requisitions', 'tag:pending_file_docket'] }),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   getRegistryInwardQueue
 );
 
 router.post(
   '/:id/acknowledge',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   acknowledgeRequisition
 );
 
 // ─── TIER 4: DISPATCH & RELEASE ──────────────────────────────────────────────
+// Real-time live dispatch queue (Zero-cache)
 router.get(
   '/ready-for-dispatch',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
-  cacheMiddleware(10, { tags: ['tag:file_requisitions', 'tag:pending_file_docket'] }),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   getReadyForDispatchQueue
 );
 
 router.post(
   '/:id/dispatch',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   dispatchRequisition
 );
 
 // ─── TIER 5: RETURN & RE-ARCHIVING ───────────────────────────────────────────
 router.post(
   '/:id/return',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] as any),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   returnRequisition
 );
 
 // ─── AUDIT LEDGER & DIGITAL TRANSCRIPT VIEW ─────────────────────────────────
 router.get(
   '/audit-ledger',
-  requireRole(['REGISTRY_ADMIN', 'HR_ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'SUPER_USER'] as any),
-  cacheMiddleware(15, { tags: ['tag:file_requisitions'] }),
+  requireRole(REGISTRY_ALLOWED_ROLES),
   getCustodyAuditLedger
 );
 
 router.get('/:id/digital-view', getDigitalTranscript);
-router.get('/:id', cacheMiddleware(10, { tags: ['tag:file_requisitions'] }), getRequisitionById);
+router.get('/:id', getRequisitionById);
 
 export default router;

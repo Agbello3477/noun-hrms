@@ -378,10 +378,10 @@ export async function lodgeRequisition(req: Request, res: Response) {
       targetStaffProfiles.length > 1 ? ` (${targetStaffProfiles.length} staff files)` : '';
 
     notifyRoleUsers(
-      [Role.REGISTRY_ADMIN, Role.HR_ADMIN, Role.SUPER_USER],
+      [Role.REGISTRY_ADMIN, Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN],
       'New Personnel File Requisition Lodged',
       `File requisition lodged for ${staffNames}${countText} by ${requesterDepartment}.`,
-      `/registry/file-requests/inward`
+      `/dashboard/registry/file-requests/inward`
     );
 
     await cacheInvalidationService.invalidateFileRequisitions();
@@ -531,7 +531,7 @@ export async function acknowledgeRequisition(req: Request, res: Response) {
 
     // Notify Registrar
     notifyRoleUsers(
-      [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.SUPER_USER],
+      [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.SUPER_USER, Role.ADMIN],
       'Executive Authorization Required: Personnel File Requisition',
       `File requisition ${requisition.requisitionNumber} (Folio ${assignedFolio}) for staff ${requisition.staffProfile?.user?.name || 'Staff'} awaits executive release authorization.`,
       `/registrar-cockpit/file-releases`
@@ -717,10 +717,10 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
 
     // Notify Registry Records Desk to prepare file for dispatch
     notifyRoleUsers(
-      [Role.REGISTRY_ADMIN, Role.HR_ADMIN],
+      [Role.REGISTRY_ADMIN, Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN],
       'File Release Authorized - Ready for Dispatch',
       `File requisition ${requisition.requisitionNumber} for ${requisition.staffProfile?.user?.name || 'Staff'} has been authorized by the Registrar. Proceed with physical handover / digital release.`,
-      `/registry/file-requests/ready-for-dispatch`
+      `/dashboard/registry/file-requests/ready-for-dispatch`
     );
 
     // Notify requester
@@ -997,7 +997,12 @@ export async function getRegistryInwardQueue(req: Request, res: Response) {
             id: true,
             staffId: true,
             rank: true,
+            surname: true,
+            otherNames: true,
+            title: true,
             department: true,
+            unit: { select: { id: true, name: true } },
+            studyCenter: { select: { id: true, name: true } },
             user: { select: { name: true, email: true } },
           },
         },
@@ -1049,7 +1054,12 @@ export async function getRegistrarPendingQueue(req: Request, res: Response) {
             id: true,
             staffId: true,
             rank: true,
+            surname: true,
+            otherNames: true,
+            title: true,
             department: true,
+            unit: { select: { id: true, name: true } },
+            studyCenter: { select: { id: true, name: true } },
             userId: true,
             user: { select: { name: true, email: true } },
           },
