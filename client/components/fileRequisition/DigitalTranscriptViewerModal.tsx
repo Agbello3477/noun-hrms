@@ -35,6 +35,17 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
     if (!isOpen || !requisitionId) return;
 
     let isMounted = true;
@@ -80,8 +91,12 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
       role="dialog"
       aria-modal="true"
       aria-labelledby="viewer-title"
+      onClick={onClose}
     >
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8">
+      <div
+        className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Top Warning Banner: Digital Single-Session Security */}
         <div className="flex items-center justify-between bg-amber-500 px-6 py-2.5 text-slate-950 text-xs font-bold">
           <div className="flex items-center gap-2">
@@ -114,10 +129,10 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors"
             aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 text-slate-400" /> Close
           </button>
         </div>
 
@@ -150,53 +165,25 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
                     {profile.name?.slice(0, 2).toUpperCase() || 'ST'}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900">{profile.name}</h3>
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-sm">
-                        {profile.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Staff ID: <span className="font-mono font-bold text-slate-800">{profile.staffId || 'N/A'}</span> • {profile.officialEmail}
+                    <h3 className="text-base font-bold text-slate-900">{profile.name}</h3>
+                    <p className="text-xs text-slate-500">
+                      Staff ID: <span className="font-mono font-bold text-emerald-800">{profile.staffId}</span> • {profile.rank}
                     </p>
                   </div>
                 </div>
-
                 <div className="text-right">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Disciplinary Status</span>
-                  <span
-                    className={`inline-flex items-center gap-1 text-xs font-bold ${
-                      profile.disciplinaryClearance === 'CLEARED'
-                        ? 'text-emerald-700'
-                        : 'text-rose-700'
-                    }`}
-                  >
-                    {profile.disciplinaryClearance === 'CLEARED' ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Institutionally Cleared
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="w-3.5 h-3.5" /> Active Disciplinary Hold
-                      </>
-                    )}
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Registry Authenticated
                   </span>
+                  <p className="text-[10px] text-slate-400 mt-1">Single-session read-only ledger</p>
                 </div>
               </div>
 
-              {/* Bio & Career Appointments */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block">Rank / Grade</span>
-                  <p className="font-bold text-slate-800">{profile.rank || 'N/A'}</p>
-                  <p className="text-[11px] text-slate-500">
-                    {profile.level ? `${profile.level} (Step ${profile.step || '1'})` : 'CONTISS'}
-                  </p>
-                </div>
-
+              {/* Departmental & Cadre Scope */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1">
                   <span className="text-[10px] font-bold uppercase text-slate-400 block">Department & Unit</span>
-                  <p className="font-bold text-slate-800">{profile.department || 'N/A'}</p>
+                  <p className="font-bold text-slate-800">{profile.department || 'Registry'}</p>
                   <p className="text-[11px] text-slate-500">{profile.unit || 'Headquarters'}</p>
                 </div>
 
@@ -263,6 +250,20 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
               )}
             </div>
           ) : null}
+        </div>
+
+        {/* Footer Action Bar */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="text-xs text-slate-500">
+            Secure Digital Dossier Stream
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
+          >
+            <X className="w-4 h-4 text-slate-500" /> Close Dossier
+          </button>
         </div>
       </div>
     </div>

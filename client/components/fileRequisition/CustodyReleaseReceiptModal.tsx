@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   X,
   Printer,
@@ -29,6 +29,17 @@ export const CustodyReleaseReceiptModal: React.FC<CustodyReleaseReceiptModalProp
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !requisition) return null;
 
   const handlePrint = () => {
@@ -48,8 +59,12 @@ export const CustodyReleaseReceiptModal: React.FC<CustodyReleaseReceiptModalProp
       role="dialog"
       aria-modal="true"
       aria-labelledby="receipt-title"
+      onClick={onClose}
     >
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8">
+      <div
+        className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header Action Bar (Hidden in Print) */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 print:hidden">
           <div className="flex items-center gap-2">
@@ -80,10 +95,10 @@ export const CustodyReleaseReceiptModal: React.FC<CustodyReleaseReceiptModalProp
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
               aria-label="Close modal"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 text-slate-500" /> Close
             </button>
           </div>
         </div>
@@ -302,6 +317,29 @@ export const CustodyReleaseReceiptModal: React.FC<CustodyReleaseReceiptModalProp
                 <div>SECURE</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Footer Action Bar with Explicit Close Button (Hidden in Print) */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4 print:hidden">
+          <div className="text-xs text-slate-500">
+            Vault Folio: <span className="font-mono font-bold text-emerald-800">{requisition.registryFolioReference || 'NOUN/FOLIO/VAULT'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
+            >
+              <X className="w-4 h-4 text-slate-500" /> Close Folio
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 transition-colors"
+            >
+              <Printer className="w-4 h-4" /> Print Gatepass
+            </button>
           </div>
         </div>
       </div>
