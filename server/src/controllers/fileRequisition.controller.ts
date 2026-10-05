@@ -699,6 +699,20 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
     }
 
     // Action: APPROVE
+    const dispatchReceiptNumber = requisition.dispatchReceiptNumber || (await generateDispatchReceiptNumber());
+    let digitalAccessToken: string | null = requisition.digitalAccessToken;
+    let digitalAccessExpiresAt: Date | null = requisition.digitalAccessExpiresAt;
+
+    if (
+      requisition.requestedFileFormat === FileRequestedFormat.DIGITAL_TRANSCRIPT ||
+      requisition.requestedFileFormat === FileRequestedFormat.BOTH
+    ) {
+      if (!digitalAccessToken || !digitalAccessExpiresAt || digitalAccessExpiresAt < new Date()) {
+        digitalAccessToken = crypto.randomBytes(32).toString('hex');
+        digitalAccessExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const item = await tx.fileRequisition.update({
         where: { id },
@@ -707,6 +721,9 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
           authorizedById: actorId,
           authorizedAt: new Date(),
           registrarRemarks: registrarRemarks || 'File release authorized by Registrar pursuant to institutional custody protocols.',
+          dispatchReceiptNumber,
+          digitalAccessToken,
+          digitalAccessExpiresAt,
         },
       });
 
@@ -715,10 +732,18 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
           requisitionId: id,
           action: FileCustodyAction.REGISTRAR_AUTHORIZED,
           actorId,
-          details: `Executive release granted by Registrar. Remarks: ${registrarRemarks || 'Approved'}`,
+          details: `Executive release granted by Registrar. Remarks: ${registrarRemarks || 'Approved'}. ${
+            digitalAccessToken ? `Digital access token generated valid until ${digitalAccessExpiresAt?.toISOString()}` : ''
+          }`,
           ipAddress,
           userAgent,
-          metadata: { action: 'APPROVE', remarks: registrarRemarks },
+          metadata: {
+            action: 'APPROVE',
+            remarks: registrarRemarks,
+            dispatchReceiptNumber,
+            hasDigitalToken: !!digitalAccessToken,
+            digitalExpires: digitalAccessExpiresAt,
+          },
         },
       });
 
@@ -737,9 +762,9 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
     await notifyUser(
       requisition.requesterId,
       'File Requisition Authorized by Registrar',
-      `Your file requisition ${requisition.requisitionNumber} has been approved by the Registrar. Registry Records Desk is preparing the release.`,
+      `Your file requisition ${requisition.requisitionNumber} has been approved by the Registrar. You can now view your digital transcript or collect the file at Registry Vault.`,
       'SUCCESS',
-      `/registry/file-requests/my`
+      `/dashboard/services/file-requests`
     );
 
     await cacheInvalidationService.invalidateFileRequisitions();
@@ -850,7 +875,7 @@ export async function dispatchRequisition(req: Request, res: Response) {
         digitalAccessToken ? ' Digital transcript viewer access is now active.' : ''
       }`,
       'SUCCESS',
-      `/registry/file-requests/my`
+      `/dashboard/services/file-requests`
     );
 
     await cacheInvalidationService.invalidateFileRequisitions();
@@ -938,7 +963,7 @@ export async function returnRequisition(req: Request, res: Response) {
       'Personnel File Custody Closed',
       `File ${requisition.requisitionNumber} has been received back by Registry Archives and the custody docket is now formally closed.`,
       'INFO',
-      `/registry/file-requests/my`
+      `/dashboard/services/file-requests`
     );
 
     await cacheInvalidationService.invalidateFileRequisitions();
@@ -1382,16 +1407,21 @@ export async function getDigitalTranscript(req: Request, res: Response) {
       new Date() < requisition.digitalAccessExpiresAt;
 
     const isAuthorizedRole = [
-      Role.REGISTRY_ADMIN,
-      Role.HR_ADMIN,
+      Role.ADMIN,
+      Role.SUPER_USER,
+      Role.VICE_CHANCELLOR,
       Role.REGISTRAR,
       Role.DEPUTY_REGISTRAR,
-      Role.SUPER_USER,
+      Role.REGISTRY_ADMIN,
+      Role.HR_ADMIN,
     ].includes(currentUserRole);
 
     const isApprovedRequester =
       requisition.requesterId === currentUserId &&
-      requisition.status === FileRequisitionStatus.DISPATCHED_RELEASED;
+      [
+        FileRequisitionStatus.AUTHORIZED_BY_REGISTRAR,
+        FileRequisitionStatus.DISPATCHED_RELEASED,
+      ].includes(requisition.status as any);
 
     if (!isTokenValid && !isAuthorizedRole && !isApprovedRequester) {
       return res.status(403).json({

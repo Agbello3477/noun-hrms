@@ -139,10 +139,13 @@ export default function MyFileRequisitionsPage() {
           </div>
         ) : (
           requisitions.map((req) => {
-            const isReleased = req.status === 'DISPATCHED_RELEASED';
+            const isAuthorized = req.status === 'AUTHORIZED_BY_REGISTRAR';
+            const isReleased = req.status === 'DISPATCHED_RELEASED' || req.status === 'DISPATCHED_IN_CUSTODY';
             const isReturned = req.status === 'RETURNED_ARCHIVED';
             const hasDigitalFormat =
               req.requestedFileFormat === 'DIGITAL_TRANSCRIPT' || req.requestedFileFormat === 'BOTH';
+            const canViewTranscript = (isAuthorized || isReleased) && hasDigitalFormat;
+            const canViewGatepass = isAuthorized || isReleased || isReturned || Boolean(req.dispatchReceiptNumber);
 
             return (
               <div
@@ -165,6 +168,11 @@ export default function MyFileRequisitionsPage() {
                         Receipt: {req.dispatchReceiptNumber}
                       </span>
                     )}
+                    {isAuthorized && (
+                      <span className="inline-flex items-center gap-1 font-sans text-xs font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> Authorized for Release
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-[11px] text-slate-500">
@@ -181,6 +189,16 @@ export default function MyFileRequisitionsPage() {
 
                 {/* Content */}
                 <div className="p-5 space-y-4">
+                  {/* Executive Clearance Callout */}
+                  {isAuthorized && (
+                    <div className="flex items-center gap-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 p-3 text-xs text-emerald-900 font-medium">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="flex-1">
+                        <span className="font-bold text-emerald-950">Release Authorized by Registrar!</span> Your file requisition has received official clearance. You can view the digital transcript or present the Custody Gatepass at Registry Records Vault.
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                     {/* Subject Staff */}
                     <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 space-y-1">
@@ -246,7 +264,7 @@ export default function MyFileRequisitionsPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {(isReleased || isReturned || req.dispatchReceiptNumber) && (
+                      {canViewGatepass && (
                         <button
                           type="button"
                           onClick={() => {
@@ -259,14 +277,14 @@ export default function MyFileRequisitionsPage() {
                         </button>
                       )}
 
-                      {isReleased && hasDigitalFormat && req.digitalAccessToken && (
+                      {canViewTranscript && (
                         <button
                           type="button"
                           onClick={() => {
                             setSelectedReq(req);
                             setIsDigitalViewerOpen(true);
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-200 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition-colors shadow-xs"
                         >
                           <ExternalLink className="w-3.5 h-3.5" /> View Digital Transcript
                         </button>
