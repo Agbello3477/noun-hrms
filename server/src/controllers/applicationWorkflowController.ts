@@ -1178,28 +1178,36 @@ export async function getDirectorQueue(req: Request, res: Response) {
     }
     directorUserIds = Array.from(new Set(directorUserIds.filter(Boolean)));
 
-    const statusFilter = (status as any) || 'SUBMITTED_TO_DIRECTOR';
+    const baseScope: any = {
+      OR: [
+        { directorId: { in: directorUserIds } },
+        ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
+        ...(directorProfile?.centerId ? [{ applicant: { staffProfile: { centerId: directorProfile.centerId } } }] : []),
+        ...(callerRole === 'SUPER_USER' || callerRole === 'ADMIN' || callerRole === 'VICE_CHANCELLOR' ? [{ directorId: { not: '' } }] : []),
+      ],
+    };
 
-    let whereClause: any;
-    if (callerRole === 'SUPER_USER' || callerRole === 'ADMIN' || callerRole === 'VICE_CHANCELLOR') {
-      whereClause = {
-        status: statusFilter,
-        OR: [
-          { directorId: { in: directorUserIds } },
-          { directorId: { not: '' } },
-          ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
-        ],
-      };
-    } else {
-      whereClause = {
-        status: statusFilter,
-        OR: [
-          { directorId: { in: directorUserIds } },
-          ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
-          ...(directorProfile?.centerId ? [{ applicant: { staffProfile: { centerId: directorProfile.centerId } } }] : []),
-        ],
-      };
+    let statusCondition: any = undefined;
+    const statusParam = status ? String(status).toUpperCase().trim() : 'ALL';
+
+    if (statusParam === 'PENDING' || statusParam === 'SUBMITTED_TO_DIRECTOR') {
+      statusCondition = 'SUBMITTED_TO_DIRECTOR';
+    } else if (statusParam === 'RECOMMENDED' || statusParam === 'ENDORSED') {
+      statusCondition = { in: ['RECOMMENDED_TO_REGISTRY', 'DOCKETED_PENDING_REGISTRAR'] };
+    } else if (statusParam === 'APPROVED' || statusParam === 'APPROVED_BY_REGISTRAR') {
+      statusCondition = 'APPROVED_BY_REGISTRAR';
+    } else if (statusParam === 'REJECTED' || statusParam === 'DECLINED') {
+      statusCondition = { in: ['REJECTED_BY_DIRECTOR', 'DECLINED_BY_REGISTRAR'] };
+    } else if (statusParam === 'REWRITE' || statusParam === 'RETURNED_FOR_REWRITE') {
+      statusCondition = 'RETURNED_FOR_REWRITE';
+    } else if (statusParam !== 'ALL' && statusParam !== '') {
+      statusCondition = statusParam;
     }
+
+    const whereClause: any = {
+      ...baseScope,
+      ...(statusCondition ? { status: statusCondition } : {}),
+    };
 
     const applications = await prisma.institutionalApplication.findMany({
       where: whereClause,
@@ -1238,16 +1246,37 @@ export async function getDirectorQueue(req: Request, res: Response) {
                 rank: true,
                 department: true,
                 unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } },
               },
             },
           },
         },
         revisions: { orderBy: { createdAt: 'desc' } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { updatedAt: 'desc' },
     });
 
-    return res.status(200).json({ success: true, data: applications, applications });
+    // Aggregate status counts for filter tabs
+    const allScopedApps = await prisma.institutionalApplication.findMany({
+      where: baseScope,
+      select: { id: true, status: true },
+    });
+
+    const summary = {
+      total: allScopedApps.length,
+      pending: allScopedApps.filter((a) => a.status === 'SUBMITTED_TO_DIRECTOR').length,
+      recommended: allScopedApps.filter((a) => ['RECOMMENDED_TO_REGISTRY', 'DOCKETED_PENDING_REGISTRAR'].includes(a.status)).length,
+      approved: allScopedApps.filter((a) => a.status === 'APPROVED_BY_REGISTRAR').length,
+      rejected: allScopedApps.filter((a) => ['REJECTED_BY_DIRECTOR', 'DECLINED_BY_REGISTRAR'].includes(a.status)).length,
+      rewrite: allScopedApps.filter((a) => a.status === 'RETURNED_FOR_REWRITE').length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: applications,
+      applications,
+      summary,
+    });
   } catch (error: any) {
     console.error('Error in getDirectorQueue:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Director queue.' });
