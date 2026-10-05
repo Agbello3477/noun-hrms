@@ -413,14 +413,19 @@ export async function acknowledgeRequisition(req: Request, res: Response) {
   try {
     const actorId = (req as any).user?.id;
     const { id } = req.params;
-    const { action, registryFolioReference, adminAcknowledgmentRemarks } = req.body;
+    const rawAction = req.body.action || req.body.decision;
+    const action = rawAction ? String(rawAction).trim().toUpperCase() : '';
+    const registryFolioReference = req.body.registryFolioReference || req.body.folioReference || req.body.folio;
+    const adminAcknowledgmentRemarks = req.body.adminAcknowledgmentRemarks || req.body.remarks || req.body.comment;
 
-    if (!action || !['ACKNOWLEDGE', 'REJECT'].includes(action)) {
+    if (!action || !['ACKNOWLEDGE', 'REJECT', 'ACKNOWLEDGED', 'REJECTED'].includes(action)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid action. Must be either ACKNOWLEDGE or REJECT.',
       });
     }
+
+    const normalizedAction = ['ACKNOWLEDGE', 'ACKNOWLEDGED'].includes(action) ? 'ACKNOWLEDGE' : 'REJECT';
 
     const requisition = await prisma.fileRequisition.findUnique({
       where: { id },
@@ -444,7 +449,7 @@ export async function acknowledgeRequisition(req: Request, res: Response) {
     const { ipAddress, userAgent } = getClientMeta(req);
     const year = new Date().getFullYear();
 
-    if (action === 'REJECT') {
+    if (normalizedAction === 'REJECT') {
       if (!adminAcknowledgmentRemarks) {
         return res.status(400).json({
           success: false,
@@ -573,14 +578,19 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
   try {
     const actorId = (req as any).user?.id;
     const { id } = req.params;
-    const { action, registrarRemarks } = req.body;
+    const rawAction = req.body.action || req.body.decision;
+    const action = rawAction ? String(rawAction).trim().toUpperCase() : '';
+    const rawRemarks = req.body.registrarRemarks || req.body.remarks || req.body.comment || '';
+    const registrarRemarks = typeof rawRemarks === 'string' ? rawRemarks.trim() : '';
 
-    if (!action || !['APPROVE', 'DECLINE'].includes(action)) {
+    if (!action || !['APPROVE', 'DECLINE', 'APPROVED', 'DECLINED', 'REJECT', 'REJECTED'].includes(action)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid decision action. Must be either APPROVE or DECLINE.',
       });
     }
+
+    const normalizedAction = ['APPROVE', 'APPROVED'].includes(action) ? 'APPROVE' : 'DECLINE';
 
     const requisition = await prisma.fileRequisition.findUnique({
       where: { id },
@@ -631,7 +641,7 @@ export async function registrarAuthorizeRequisition(req: Request, res: Response)
 
     const { ipAddress, userAgent } = getClientMeta(req);
 
-    if (action === 'DECLINE') {
+    if (normalizedAction === 'DECLINE') {
       if (!registrarRemarks?.trim()) {
         return res.status(400).json({
           success: false,

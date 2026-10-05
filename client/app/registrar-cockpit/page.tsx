@@ -129,9 +129,12 @@ export default function RegistrarCockpitPage() {
         setActionLoading(true);
         setFeedback(null);
         try {
+            const remarksTrimmed = decisionRemarks?.trim() || undefined;
             const res = await api.post(`/api/v1/registrar/file-requests/${requisitionId}/authorize`, {
+                action: decision,
                 decision,
-                remarks: decisionRemarks || undefined
+                registrarRemarks: remarksTrimmed,
+                remarks: remarksTrimmed
             });
             setFeedback({ type: 'success', message: res.data?.message || 'File release authorization recorded.' });
             setDecisionRemarks('');
