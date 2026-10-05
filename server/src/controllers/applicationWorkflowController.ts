@@ -16,25 +16,30 @@ import { ApplicationCategory } from '@prisma/client';
  */
 async function generateReferenceNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const count = await prisma.institutionalApplication.count({
-    where: {
-      createdAt: {
-        gte: new Date(`${year}-01-01T00:00:00.000Z`),
-      },
-    },
-  });
-  const seq = String(count + 1).padStart(5, '0');
-  let refNo = `NOUN/APP/${year}/${seq}`;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const count = await prisma.institutionalApplication.count({
+        where: {
+          createdAt: {
+            gte: new Date(`${year}-01-01T00:00:00.000Z`),
+          },
+        },
+      });
+      const seq = String(count + 1 + attempt).padStart(5, '0');
+      const salt = attempt > 0 ? `-${Math.floor(100 + Math.random() * 900)}` : '';
+      const refNo = `NOUN/APP/${year}/${seq}${salt}`;
 
-  // Collision safety
-  const exists = await prisma.institutionalApplication.findUnique({
-    where: { referenceNumber: refNo },
-  });
-  if (exists) {
-    const salt = Math.floor(100 + Math.random() * 900);
-    refNo = `NOUN/APP/${year}/${seq}-${salt}`;
+      const exists = await prisma.institutionalApplication.findUnique({
+        where: { referenceNumber: refNo },
+      });
+      if (!exists) {
+        return refNo;
+      }
+    } catch {
+      break;
+    }
   }
-  return refNo;
+  return `NOUN/APP/${year}/${Date.now().toString().slice(-5)}-${Math.floor(100 + Math.random() * 900)}`;
 }
 
 /**
@@ -42,22 +47,28 @@ async function generateReferenceNumber(): Promise<string> {
  */
 async function generateDocketFolioNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const count = await prisma.institutionalApplication.count({
-    where: {
-      registryDocketNumber: { not: null },
-    },
-  });
-  const seq = String(count + 1).padStart(5, '0');
-  let folio = `NOUN/REG/FOLIO/${year}/${seq}`;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const count = await prisma.institutionalApplication.count({
+        where: {
+          registryDocketNumber: { not: null },
+        },
+      });
+      const seq = String(count + 1 + attempt).padStart(5, '0');
+      const salt = attempt > 0 ? `-${Math.floor(100 + Math.random() * 900)}` : '';
+      const folio = `NOUN/REG/FOLIO/${year}/${seq}${salt}`;
 
-  const exists = await prisma.institutionalApplication.findUnique({
-    where: { registryDocketNumber: folio },
-  });
-  if (exists) {
-    const salt = Math.floor(100 + Math.random() * 900);
-    folio = `NOUN/REG/FOLIO/${year}/${seq}-${salt}`;
+      const exists = await prisma.institutionalApplication.findUnique({
+        where: { registryDocketNumber: folio },
+      });
+      if (!exists) {
+        return folio;
+      }
+    } catch {
+      break;
+    }
   }
-  return folio;
+  return `NOUN/REG/FOLIO/${year}/${Date.now().toString().slice(-5)}-${Math.floor(100 + Math.random() * 900)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,13 +80,56 @@ async function generateDocketFolioNumber(): Promise<string> {
  */
 export async function submitApplication(req: Request, res: Response) {
   try {
-    const applicantId = (req as any).user?.id;
+    const callerId = (req as any).user?.id;
     const { subject, category, content, attachmentUrls, directorId: explicitDirectorId } = req.body;
+
+    if (!callerId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please log in again.',
+      });
+    }
 
     if (!subject || !category || !content) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: subject, category, and content are mandatory.',
+      });
+    }
+
+    // Resolve Applicant User ID (ensuring it is a valid User foreign key)
+    let resolvedApplicantId = callerId;
+    let applicantUser = await prisma.user.findUnique({
+      where: { id: resolvedApplicantId },
+      include: {
+        staffProfile: {
+          include: { unit: true, studyCenter: true },
+        },
+      },
+    });
+
+    if (!applicantUser) {
+      const applicantProfile = await prisma.staffProfile.findUnique({
+        where: { id: callerId },
+        include: {
+          user: true,
+          unit: true,
+          studyCenter: true,
+        },
+      });
+      if (applicantProfile?.user) {
+        applicantUser = {
+          ...applicantProfile.user,
+          staffProfile: applicantProfile,
+        } as any;
+        resolvedApplicantId = applicantProfile.user.id;
+      }
+    }
+
+    if (!applicantUser) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authenticated staff user record could not be found.',
       });
     }
 
@@ -101,61 +155,119 @@ export async function submitApplication(req: Request, res: Response) {
     }
 
     // Resolve designated Director / Directorate Head
-    let resolvedDirectorId = explicitDirectorId;
+    let resolvedDirectorId = explicitDirectorId || null;
+    let directorUser: any = null;
 
-    if (!resolvedDirectorId) {
-      // Auto-resolve from applicant's staff profile
-      const profile = await prisma.staffProfile.findUnique({
-        where: { userId: applicantId },
-        include: { unit: true },
+    if (resolvedDirectorId) {
+      directorUser = await prisma.user.findUnique({
+        where: { id: resolvedDirectorId },
+        include: { staffProfile: true },
       });
 
-      if (profile?.unit?.headId && profile.unit.headId !== applicantId) {
-        resolvedDirectorId = profile.unit.headId;
-      } else {
-        // Find any active user with role UNIT_HEAD, DEAN, HOD, DIRECTOR, or SUPER_USER
-        const unitHeadUser = await prisma.user.findFirst({
-          where: {
-            role: { in: ['UNIT_HEAD', 'DEAN', 'HOD', 'DIRECTOR', 'SUPER_USER'] as any },
-            isActive: true,
-            id: { not: applicantId },
-          },
+      if (!directorUser) {
+        const dirProfile = await prisma.staffProfile.findUnique({
+          where: { id: resolvedDirectorId },
+          include: { user: true },
         });
-        resolvedDirectorId = unitHeadUser?.id;
+        if (dirProfile?.user) {
+          directorUser = dirProfile.user;
+          resolvedDirectorId = dirProfile.user.id;
+        }
       }
     }
 
-    if (!resolvedDirectorId) {
+    // Auto-resolve if not found or not provided
+    if (!directorUser) {
+      let callerProfile: any = applicantUser.staffProfile;
+      if (!callerProfile || !callerProfile.unit) {
+        callerProfile = await prisma.staffProfile.findUnique({
+          where: { userId: resolvedApplicantId },
+          include: { unit: true, studyCenter: true },
+        });
+      }
+
+      if (callerProfile?.unit?.headId && callerProfile.unit.headId !== resolvedApplicantId) {
+        let headUser = await prisma.user.findUnique({
+          where: { id: callerProfile.unit.headId },
+        });
+        if (!headUser) {
+          const headProf = await prisma.staffProfile.findUnique({
+            where: { id: callerProfile.unit.headId },
+            include: { user: true },
+          });
+          if (headProf?.user) {
+            headUser = headProf.user;
+          }
+        }
+        if (headUser && headUser.isActive) {
+          directorUser = headUser;
+          resolvedDirectorId = headUser.id;
+        }
+      }
+
+      if (!directorUser && callerProfile?.unitId) {
+        const unitLeader = await prisma.user.findFirst({
+          where: {
+            role: { in: ['DIRECTOR', 'DEAN', 'HOD', 'UNIT_HEAD', 'HEAD_OF_ADMIN'] as any },
+            staffProfile: { unitId: callerProfile.unitId },
+            isActive: true,
+            id: { not: resolvedApplicantId },
+          },
+        });
+        if (unitLeader) {
+          directorUser = unitLeader;
+          resolvedDirectorId = unitLeader.id;
+        }
+      }
+
+      if (!directorUser && callerProfile?.centerId) {
+        const centerManager = await prisma.user.findFirst({
+          where: {
+            role: { in: ['STUDY_CENTER_MANAGER', 'DIRECTOR'] as any },
+            staffProfile: { centerId: callerProfile.centerId },
+            isActive: true,
+            id: { not: resolvedApplicantId },
+          },
+        });
+        if (centerManager) {
+          directorUser = centerManager;
+          resolvedDirectorId = centerManager.id;
+        }
+      }
+
+      if (!directorUser) {
+        const leadershipUser = await prisma.user.findFirst({
+          where: {
+            role: { in: ['DIRECTOR', 'DEAN', 'HOD', 'UNIT_HEAD', 'SUPER_USER'] as any },
+            isActive: true,
+            id: { not: resolvedApplicantId },
+          },
+        });
+        if (leadershipUser) {
+          directorUser = leadershipUser;
+          resolvedDirectorId = leadershipUser.id;
+        }
+      }
+    }
+
+    if (!directorUser || !resolvedDirectorId) {
       return res.status(400).json({
         success: false,
-        error: 'Could not auto-resolve Directorate Head. Please explicitly designate a Director from the list.',
+        error: 'Could not resolve Designated Director or Unit Head. Please designate a Director from the list.',
       });
     }
-
-    const directorUser = await prisma.user.findUnique({
-      where: { id: resolvedDirectorId },
-    });
-    if (!directorUser) {
-      return res.status(404).json({
-        success: false,
-        error: 'Designated Director user record not found.',
-      });
-    }
-
-    const applicantUser = await prisma.user.findUnique({
-      where: { id: applicantId },
-      include: { staffProfile: true },
-    });
 
     const referenceNumber = await generateReferenceNumber();
-    const cleanAttachments = Array.isArray(attachmentUrls) ? attachmentUrls : [];
+    const cleanAttachments = Array.isArray(attachmentUrls)
+      ? attachmentUrls.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+      : [];
 
     const result = await prisma.$transaction(async (tx) => {
       const app = await tx.institutionalApplication.create({
         data: {
           referenceNumber,
-          applicantId,
-          directorId: resolvedDirectorId,
+          applicantId: resolvedApplicantId,
+          directorId: resolvedDirectorId!,
           subject: effectiveSubject,
           category: sanitizedCategory,
           content: content.trim(),
@@ -168,7 +280,7 @@ export async function submitApplication(req: Request, res: Response) {
       await tx.applicationRevisionHistory.create({
         data: {
           applicationId: app.id,
-          actorId: applicantId,
+          actorId: resolvedApplicantId,
           stage: 'TIER_1_SUBMISSION',
           action: 'SUBMITTED',
           comments: 'Initial application submitted through Directorate for vetting',
@@ -179,40 +291,58 @@ export async function submitApplication(req: Request, res: Response) {
       return app;
     });
 
-    // Asynchronous Real-Time Notification & Email
+    // Asynchronous Real-Time Notification & Email (Non-blocking)
     const applicantName = applicantUser?.name || applicantUser?.email || 'Staff Member';
     const directorName = directorUser.name || directorUser.email || 'Director';
 
-    notifyUser(
-      resolvedDirectorId,
-      '📄 New Staff Application for Vetting',
-      `${applicantName} has routed application ${referenceNumber} (${subject}) to your Directorate for review.`,
-      'INFO',
-      '/director/applications/pending'
-    ).catch(() => {});
-
-    if (directorUser.email) {
-      sendDirectorNotificationEmail(
-        directorUser.email,
-        directorName,
-        applicantName,
-        subject,
-        referenceNumber,
-        category
-      ).catch(() => {});
+    try {
+      if (resolvedDirectorId) {
+        notifyUser(
+          resolvedDirectorId,
+          '📄 New Staff Application for Vetting',
+          `${applicantName} has routed application ${referenceNumber} (${subject}) to your Directorate for review.`,
+          'INFO',
+          '/director/applications/pending'
+        ).catch(() => {});
+      }
+    } catch (notifErr) {
+      console.warn('[Docket] Notification error (non-fatal):', notifErr);
     }
 
-    emitApplicationStatusChanged({
-      applicationId: result.id,
-      refNo: referenceNumber,
-      oldStatus: 'DRAFT',
-      newStatus: 'SUBMITTED_TO_DIRECTOR',
-      actorName: applicantName,
-      remarks: 'Application submitted',
-      actionUrl: '/director/applications/pending',
-    });
+    try {
+      if (directorUser.email) {
+        sendDirectorNotificationEmail(
+          directorUser.email,
+          directorName,
+          applicantName,
+          subject,
+          referenceNumber,
+          sanitizedCategory
+        ).catch(() => {});
+      }
+    } catch (emailErr) {
+      console.warn('[Docket] Email error (non-fatal):', emailErr);
+    }
 
-    await cacheInvalidationService.invalidateInstitutionalApplications();
+    try {
+      emitApplicationStatusChanged({
+        applicationId: result.id,
+        refNo: referenceNumber,
+        oldStatus: 'DRAFT',
+        newStatus: 'SUBMITTED_TO_DIRECTOR',
+        actorName: applicantName,
+        remarks: 'Application submitted',
+        actionUrl: '/director/applications/pending',
+      });
+    } catch (wsErr) {
+      console.warn('[Docket] WebSocket emission warning:', wsErr);
+    }
+
+    try {
+      await cacheInvalidationService.invalidateInstitutionalApplications();
+    } catch (cacheErr) {
+      console.warn('[Docket] Cache invalidation warning:', cacheErr);
+    }
 
     return res.status(201).json({
       success: true,
@@ -223,8 +353,7 @@ export async function submitApplication(req: Request, res: Response) {
     console.error('Error in submitApplication:', error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to submit institutional application.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      error: error?.message || 'Failed to submit institutional application.',
     });
   }
 }
