@@ -1154,13 +1154,40 @@ export async function getEligibleDirectors(req: Request, res: Response) {
 
     let designatedDirector: any = null;
     if (callerId) {
-      const callerProfile = await prisma.staffProfile.findUnique({
+      let callerProfile = await prisma.staffProfile.findUnique({
         where: { userId: callerId },
         include: {
           unit: true,
           studyCenter: true,
         },
       });
+
+      if (!callerProfile) {
+        callerProfile = await prisma.staffProfile.findUnique({
+          where: { id: callerId },
+          include: {
+            unit: true,
+            studyCenter: true,
+          },
+        });
+      }
+
+      if (!callerProfile) {
+        const callerUser = await prisma.user.findUnique({
+          where: { id: callerId },
+          include: {
+            staffProfile: {
+              include: {
+                unit: true,
+                studyCenter: true,
+              },
+            },
+          },
+        });
+        if (callerUser?.staffProfile) {
+          callerProfile = callerUser.staffProfile;
+        }
+      }
 
       // 1. Direct unit head via unit.headId (may be User.id or StaffProfile.id)
       if (callerProfile?.unit?.headId && callerProfile.unit.headId !== callerId) {

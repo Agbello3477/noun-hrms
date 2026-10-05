@@ -119,11 +119,20 @@ export default function WriteOfficialApplicationModal({
     const loadEligibleDirectors = async () => {
         try {
             setLoadingDirectors(true);
-            const res = await api.get('/api/v1/applications/eligible-directors');
-            const directorList: DirectorOption[] = res.data?.directors || res.data?.data || [];
+            let res: any;
+            try {
+                res = await api.get('/api/v1/applications/eligible-directors');
+            } catch {
+                try {
+                    res = await api.get('/api/v1/applications/directors');
+                } catch {
+                    res = await api.get('/api/applications/eligible-directors');
+                }
+            }
+            const directorList: DirectorOption[] = res?.data?.directors || res?.data?.data || [];
             setDirectors(directorList);
 
-            if (res.data?.designatedDirector) {
+            if (res?.data?.designatedDirector) {
                 const detected = res.data.designatedDirector;
                 setDesignatedDirector(detected);
                 setDirectorId(detected.id);

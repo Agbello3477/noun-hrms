@@ -35,8 +35,9 @@ router.put('/:id/resubmit', resubmitApplication);
 // Fetch my submitted applications (Session-isolated 15s cache)
 router.get('/my-applications', cacheMiddleware(15, { tags: ['tag:institutional_applications'] }), getMyApplications);
 
-// Fetch eligible Directors for submission dropdown (60s cache)
-router.get('/directors', cacheMiddleware(60, { tags: ['tag:staff_roster'] }), getEligibleDirectors);
+// Fetch eligible Directors and caller's auto-detected designated Unit Head / Director
+router.get('/eligible-directors', getEligibleDirectors);
+router.get('/directors', getEligibleDirectors);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 2: DIRECTORATE VETTING
