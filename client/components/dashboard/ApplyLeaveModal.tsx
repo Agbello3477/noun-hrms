@@ -133,15 +133,14 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                 documentUrl = uploadRes.data.url;
             }
 
-            const handoverNote = reliefStaffName ? `<p><strong>Relief / Handover Officer:</strong> ${reliefStaffName}</p>` : '';
-            const docNote = documentUrl ? `<p><a href="${documentUrl}" target="_blank" class="text-blue-600 underline font-semibold">[Verified Supporting Document Attached]</a></p>` : '';
-            const finalReason = `${reason || ''}${handoverNote}${docNote}`;
+            const handoverNote = reliefStaffName ? ` (Relief Officer: ${reliefStaffName})` : '';
+            const cleanReason = reason ? `${reason.trim()}${handoverNote}` : (reliefStaffName ? `Relief Officer: ${reliefStaffName}` : '');
 
             await api.post('/api/v1/leave/apply', {
                 leaveType: type,
                 startDate,
                 endDate,
-                reason: finalReason,
+                reason: cleanReason || undefined,
                 supportingDocumentUrl: documentUrl || undefined,
                 isPaidLeave: type !== 'LEAVE_OF_ABSENCE_WITHOUT_PAY',
             });

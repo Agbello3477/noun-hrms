@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import api from '../../../../lib/api';
+import api, { getImageUrl } from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import {
     CheckCircle,
@@ -26,6 +26,46 @@ import {
 import DocumentViewerModal from '../../../../components/dashboard/DocumentViewerModal';
 import Pagination from '../../../../components/ui/Pagination';
 import { Button } from '../../../../components/ui/Button';
+
+function parseLeaveReason(rawReason: string | undefined | null) {
+    if (!rawReason) return { cleanReason: '', reliefOfficer: null, attachmentUrl: null };
+
+    let text = String(rawReason).trim();
+    let reliefOfficer: string | null = null;
+    let attachmentUrl: string | null = null;
+
+    // Check for Relief / Handover Officer in HTML or text
+    const reliefMatch = text.match(/<strong>\s*Relief \/ Handover Officer:\s*<\/strong>\s*([^<]+)/i) ||
+                        text.match(/Relief \/ Handover Officer:\s*([^\n<]+)/i) ||
+                        text.match(/\(Relief Officer:\s*([^\n\)<]+)\)/i);
+    if (reliefMatch) {
+        reliefOfficer = reliefMatch[1].trim();
+    }
+
+    // Check for attachment link in HTML href or text
+    const hrefMatch = text.match(/href=["']([^"']+)["']/i) ||
+                      text.match(/(https?:\/\/[^\s<"']+|\/uploads\/[^\s<"']+)/i);
+    if (hrefMatch) {
+        attachmentUrl = hrefMatch[1].trim();
+    }
+
+    // Strip out the relief officer block and attachment link block from the main reason text
+    text = text.replace(/<p[^>]*>\s*<strong>\s*Relief \/ Handover Officer:\s*<\/strong>.*?<\/p>/gi, '');
+    text = text.replace(/<p[^>]*>\s*<a\s+href=.*?<\/a>\s*<\/p>/gi, '');
+    text = text.replace(/<p[^>]*>/gi, '').replace(/<\/p>/gi, '\n');
+    text = text.replace(/Relief \/ Handover Officer:\s*[^\n]+/gi, '');
+    text = text.replace(/\(Relief Officer:\s*[^\n\)]+\)/gi, '');
+    text = text.replace(/\[Verified Supporting Document Attached\]/gi, '');
+    text = text.replace(/<[^>]*>/g, ' '); // Strip any remaining HTML tags
+    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    text = text.replace(/\s+/g, ' ').trim();
+
+    return {
+        cleanReason: text,
+        reliefOfficer,
+        attachmentUrl
+    };
+}
 
 const STATUTORY_LEAVE_TYPES = [
     { value: 'ALL', label: 'All Leave Categories' },
@@ -584,6 +624,7 @@ export default function UnitLeavesPage() {
                                             const workingDays = leave.workingDaysCount || leave.durationDays || '—';
                                             const isPendingHod = leave.status === 'PENDING_HOD' || leave.status === 'PENDING';
                                             const isPendingRegistry = leave.status === 'PENDING_REGISTRY';
+                                            const rowDoc = leave.supportingDocumentUrl || parseLeaveReason(leave.reason).attachmentUrl;
 
                                             return (
                                                 <tr key={leave.id} className="hover:bg-gray-50 transition">
@@ -627,9 +668,9 @@ export default function UnitLeavesPage() {
                                                         )}
                                                     </td>
                                                     <td className="py-4 px-6 text-center">
-                                                        {leave.supportingDocumentUrl ? (
+                                                        {rowDoc ? (
                                                             <a
-                                                                href={leave.supportingDocumentUrl}
+                                                                href={getImageUrl(rowDoc) || rowDoc}
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5 font-semibold text-[11px]"
@@ -674,7 +715,15 @@ export default function UnitLeavesPage() {
             )}
 
             {/* Leave Review & Dual-Control Approval Modal */}
-            {selectedLeave && (
+            {selectedLeave && (() => {
+                const parsedReason = parseLeaveReason(selectedLeave.reason);
+                const finalSupportingDoc = selectedLeave.supportingDocumentUrl || parsedReason.attachmentUrl;
+                const finalReliefOfficer = selectedLeave.reliefStaff
+                    ? (selectedLeave.reliefStaff.user?.name || `${selectedLeave.reliefStaff.surname || ''} ${selectedLeave.reliefStaff.otherNames || ''}`.trim())
+                    : parsedReason.reliefOfficer;
+                const displayReason = parsedReason.cleanReason || (selectedLeave.reason ? String(selectedLeave.reason).replace(/<[^>]*>/g, ' ').trim() : '');
+
+                return (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl p-8 max-w-xl w-full space-y-6 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
                         <div className="border-b border-gray-100 pb-4">
@@ -743,34 +792,34 @@ export default function UnitLeavesPage() {
                                 </div>
                             )}
 
-                            {selectedLeave.reliefStaff && (
+                            {finalReliefOfficer && (
                                 <div className="flex justify-between items-center py-1 border-b border-gray-200">
                                     <span className="text-gray-500">Nominated Relief Officer:</span>
                                     <span className="font-semibold text-gray-800">
-                                        {selectedLeave.reliefStaff.user?.name || `${selectedLeave.reliefStaff.surname} ${selectedLeave.reliefStaff.otherNames}`}
+                                        {finalReliefOfficer}
                                     </span>
                                 </div>
                             )}
 
-                            {selectedLeave.supportingDocumentUrl && (
+                            {finalSupportingDoc && (
                                 <div className="flex justify-between items-center py-1 border-b border-gray-200">
                                     <span className="text-gray-500">Supporting Document:</span>
                                     <a
-                                        href={selectedLeave.supportingDocumentUrl}
+                                        href={getImageUrl(finalSupportingDoc) || finalSupportingDoc}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-emerald-700 font-bold hover:underline inline-flex items-center gap-1"
+                                        className="text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200"
                                     >
                                         <FileText size={13} /> View Attached Evidence
                                     </a>
                                 </div>
                             )}
 
-                            {selectedLeave.reason && (
+                            {displayReason && (
                                 <div className="pt-1">
                                     <span className="text-gray-500 block mb-1">Reason / Justification:</span>
-                                    <p className="bg-white p-3 rounded-xl border border-gray-200 text-gray-700 italic">
-                                        &ldquo;{selectedLeave.reason}&rdquo;
+                                    <p className="bg-white p-3 rounded-xl border border-gray-200 text-gray-700 font-medium">
+                                        &ldquo;{displayReason}&rdquo;
                                     </p>
                                 </div>
                             )}
@@ -852,7 +901,8 @@ export default function UnitLeavesPage() {
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
         </div>
     );
 }

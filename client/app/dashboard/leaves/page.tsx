@@ -911,8 +911,8 @@ function LeavesContent() {
                                                         {leave.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right text-slate-500 italic max-w-xs truncate">
-                                                    {leave.comment || leave.rejectionReason || '—'}
+                                                <td className="px-6 py-4 text-right text-slate-500 italic max-w-xs truncate" title={String(leave.comment || leave.rejectionReason || leave.reason || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()}>
+                                                    {String(leave.comment || leave.rejectionReason || leave.reason || '—').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || '—'}
                                                 </td>
                                             </tr>
                                         ))}
