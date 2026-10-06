@@ -230,7 +230,13 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
                         <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
-                        <LinkItem href="/dashboard/academic/workload" icon={Users} label="Teaching Workload" />
+                        <LinkItem href="/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" />
+                        {(isUnitHead || isRegistry || isAdmin) && (
+                            <LinkItem href="/academic/workload/allocation" icon={Layers} label="Course Allocation Matrix" badge="HOD / Desk" />
+                        )}
+                        {(isUnitHead || isRegistrar || isAdmin || isVC) && (
+                            <LinkItem href="/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
+                        )}
                     </>
                 )}
 

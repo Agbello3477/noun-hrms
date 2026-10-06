@@ -12,6 +12,7 @@ import {
     allocateCourse,
     getCourses
 } from '../controllers/academic.controller';
+import workloadRoutes from './academic/workload.routes';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { upload } from '../middleware/upload.middleware';
 import { Role } from '@prisma/client';
@@ -29,6 +30,9 @@ const vettingCommitteeRoles = [
     Role.UNIT_HEAD
 ];
 
+// Academic Structure & Workload Subsystem routes
+router.use('/', workloadRoutes);
+
 // Publications Management
 router.get('/publications', getPublications);
 router.post('/publications', upload.single('file'), createPublication);
@@ -45,11 +49,9 @@ router.get('/dossier/:staffId', getAcademicDossier);
 // Sabbatical
 router.get('/sabbatical/eligibility', checkSabbatical);
 
-// Courses
-router.get('/courses', getCourses);
-
-// Teaching Workload
-router.get('/workload', getTeachingWorkload);
-router.post('/workload', allocateCourse);
+// Legacy Courses & Workload
+router.get('/courses/legacy', getCourses);
+router.get('/workload/legacy', getTeachingWorkload);
+router.post('/workload/legacy', allocateCourse);
 
 export default router;

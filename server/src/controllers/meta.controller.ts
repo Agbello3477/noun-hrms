@@ -9,27 +9,34 @@ export const getFaculties = async (req: Request, res: Response) => {
             'redis:db:meta:faculties',
             86400, // 24 hours
             async () => {
-                // Fetch distinct faculties from programmes
-                const programmeFaculties = await prisma.academicProgramme.findMany({
-                    select: { faculty: true },
-                    distinct: ['faculty']
+                // Fetch faculties from new Faculty model
+                const allFaculties = await prisma.faculty.findMany({
+                    select: { id: true, name: true, facultyCode: true },
+                    orderBy: { name: 'asc' }
                 });
 
-                // Fetch units of type FACULTY
+                if (allFaculties.length > 0) {
+                    return allFaculties.map(f => ({
+                        id: f.id,
+                        name: f.name,
+                        code: f.facultyCode
+                    }));
+                }
+
+                // Fallback: Fetch units of type FACULTY
                 const facultyUnits = await prisma.unit.findMany({
                     where: { type: 'FACULTY' },
                     select: { id: true, name: true, code: true }
                 });
 
-                const distinctNames = Array.from(new Set([
-                    ...programmeFaculties.map(p => p.faculty).filter(Boolean),
-                    ...facultyUnits.map(u => u.name)
-                ])).sort();
+                const distinctNames = Array.from(new Set(
+                    facultyUnits.map((u: any) => u.name)
+                )).sort();
 
-                return distinctNames.map((name, index) => ({
+                return distinctNames.map((name: string, index: number) => ({
                     id: `FAC-${index + 1}`,
                     name,
-                    code: name.split(' ').map(w => w[0]).join('').toUpperCase()
+                    code: name.split(' ').map((w: string) => w[0]).join('').toUpperCase()
                 }));
             },
             ['tag:meta_faculties']

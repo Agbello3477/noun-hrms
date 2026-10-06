@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AccessLevel, DocumentType, Department, Role, RequestStatus } from '@prisma/client';
+import { AccessLevel, DocumentType, LegacyDepartment, Role, RequestStatus } from '@prisma/client';
 import { StorageService } from '../services/storage.service';
 import { AuditService } from '../services/audit.service';
 import prisma from '../prisma';
@@ -88,7 +88,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
                 ownerId: targetStaffId,
                 uploadedById: uploaderProfile ? uploaderProfile.id : targetStaffId, // Fallback to staff's own profile if Admin lacks one
                 accessLevel: accessLevel as AccessLevel || AccessLevel.CONFIDENTIAL,
-                currentLocation: Department.REGISTRY_MAIN // Default to HQ Registry
+                currentLocation: LegacyDepartment.REGISTRY_MAIN // Default to HQ Registry
             }
         });
 
@@ -388,7 +388,7 @@ export const batchUploadDocuments = async (req: AuthRequest, res: Response) => {
                         ownerId: targetProfile.id,
                         uploadedById: uploaderProfile ? uploaderProfile.id : targetProfile.id,
                         accessLevel,
-                        currentLocation: Department.REGISTRY_MAIN
+                        currentLocation: LegacyDepartment.REGISTRY_MAIN
                     }
                 });
 

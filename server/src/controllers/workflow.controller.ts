@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Department, Role } from '@prisma/client';
+import { LegacyDepartment, Role } from '@prisma/client';
 import { AuditService } from '../services/audit.service';
 import prisma from '../prisma';
 
@@ -36,7 +36,7 @@ export const moveDocument = async (req: AuthRequest, res: Response) => {
             data: {
                 documentId,
                 fromDept,
-                toDept: toDept as Department,
+                toDept: toDept as LegacyDepartment,
                 actionById: userId, // Assuming user exists in StaffProfile/User
                 note
             }
@@ -45,7 +45,7 @@ export const moveDocument = async (req: AuthRequest, res: Response) => {
         // 4. Update Document Location
         const updatedDoc = await prisma.document.update({
             where: { id: documentId },
-            data: { currentLocation: toDept as Department }
+            data: { currentLocation: toDept as LegacyDepartment }
         });
 
         // 5. Audit Log

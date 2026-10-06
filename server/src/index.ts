@@ -248,6 +248,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/file-requests', fileRequestRoutes);
 app.use('/api/queries', queryRoutes);
 app.use('/api/academic', academicRoutes);
+app.use('/api/v1/academic', academicRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/aper', aperRoutes);
 app.use('/api/memos', memoRoutes);

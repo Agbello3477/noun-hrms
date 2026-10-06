@@ -1,5 +1,5 @@
 import prisma from '../prisma';
-import { Department } from '@prisma/client';
+import { LegacyDepartment } from '@prisma/client';
 import { enableDbMock } from './dbMock';
 
 const runTests = async () => {
@@ -22,7 +22,7 @@ const runTests = async () => {
                         staffId: `T-${Date.now()}`,
                         surname: 'BursaryUser',
                         otherNames: 'Test',
-                        department: Department.BURSARY_PAYROLL,
+                        department: LegacyDepartment.BURSARY_PAYROLL,
                         cadre: 'ADMINISTRATIVE',
                         level: 'CONTISS_08',
                         step: 'STEP_02',

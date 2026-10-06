@@ -130,6 +130,13 @@ model User {
   fileRequisitionsReceived               FileRequisition[]             @relation("FileRequisitionsReceived")
   fileCustodyAudits                      FileCustodyAuditTrail[]       @relation("FileCustodyAudits")
 
+  // Academic Hierarchy & Workload Relations
+  deanFaculties                          Faculty[]                     @relation("FacultyDean")
+  hodDepartments                         Department[]                  @relation("DepartmentHod")
+  assignedWorkloads                      CourseWorkloadAllocation[]    @relation("AssignedWorkloads")
+  approvedWorkloads                      CourseWorkloadAllocation[]    @relation("ApprovedWorkloads")
+  ratifiedWorkloads                      CourseWorkloadAllocation[]    @relation("RatifiedWorkloads")
+
   @@map("users")
 }
 
@@ -323,7 +330,7 @@ model StaffProfile {
   passportUrl   String?
   
   // Organization
-  department  Department? // Legacy Enum (keep for now)
+  department  LegacyDepartment? @map("department") // Legacy Enum (keep for backward compatibility)
   
   // Enhanced Organization
   unitId      String?
@@ -377,6 +384,7 @@ model StaffProfile {
   publications Publication[]
   academicPublications AcademicPublication[]
   teaching     TeachingAllocation[]
+  courseAllocations CourseWorkloadAllocation[]
   ippisNumber  String?  @unique // For Payroll Integration
 
   // Academic Promotion & Publication Engine Fields
@@ -484,18 +492,146 @@ model StaffProfile {
   @@index([cadreType, rank, dateOfBirth])
 }
 
+enum ProgrammeLevel {
+  UNDERGRADUATE
+  POSTGRADUATE_DIPLOMA
+  MASTERS
+  DOCTORATE
+}
+
+enum AcademicSemester {
+  FIRST_SEMESTER
+  SECOND_SEMESTER
+}
+
+enum AllocationRole {
+  COURSE_COORDINATOR
+  LEAD_LECTURER
+  CO_LECTURER
+  PRACTICAL_INSTRUCTOR
+}
+
+enum WorkloadAllocationStatus {
+  DRAFT
+  SUBMITTED_BY_HOD
+  APPROVED_BY_DEAN
+  RATIFIED_ACADEMIC_PLANNING
+}
+
+model Faculty {
+  id          String              @id // Standardized code: agr, art, edu, hsc, law, msc, sci, ssc, cmp
+  facultyCode String              @unique // e.g. F01, F02, F03, ...
+  name        String              // e.g. Faculty of Agricultural Sciences
+  deanId      String?
+  dean        User?               @relation("FacultyDean", fields: [deanId], references: [id], onDelete: SetNull)
+  departments Department[]
+  programmes  AcademicProgramme[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([facultyCode])
+  @@map("faculties")
+}
+
+model Department {
+  id          String              @id // Standardized code: AEE, ASF, CSI, LNG, RST, ENG, etc.
+  facultyId   String
+  faculty     Faculty             @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  name        String              // e.g. Agricultural Economics And Extension
+  hodId       String?
+  hod         User?               @relation("DepartmentHod", fields: [hodId], references: [id], onDelete: SetNull)
+  programmes  AcademicProgramme[]
+  courses     AcademicCourse[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([facultyId])
+  @@map("academic_departments")
+}
+
 model AcademicProgramme {
-  id        String   @id @default(uuid())
-  title     String   // e.g. B.Sc. Computer Science
-  code      String?  // e.g. 2201
-  faculty   String   // e.g. Faculty of Sciences
+  id                   String            @id // Standardized programme id: e.g. AGR201, CMP201
+  programmeCode        String            @unique // e.g. P010202
+  name                 String            // e.g. B.Agric Agricultural Economics and Agro-Business
+  degreeTitle          String            // e.g. B.Agric, B.Sc., B.A., PGD, M.Sc., Ph.D.
+  programmeDescription String            @db.Text
+  departmentId         String
+  department           Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  facultyId            String
+  faculty              Faculty           @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  level                ProgrammeLevel    @default(UNDERGRADUATE)
+  isActive             Boolean           @default(true)
+  courses              AcademicCourse[]
+  staff                StaffProfile[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
-  staff     StaffProfile[]
+  // Legacy fields for backward compatibility
+  title                String?
+  code                 String?
+  facultyName          String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  @@index([departmentId])
+  @@index([facultyId])
+  @@index([programmeCode])
   @@map("academic_programmes")
+}
+
+model AcademicCourse {
+  id             String                     @id @default(uuid())
+  courseCode     String                     @unique // e.g. AEE 201, CMP 301
+  courseTitle    String
+  creditUnits    Int                        // 1–6
+  lectureHours   Int                        @default(2)
+  tutorialHours  Int                        @default(1)
+  practicalHours Int                        @default(0)
+  programmeId    String
+  programme      AcademicProgramme          @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department                 @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  semester       AcademicSemester           @default(FIRST_SEMESTER)
+  session        String                     @default("2026/2027") // e.g. "2026/2027"
+  level          Int                        @default(100) // 100, 200, 300, 400, 500, 700, 800, 900
+  allocations    CourseWorkloadAllocation[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@index([departmentId])
+  @@index([programmeId])
+  @@index([semester, session])
+  @@map("academic_courses")
+}
+
+model CourseWorkloadAllocation {
+  id                          String                    @id @default(uuid())
+  courseId                    String
+  course                      AcademicCourse            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  academicStaffId             String
+  academicStaff               StaffProfile              @relation(fields: [academicStaffId], references: [id], onDelete: Cascade)
+  academicSession             String                    // e.g. "2026/2027"
+  semester                    AcademicSemester          @default(FIRST_SEMESTER)
+  role                        AllocationRole            @default(COURSE_COORDINATOR)
+  assignedCreditUnits         Decimal                   @db.Decimal(4, 2)
+  enrolledStudentsCount       Int                       @default(0)
+  contactHoursWeekly          Decimal                   @db.Decimal(4, 2)
+  allocationStatus            WorkloadAllocationStatus  @default(DRAFT)
+  assignedById                String
+  assignedBy                  User                      @relation("AssignedWorkloads", fields: [assignedById], references: [id])
+  approvedById                String?
+  approvedBy                  User?                     @relation("ApprovedWorkloads", fields: [approvedById], references: [id])
+  ratifiedById                String?
+  ratifiedBy                  User?                     @relation("RatifiedWorkloads", fields: [ratifiedById], references: [id])
+  approvalRemarks             String?                   @db.Text
+  courseMaterialCreditUnits   Decimal                   @default(0.0) @db.Decimal(4, 2)
+  administrativeReliefUnits   Decimal                   @default(0.0) @db.Decimal(4, 2)
+  effectiveTeachingEquivalent Decimal                   @default(0.0) @db.Decimal(6, 2)
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+
+  @@unique([courseId, academicStaffId, academicSession, semester])
+  @@index([academicStaffId, academicSession])
+  @@index([allocationStatus])
+  @@map("course_workload_allocations")
 }
 
 model Publication {
@@ -583,7 +719,7 @@ model TeachingAllocation {
 }
 
 // ... Document Models (Keep existing) ...
-enum Department {
+enum LegacyDepartment {
   REGISTRY_MAIN
   REGISTRY_HR
   REGISTRY_ACADEMIC
@@ -600,6 +736,7 @@ enum Department {
   ACADEMIC_ARTS
   SECURITY_DEPARTMENT
   UNIVERSITY_CLINIC
+  @@map("Department")
 }
 
 enum DocumentType {
@@ -618,42 +755,42 @@ enum AccessLevel {
 }
 
 model Document {
-  id              String        @id @default(uuid())
+  id              String           @id @default(uuid())
   ownerId         String
-  owner           StaffProfile  @relation("OwnerDocs", fields: [ownerId], references: [id])
+  owner           StaffProfile     @relation("OwnerDocs", fields: [ownerId], references: [id])
   
   type            DocumentType
   url             String
   title           String
   
   uploadedById    String
-  uploadedBy      StaffProfile  @relation("UploaderDocs", fields: [uploadedById], references: [id])
+  uploadedBy      StaffProfile     @relation("UploaderDocs", fields: [uploadedById], references: [id])
   
-  currentLocation Department   @default(REGISTRY_MAIN)
-  accessLevel     AccessLevel  @default(CONFIDENTIAL)
+  currentLocation LegacyDepartment @default(REGISTRY_MAIN)
+  accessLevel     AccessLevel      @default(CONFIDENTIAL)
   
   trail           DocumentTrail[]
   
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@map("documents")
 }
 
 model DocumentTrail {
-  id          String      @id @default(uuid())
+  id          String           @id @default(uuid())
   documentId  String
-  document    Document    @relation(fields: [documentId], references: [id])
+  document    Document         @relation(fields: [documentId], references: [id])
   
-  fromDept    Department
-  toDept      Department
+  fromDept    LegacyDepartment
+  toDept      LegacyDepartment
   
   actionById  String
-  actionBy    User        @relation(fields: [actionById], references: [id])
+  actionBy    User             @relation(fields: [actionById], references: [id])
   
   note        String?
-  createdAt   DateTime    @default(now())
-
+  createdAt   DateTime         @default(now())
+  
   @@map("document_trails")
 }
 

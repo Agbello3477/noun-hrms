@@ -1,6 +1,6 @@
 import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
-import { Role, Cadre, Department } from '@prisma/client';
+import { Role, Cadre, LegacyDepartment } from '@prisma/client';
 
 /**
  * Ensures the University Registrar user account and profile exist in the database with staffId '00002'.
@@ -84,7 +84,7 @@ export async function ensureRegistrarAccount(): Promise<void> {
                     level: 'CONTISS 15',
                     step: '09',
                     cadre: Cadre.ADMINISTRATIVE,
-                    department: Department.REGISTRY_MAIN,
+                    department: LegacyDepartment.REGISTRY_MAIN,
                     centerId: hqCenter?.id || undefined,
                     status: 'ACTIVE',
                     accountStatus: 'CLEARED_ACTIVE',
@@ -105,7 +105,7 @@ export async function ensureRegistrarAccount(): Promise<void> {
                     rank: 'University Registrar',
                     level: 'CONTISS 15',
                     cadre: Cadre.ADMINISTRATIVE,
-                    department: Department.REGISTRY_MAIN,
+                    department: LegacyDepartment.REGISTRY_MAIN,
                     status: 'ACTIVE',
                     accountStatus: 'CLEARED_ACTIVE',
                     isActivated: true,
