@@ -268,3 +268,72 @@ export const sendRegistrarFinalDeterminationEmail = async (
     console.warn('[Docket Email] Error dispatching registrar determination email:', err);
   });
 };
+
+/**
+ * Email Template 5: Registry & HR Inward Docket Desk Notification Email
+ */
+export const sendRegistryInwardDeskNotificationEmail = async (
+  recipientEmail: string,
+  recipientName: string,
+  directorName: string,
+  applicantName: string,
+  subject: string,
+  refNo: string,
+  category: string,
+  directorRemarks?: string
+) => {
+  const emailSubject = `[ACTION REQUIRED - INWARD DOCKET] Endorsed Staff Application: ${refNo}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
+      <div style="background-color: #047857; padding: 15px; border-radius: 6px; text-align: center; color: #ffffff;">
+        <h2 style="margin: 0; font-size: 20px;">Central Registry &amp; HR Inward Desk</h2>
+        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.9;">Directorate Endorsement Notification</p>
+      </div>
+
+      <div style="padding: 20px 0;">
+        <p style="font-size: 15px; color: #1e293b;">Dear <strong>${recipientName}</strong>,</p>
+        <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+          An institutional staff application has been reviewed, endorsed, and recommended by <strong>Director ${directorName}</strong>. It is now awaiting intake, folio stamping, and docketing by the Registry / HR desk to be forwarded to the University Registrar.
+        </p>
+
+        <div style="background-color: #f8fafc; border-left: 4px solid #047857; padding: 12px 16px; margin: 20px 0; border-radius: 0 4px 4px 0;">
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Reference Number:</strong> ${refNo}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Applicant:</strong> ${applicantName}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Category:</strong> ${category.replace(/_/g, ' ')}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Subject:</strong> ${subject}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Status:</strong> ENDORSED BY DIRECTOR · AWAITING REGISTRY DOCKETING</p>
+        </div>
+
+        ${
+          directorRemarks
+            ? `
+          <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 20px 0; border-radius: 0 4px 4px 0;">
+            <p style="margin: 0; font-size: 13px; color: #92400e;"><strong>Director's Recommendation Minute:</strong></p>
+            <p style="margin: 6px 0 0; font-size: 14px; color: #78350f; font-style: italic;">"${directorRemarks}"</p>
+          </div>
+        `
+            : ''
+        }
+
+        <p style="font-size: 14px; color: #334155;">
+          Please open your Registry Inward Desk to assign the official Registry Folio Number and forward the dossier to the Registrar's Executive Cockpit.
+        </p>
+
+        <div style="margin: 30px 0; text-align: center;">
+          <a href="${process.env.CLIENT_URL || 'https://nounhrms.web.app'}/dashboard/registry/inward-docket" 
+             style="background-color: #047857; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">
+            Open Registry Inward Docket Desk
+          </a>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 12px; color: #64748b; text-align: center;">
+        <p style="margin: 0;">Central Registry Operations · National Open University of Nigeria</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail(recipientEmail, emailSubject, html).catch((err) => {
+    console.warn('[Docket Email] Error dispatching registry inward desk notification email:', err);
+  });
+};

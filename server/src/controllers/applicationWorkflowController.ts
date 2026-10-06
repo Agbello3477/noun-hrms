@@ -6,6 +6,7 @@ import {
   sendApplicantProgressEmail,
   sendRegistryAcknowledgmentReceiptEmail,
   sendRegistrarFinalDeterminationEmail,
+  sendRegistryInwardDeskNotificationEmail,
 } from '../services/docketNotification.service';
 import { notifyUser } from './notification.controller';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
@@ -692,26 +693,40 @@ export async function directorAction(req: Request, res: Response) {
     }
 
     if (decision === 'RECOMMEND') {
-      prisma.user
-        .findMany({
+      try {
+        const registryAndHrUsers = await prisma.user.findMany({
           where: {
-            role: { in: ['REGISTRY_ADMIN', 'HR_ADMIN', 'SUPER_USER'] },
+            role: { in: ['REGISTRY_ADMIN', 'HR_ADMIN', 'ADMIN', 'SUPER_USER'] },
             isActive: true,
           },
-          select: { id: true },
-        })
-        .then((registryUsers) => {
-          for (const regUser of registryUsers) {
-            notifyUser(
-              regUser.id,
-              '📥 New Directorate Endorsement for Inward Docketing',
-              `Director ${directorName} has endorsed application ${application.referenceNumber} (${application.subject}) for staff ${applicantName}. Awaiting Registry Folio docketing.`,
-              'INFO',
-              '/dashboard/registry/inward-docket'
+          select: { id: true, email: true, name: true },
+        });
+
+        for (const regUser of registryAndHrUsers) {
+          notifyUser(
+            regUser.id,
+            '📥 New Directorate Endorsement for Inward Docketing',
+            `Director ${directorName} has endorsed application ${application.referenceNumber} (${application.subject}) for staff ${applicantName}. Awaiting Registry Folio docketing.`,
+            'INFO',
+            '/dashboard/registry/inward-docket'
+          ).catch(() => {});
+
+          if (regUser.email) {
+            sendRegistryInwardDeskNotificationEmail(
+              regUser.email,
+              regUser.name || 'Registry / HR Officer',
+              directorName,
+              applicantName,
+              application.subject,
+              application.referenceNumber,
+              application.category,
+              directorRemarks ? directorRemarks.trim() : undefined
             ).catch(() => {});
           }
-        })
-        .catch(() => {});
+        }
+      } catch (notifErr) {
+        console.warn('[Docket Notification] Error notifying Registry/HR admins:', notifErr);
+      }
     }
 
     emitApplicationStatusChanged({
@@ -721,7 +736,7 @@ export async function directorAction(req: Request, res: Response) {
       newStatus,
       actorName: directorName,
       remarks: directorRemarks,
-      actionUrl: '/portal/applications/my-applications',
+      actionUrl: '/dashboard/registry/inward-docket',
     });
 
     await cacheInvalidationService.invalidateInstitutionalApplications();
@@ -1964,6 +1979,9 @@ export async function getApplicationById(req: Request, res: Response) {
                 id: true,
                 staffId: true,
                 rank: true,
+                title: true,
+                surname: true,
+                otherNames: true,
                 level: true,
                 step: true,
                 highestQualification: true,
@@ -1974,7 +1992,23 @@ export async function getApplicationById(req: Request, res: Response) {
             },
           },
         },
-        director: { select: { id: true, name: true, email: true } },
+        director: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: {
+                id: true,
+                title: true,
+                surname: true,
+                otherNames: true,
+                rank: true,
+                unit: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
         registrar: { select: { id: true, name: true, email: true } },
         registryClerk: { select: { id: true, name: true, email: true } },
         revisions: {

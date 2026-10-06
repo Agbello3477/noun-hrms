@@ -38,38 +38,63 @@ interface ApplicationData {
   registrarDecidedAt?: string | null;
   applicant?: {
     id: string;
+    name?: string;
     email: string;
     staffProfile?: {
-      firstName: string;
-      lastName: string;
+      id?: string;
+      title?: string;
+      surname?: string;
+      otherNames?: string;
+      firstName?: string;
+      lastName?: string;
+      staffId?: string;
       staffNumber?: string;
-      department?: { name: string } | null;
-      unit?: { name: string } | null;
+      rank?: string;
+      department?: any;
+      unit?: { id?: string; name?: string } | null;
+      studyCenter?: { id?: string; name?: string } | null;
       directorate?: { name: string } | null;
     } | null;
   };
   director?: {
     id: string;
+    name?: string;
     email: string;
     staffProfile?: {
-      firstName: string;
-      lastName: string;
+      id?: string;
+      title?: string;
+      surname?: string;
+      otherNames?: string;
+      firstName?: string;
+      lastName?: string;
+      rank?: string;
+      unit?: { id?: string; name?: string } | null;
     } | null;
   };
   registrar?: {
     id: string;
+    name?: string;
     email: string;
     staffProfile?: {
-      firstName: string;
-      lastName: string;
+      id?: string;
+      title?: string;
+      surname?: string;
+      otherNames?: string;
+      firstName?: string;
+      lastName?: string;
     } | null;
   } | null;
   registryClerk?: {
     id: string;
+    name?: string;
     email: string;
     staffProfile?: {
-      firstName: string;
-      lastName: string;
+      id?: string;
+      title?: string;
+      surname?: string;
+      otherNames?: string;
+      firstName?: string;
+      lastName?: string;
     } | null;
   } | null;
   revisionHistory?: Revision[];
@@ -89,13 +114,26 @@ interface Props {
 export default function ApplicationDetailsModal({ application, isOpen, onClose }: Props) {
   if (!isOpen || !application) return null;
 
-  const applicantName = application.applicant?.staffProfile
-    ? `${application.applicant.staffProfile.firstName} ${application.applicant.staffProfile.lastName}`
-    : application.applicant?.email || 'N/A';
+  const applicant = application.applicant?.staffProfile;
+  const applicantName = applicant?.title
+    ? `${applicant.title} ${applicant.surname || ''} ${applicant.otherNames || ''}`.trim()
+    : applicant?.surname
+    ? `${applicant.surname} ${applicant.otherNames || ''}`.trim()
+    : applicant?.firstName
+    ? `${applicant.firstName} ${applicant.lastName || ''}`.trim()
+    : application.applicant?.name || application.applicant?.email || 'Staff Member';
 
-  const directorName = application.director?.staffProfile
-    ? `${application.director.staffProfile.firstName} ${application.director.staffProfile.lastName}`
-    : application.director?.email || 'N/A';
+  const director = application.director?.staffProfile;
+  const directorName = director?.title
+    ? `${director.title} ${director.surname || ''} ${director.otherNames || ''}`.trim()
+    : director?.surname
+    ? `${director.surname} ${director.otherNames || ''}`.trim()
+    : director?.firstName
+    ? `${director.firstName} ${director.lastName || ''}`.trim()
+    : application.director?.name || application.director?.email || 'Director';
+
+  const staffId = applicant?.staffId || applicant?.staffNumber || 'N/A';
+  const unitOrDept = applicant?.unit?.name || (typeof applicant?.department === 'string' ? applicant.department : applicant?.department?.name) || 'Registry Division';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -143,12 +181,17 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
             <div>
               <p className="text-xs text-gray-500 uppercase">Applicant</p>
               <p className="font-semibold text-gray-900">{applicantName}</p>
-              <p className="text-xs text-gray-500">
-                {application.applicant?.staffProfile?.staffNumber || 'Staff ID: N/A'}
+              <p className="text-xs text-gray-500 font-mono">
+                Staff ID: {staffId}
               </p>
               <p className="text-xs text-gray-500">
-                {application.applicant?.staffProfile?.department?.name || 'Department: N/A'}
+                Unit/Dept: {unitOrDept}
               </p>
+              {applicant?.rank && (
+                <p className="text-xs text-gray-500">
+                  Rank: {applicant.rank}
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">Target Directorate / Unit</p>

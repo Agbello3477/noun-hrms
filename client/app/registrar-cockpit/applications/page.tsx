@@ -130,14 +130,26 @@ export default function RegistrarApplicationsPage() {
         <div className="space-y-4">
           {applications.map((app) => {
             const applicant = app.applicant?.staffProfile;
-            const applicantName = applicant
-              ? `${applicant.firstName} ${applicant.lastName}`
-              : app.applicant?.email;
+            const applicantName = applicant?.title
+              ? `${applicant.title} ${applicant.surname || ''} ${applicant.otherNames || ''}`.trim()
+              : applicant?.surname
+              ? `${applicant.surname} ${applicant.otherNames || ''}`.trim()
+              : applicant?.firstName
+              ? `${applicant.firstName} ${applicant.lastName || ''}`.trim()
+              : app.applicant?.name || app.applicant?.email || 'Staff Member';
 
             const director = app.director?.staffProfile;
-            const directorName = director
-              ? `${director.firstName} ${director.lastName}`
-              : app.director?.email;
+            const directorName = director?.title
+              ? `${director.title} ${director.surname || ''} ${director.otherNames || ''}`.trim()
+              : director?.surname
+              ? `${director.surname} ${director.otherNames || ''}`.trim()
+              : director?.firstName
+              ? `${director.firstName} ${director.lastName || ''}`.trim()
+              : app.director?.name || app.director?.email || 'Director';
+
+            const staffId = applicant?.staffId || applicant?.staffNumber || 'N/A';
+            const rank = applicant?.rank || 'Staff';
+            const deptOrUnit = applicant?.unit?.name || applicant?.department || 'Registry Division';
 
             return (
               <div
@@ -187,12 +199,15 @@ export default function RegistrarApplicationsPage() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200 text-xs space-y-1.5">
-                    <p className="text-gray-500 font-semibold uppercase text-[10px]">Staff Details</p>
+                  <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 text-xs space-y-1.5">
+                    <p className="text-gray-500 font-semibold uppercase text-[10px] tracking-wider">Applicant Staff Details</p>
                     <p className="font-bold text-gray-900 text-sm">{applicantName}</p>
-                    <p className="text-gray-600">ID: {applicant?.staffNumber || 'N/A'}</p>
-                    <p className="text-gray-600">Dept: {applicant?.department?.name || 'N/A'}</p>
-                    <p className="text-gray-600">Unit: {applicant?.unit?.name || 'N/A'}</p>
+                    <p className="text-gray-700 font-mono"><span className="text-gray-400">Staff ID:</span> {staffId}</p>
+                    <p className="text-gray-700"><span className="text-gray-400">Rank:</span> {rank}</p>
+                    <p className="text-gray-700"><span className="text-gray-400">Unit / Dept:</span> {deptOrUnit}</p>
+                    {applicant?.studyCenter?.name && (
+                      <p className="text-gray-700"><span className="text-gray-400">Centre:</span> {applicant.studyCenter.name}</p>
+                    )}
                   </div>
                 </div>
 

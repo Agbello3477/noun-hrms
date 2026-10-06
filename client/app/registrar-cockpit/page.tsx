@@ -1283,9 +1283,13 @@ export default function RegistrarCockpitPage() {
                             <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto pr-1">
                                 {pendingApplications.map((app) => {
                                     const applicant = app.applicant?.staffProfile;
-                                    const applicantName = applicant
-                                        ? `${applicant.surname || ''} ${applicant.otherNames || ''}`.trim() || app.applicant?.name
-                                        : app.applicant?.name;
+                                    const applicantName = applicant?.title
+                                        ? `${applicant.title} ${applicant.surname || ''} ${applicant.otherNames || ''}`.trim()
+                                        : applicant?.surname
+                                        ? `${applicant.surname} ${applicant.otherNames || ''}`.trim()
+                                        : applicant?.firstName
+                                        ? `${applicant.firstName} ${applicant.lastName || ''}`.trim()
+                                        : app.applicant?.name || app.applicant?.email || 'Staff Member';
                                     const isSelected = selectedApplication?.id === app.id;
 
                                     return (
@@ -1332,13 +1336,21 @@ export default function RegistrarCockpitPage() {
                             <div>
                                 {(() => {
                                     const applicant = selectedApplication.applicant?.staffProfile;
-                                    const applicantName = applicant
-                                        ? `${applicant.surname || ''} ${applicant.otherNames || ''}`.trim() || selectedApplication.applicant?.name
-                                        : selectedApplication.applicant?.name;
+                                    const applicantName = applicant?.title
+                                        ? `${applicant.title} ${applicant.surname || ''} ${applicant.otherNames || ''}`.trim()
+                                        : applicant?.surname
+                                        ? `${applicant.surname} ${applicant.otherNames || ''}`.trim()
+                                        : applicant?.firstName
+                                        ? `${applicant.firstName} ${applicant.lastName || ''}`.trim()
+                                        : selectedApplication.applicant?.name || selectedApplication.applicant?.email || 'Staff Member';
                                     const director = selectedApplication.director?.staffProfile;
-                                    const directorName = director
-                                        ? `${director.surname || ''} ${director.otherNames || ''}`.trim() || selectedApplication.director?.name
-                                        : selectedApplication.director?.name;
+                                    const directorName = director?.title
+                                        ? `${director.title} ${director.surname || ''} ${director.otherNames || ''}`.trim()
+                                        : director?.surname
+                                        ? `${director.surname} ${director.otherNames || ''}`.trim()
+                                        : director?.firstName
+                                        ? `${director.firstName} ${director.lastName || ''}`.trim()
+                                        : selectedApplication.director?.name || selectedApplication.director?.email || 'Director';
 
                                     const isApplicant = selectedApplication.applicantId === user?.id;
 
@@ -1373,11 +1385,14 @@ export default function RegistrarCockpitPage() {
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                                 <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
-                                                    <div className="font-bold text-slate-700 uppercase text-[10px] mb-1">Applicant Profile</div>
+                                                    <div className="font-bold text-slate-700 uppercase text-[10px] mb-1 tracking-wider">Applicant Staff Details</div>
                                                     <div><span className="text-slate-400">Name:</span> <span className="font-semibold text-slate-800">{applicantName}</span></div>
-                                                    <div><span className="text-slate-400">Staff ID:</span> <span className="font-mono text-slate-800">{applicant?.staffId || 'N/A'}</span></div>
-                                                    <div><span className="text-slate-400">Department:</span> <span className="font-semibold text-slate-800">{applicant?.department || 'Registry'}</span></div>
+                                                    <div><span className="text-slate-400">Staff ID:</span> <span className="font-mono text-slate-800">{applicant?.staffId || applicant?.staffNumber || 'N/A'}</span></div>
                                                     <div><span className="text-slate-400">Rank:</span> <span className="font-semibold text-slate-800">{applicant?.rank || 'Staff'}</span></div>
+                                                    <div><span className="text-slate-400">Unit / Dept:</span> <span className="font-semibold text-slate-800">{applicant?.unit?.name || applicant?.department || 'Registry Division'}</span></div>
+                                                    {applicant?.studyCenter?.name && (
+                                                        <div><span className="text-slate-400">Study Centre:</span> <span className="font-semibold text-slate-800">{applicant.studyCenter.name}</span></div>
+                                                    )}
                                                 </div>
 
                                                 <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 space-y-1.5 text-xs">
