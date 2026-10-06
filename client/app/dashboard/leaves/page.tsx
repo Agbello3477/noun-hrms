@@ -21,6 +21,7 @@ import { LodgeRequisitionModal } from '../../../components/fileRequisition/Lodge
 import { CustodyReleaseReceiptModal } from '../../../components/fileRequisition/CustodyReleaseReceiptModal';
 import { DigitalTranscriptViewerModal } from '../../../components/fileRequisition/DigitalTranscriptViewerModal';
 import { RequisitionStatusStepper, FileRequisitionStatus } from '../../../components/fileRequisition/RequisitionStatusStepper';
+import Pagination from '../../../components/ui/Pagination';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface OfficialApplication {
@@ -122,6 +123,15 @@ function LeavesContent() {
     const [loadingApps, setLoadingApps] = useState(false);
     const [selectedApp, setSelectedApp] = useState<OfficialApplication | null>(null);
     const [isStampedViewerOpen, setIsStampedViewerOpen] = useState(false);
+    const [officialPage, setOfficialPage] = useState(1);
+    const [officialPageSize, setOfficialPageSize] = useState(10);
+
+    const paginatedOfficialApps = useMemo(() => {
+        const start = (officialPage - 1) * officialPageSize;
+        return officialApps.slice(start, start + officialPageSize);
+    }, [officialApps, officialPage, officialPageSize]);
+
+    const totalOfficialPages = Math.ceil(officialApps.length / officialPageSize) || 1;
 
     const fetchOfficialApps = useCallback(async () => {
         setLoadingApps(true);
@@ -146,6 +156,15 @@ function LeavesContent() {
     }, [v1Leaves, legacyLeaves]);
 
     const loadingLeaves = loadingV1Leaves && loadingLegacyLeaves;
+    const [leavesPage, setLeavesPage] = useState(1);
+    const [leavesPageSize, setLeavesPageSize] = useState(10);
+
+    const paginatedLeaves = useMemo(() => {
+        const start = (leavesPage - 1) * leavesPageSize;
+        return leaves.slice(start, start + leavesPageSize);
+    }, [leaves, leavesPage, leavesPageSize]);
+
+    const totalLeavesPages = Math.ceil(leaves.length / leavesPageSize) || 1;
 
     const fetchMyLeaves = useCallback(() => {
         fetchV1Leaves();
@@ -603,7 +622,7 @@ function LeavesContent() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-xs">
-                                        {officialApps.map((app) => {
+                                        {paginatedOfficialApps.map((app) => {
                                             const isAcknowledged = app.status === 'ACKNOWLEDGED' || !!app.registryStampNumber;
                                             return (
                                                 <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
@@ -657,6 +676,14 @@ function LeavesContent() {
                                     </tbody>
                                 </table>
                             </div>
+                            <Pagination
+                                currentPage={officialPage}
+                                totalPages={totalOfficialPages}
+                                totalItems={officialApps.length}
+                                pageSize={officialPageSize}
+                                onPageChange={setOfficialPage}
+                                onPageSizeChange={setOfficialPageSize}
+                            />
                         </div>
                     )}
                 </div>
@@ -888,7 +915,7 @@ function LeavesContent() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-xs">
-                                        {leaves.map((leave: any) => (
+                                        {paginatedLeaves.map((leave: any) => (
                                             <tr key={leave.id} className="hover:bg-slate-50/60 transition-colors">
                                                 <td className="px-6 py-4 font-bold text-slate-900">
                                                     {(leave.type || leave.leaveType || 'ANNUAL').replace(/_/g, ' ')}
@@ -919,6 +946,14 @@ function LeavesContent() {
                                     </tbody>
                                 </table>
                             </div>
+                            <Pagination
+                                currentPage={leavesPage}
+                                totalPages={totalLeavesPages}
+                                totalItems={leaves.length}
+                                pageSize={leavesPageSize}
+                                onPageChange={setLeavesPage}
+                                onPageSizeChange={setLeavesPageSize}
+                            />
                         </div>
                     )}
                 </div>

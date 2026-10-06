@@ -17,6 +17,7 @@ import {
     RefreshCw,
     Search
 } from 'lucide-react';
+import Pagination from '../../../components/ui/Pagination';
 
 interface Voucher {
     id: string;
@@ -63,6 +64,11 @@ export default function BursaryDashboardPage() {
     const [activeTab, setActiveTab] = useState<'vouchers' | 'reconciliation'>('vouchers');
     const [vouchers, setVouchers] = useState<Voucher[]>([]);
     const [loadingVouchers, setLoadingVouchers] = useState(true);
+    const [voucherPage, setVoucherPage] = useState(1);
+    const [voucherPageSize, setVoucherPageSize] = useState(10);
+
+    const paginatedVouchers = vouchers.slice((voucherPage - 1) * voucherPageSize, voucherPage * voucherPageSize);
+    const totalVoucherPages = Math.ceil(vouchers.length / voucherPageSize) || 1;
 
     // Filter states for vouchers
     const [statusFilter, setStatusFilter] = useState('');
@@ -271,7 +277,7 @@ export default function BursaryDashboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {vouchers.map((v) => (
+                                    {paginatedVouchers.map((v) => (
                                         <tr key={v.id} className="hover:bg-slate-50/50">
                                             <td className="p-4">
                                                 <div className="font-extrabold text-slate-800">{v.title}</div>
@@ -354,6 +360,14 @@ export default function BursaryDashboardPage() {
                                     ))}
                                 </tbody>
                             </table>
+                            <Pagination
+                                currentPage={voucherPage}
+                                totalPages={totalVoucherPages}
+                                totalItems={vouchers.length}
+                                pageSize={voucherPageSize}
+                                onPageChange={setVoucherPage}
+                                onPageSizeChange={setVoucherPageSize}
+                            />
                         </div>
                     )}
                 </div>

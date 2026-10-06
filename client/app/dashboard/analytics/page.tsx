@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../lib/api';
 import Button from '../../../components/ui/Button';
+import Pagination from '../../../components/ui/Pagination';
 
 interface AnalyticsData {
     totalWorkforce: number;
@@ -74,6 +75,13 @@ export default function AnalyticsPage() {
     const [kpiTimeframe, setKpiTimeframe] = useState<'7d' | '30d' | '90d' | '365d'>('30d');
     const [kpiData, setKpiData] = useState<SlaKpiData | null>(null);
     const [kpiLoading, setKpiLoading] = useState(false);
+
+    const [bottleneckPage, setBottleneckPage] = useState(1);
+    const [bottleneckPageSize, setBottleneckPageSize] = useState(10);
+
+    const bottlenecksList = kpiData?.bottlenecks || [];
+    const paginatedBottlenecks = bottlenecksList.slice((bottleneckPage - 1) * bottleneckPageSize, bottleneckPage * bottleneckPageSize);
+    const totalBottleneckPages = Math.ceil(bottlenecksList.length / bottleneckPageSize) || 1;
 
     // Workforce Demographics Data
     const { data: demoData, isLoading: demoLoading, error: demoError } = useSwrData<AnalyticsData>(
@@ -399,8 +407,8 @@ export default function AnalyticsPage() {
                                                     <th className="px-4 py-3">Status</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {kpiData.bottlenecks.map((item) => (
+                                             <tbody className="divide-y divide-slate-100">
+                                                {paginatedBottlenecks.map((item) => (
                                                     <tr key={item.id} className="hover:bg-rose-50/40 transition">
                                                         <td className="px-4 py-3 font-semibold text-slate-700">{item.category}</td>
                                                         <td className="px-4 py-3 font-bold text-slate-900">{item.title}</td>
@@ -418,6 +426,14 @@ export default function AnalyticsPage() {
                                                 ))}
                                             </tbody>
                                         </table>
+                                        <Pagination
+                                            currentPage={bottleneckPage}
+                                            totalPages={totalBottleneckPages}
+                                            totalItems={bottlenecksList.length}
+                                            pageSize={bottleneckPageSize}
+                                            onPageChange={setBottleneckPage}
+                                            onPageSizeChange={setBottleneckPageSize}
+                                        />
                                     </div>
                                 )}
                             </div>

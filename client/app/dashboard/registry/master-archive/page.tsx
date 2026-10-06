@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import ApplicationDetailsModal from '@/components/applications/ApplicationDetailsModal';
+import Pagination from '@/components/ui/Pagination';
 
 export default function MasterApplicationArchivePage() {
   const [archives, setArchives] = useState<any[]>([]);
@@ -13,6 +14,12 @@ export default function MasterApplicationArchivePage() {
   const [search, setSearch] = useState('');
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const paginatedArchives = archives.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(archives.length / pageSize) || 1;
 
   useEffect(() => {
     loadMasterArchive();
@@ -158,7 +165,7 @@ export default function MasterApplicationArchivePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {archives.map((item) => {
+              {paginatedArchives.map((item) => {
                 const app = item.application;
                 const applicant = app?.applicant?.staffProfile;
                 const applicantName = applicant
@@ -232,6 +239,14 @@ export default function MasterApplicationArchivePage() {
               })}
             </tbody>
           </table>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={archives.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       )}
 

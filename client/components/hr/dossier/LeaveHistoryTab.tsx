@@ -3,10 +3,17 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock } from 'lucide-react';
 import api from '../../../lib/api';
+import Pagination from '../../ui/Pagination';
 
 export default function LeaveHistoryTab({ staffId }: { staffId: string }) {
     const [leaves, setLeaves] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const paginatedLeaves = leaves.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalPages = Math.ceil(leaves.length / pageSize) || 1;
 
     useEffect(() => {
         const fetchLeaves = async () => {
@@ -49,7 +56,7 @@ export default function LeaveHistoryTab({ staffId }: { staffId: string }) {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {leaves.map((leave) => (
+                            {paginatedLeaves.map((leave) => (
                                 <tr key={leave.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{leave.type.replace(/_/g, ' ')}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -72,6 +79,14 @@ export default function LeaveHistoryTab({ staffId }: { staffId: string }) {
                             ))}
                         </tbody>
                     </table>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={leaves.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={setPageSize}
+                    />
                 </div>
             )}
         </div>

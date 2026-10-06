@@ -23,6 +23,7 @@ import {
     Users
 } from 'lucide-react';
 import Button from '../../../../components/ui/Button';
+import Pagination from '../../../../components/ui/Pagination';
 
 export default function RegistryAuditReportsPage() {
     const { user, isLoading: authLoading } = useAuth();
@@ -45,6 +46,20 @@ export default function RegistryAuditReportsPage() {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState<any>(null);
     const [downloadingFormat, setDownloadingFormat] = useState<'pdf' | 'csv' | null>(null);
+
+    // Pagination states
+    const [discPage, setDiscPage] = useState(1);
+    const [discPageSize, setDiscPageSize] = useState(10);
+    const [transPage, setTransPage] = useState(1);
+    const [transPageSize, setTransPageSize] = useState(10);
+
+    const disciplinaryList = reportData?.disciplinary || [];
+    const paginatedDisciplinary = disciplinaryList.slice((discPage - 1) * discPageSize, discPage * discPageSize);
+    const totalDiscPages = Math.ceil(disciplinaryList.length / discPageSize) || 1;
+
+    const transfersList = reportData?.transfers || [];
+    const paginatedTransfers = transfersList.slice((transPage - 1) * transPageSize, transPage * transPageSize);
+    const totalTransPages = Math.ceil(transfersList.length / transPageSize) || 1;
 
     const isAuthorized = user && ['HR_ADMIN', 'REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR', 'AUDIT', 'ADMIN'].includes(user.role);
 
@@ -399,7 +414,7 @@ export default function RegistryAuditReportsPage() {
                                             <td colSpan={8} className="px-4 py-8 text-center text-gray-400">No disciplinary records match current filter criteria.</td>
                                         </tr>
                                     ) : (
-                                        reportData.disciplinary.map((d: any) => (
+                                        paginatedDisciplinary.map((d: any) => (
                                             <tr key={d.id} className="hover:bg-slate-50/70">
                                                 <td className="px-4 py-3 font-medium text-gray-900">{d.staffName} <span className="text-gray-400">({d.staffId})</span></td>
                                                 <td className="px-4 py-3 text-gray-600">{d.unit}</td>
@@ -432,6 +447,16 @@ export default function RegistryAuditReportsPage() {
                                     )}
                                 </tbody>
                             </table>
+                            {disciplinaryList.length > 0 && (
+                                <Pagination
+                                    currentPage={discPage}
+                                    totalPages={totalDiscPages}
+                                    totalItems={disciplinaryList.length}
+                                    pageSize={discPageSize}
+                                    onPageChange={setDiscPage}
+                                    onPageSizeChange={setDiscPageSize}
+                                />
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -458,7 +483,7 @@ export default function RegistryAuditReportsPage() {
                                             <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No transfer records match current filter criteria.</td>
                                         </tr>
                                     ) : (
-                                        reportData.transfers.map((t: any) => (
+                                        paginatedTransfers.map((t: any) => (
                                             <tr key={t.id} className="hover:bg-slate-50/70">
                                                 <td className="px-4 py-3 font-medium text-gray-900">{t.staffName} <span className="text-gray-400">({t.staffId})</span></td>
                                                 <td className="px-4 py-3 text-gray-600">{t.rank}</td>
@@ -480,6 +505,16 @@ export default function RegistryAuditReportsPage() {
                                     )}
                                 </tbody>
                             </table>
+                            {transfersList.length > 0 && (
+                                <Pagination
+                                    currentPage={transPage}
+                                    totalPages={totalTransPages}
+                                    totalItems={transfersList.length}
+                                    pageSize={transPageSize}
+                                    onPageChange={setTransPage}
+                                    onPageSizeChange={setTransPageSize}
+                                />
+                            )}
                         </div>
                     </div>
                 )}

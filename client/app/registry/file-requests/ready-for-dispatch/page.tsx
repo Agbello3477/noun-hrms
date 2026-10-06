@@ -25,6 +25,7 @@ import {
 import { RequisitionStatusStepper, FileRequisitionStatus } from '@/components/fileRequisition/RequisitionStatusStepper';
 import { CustodyReleaseReceiptModal } from '@/components/fileRequisition/CustodyReleaseReceiptModal';
 import { DigitalTranscriptViewerModal } from '@/components/fileRequisition/DigitalTranscriptViewerModal';
+import Pagination from '@/components/ui/Pagination';
 
 export default function FileDispatchAndCustodyPage() {
   const [activeTab, setActiveTab] = useState<'AWAITING_DISPATCH' | 'IN_CIRCULATION' | 'AUDIT_LEDGER'>('AWAITING_DISPATCH');
@@ -34,6 +35,22 @@ export default function FileDispatchAndCustodyPage() {
   const [items, setItems] = useState<any[]>([]);
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Audit Ledger State
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  // Pagination states
+  const [itemsPage, setItemsPage] = useState(1);
+  const [itemsPageSize, setItemsPageSize] = useState(10);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(10);
+
+  const paginatedItems = items.slice((itemsPage - 1) * itemsPageSize, itemsPage * itemsPageSize);
+  const totalItemsPages = Math.ceil(items.length / itemsPageSize) || 1;
+
+  const paginatedAuditLogs = auditLogs.slice((auditPage - 1) * auditPageSize, auditPage * auditPageSize);
+  const totalAuditPages = Math.ceil(auditLogs.length / auditPageSize) || 1;
 
   // Dispatch Action Modal
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
@@ -47,10 +64,6 @@ export default function FileDispatchAndCustodyPage() {
   const [returnNotes, setReturnNotes] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [returnError, setReturnError] = useState('');
-
-  // Audit Ledger State
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [loadingAudit, setLoadingAudit] = useState(false);
 
   // Modals
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
@@ -317,7 +330,7 @@ export default function FileDispatchAndCustodyPage() {
                       </td>
                     </tr>
                   ) : (
-                    items.map((item) => (
+                    paginatedItems.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                         {/* Docket Details */}
                         <td className="py-3.5 px-4">
@@ -429,6 +442,14 @@ export default function FileDispatchAndCustodyPage() {
                   )}
                 </tbody>
               </table>
+              <Pagination
+                currentPage={itemsPage}
+                totalPages={totalItemsPages}
+                totalItems={items.length}
+                pageSize={itemsPageSize}
+                onPageChange={setItemsPage}
+                onPageSizeChange={setItemsPageSize}
+              />
             </div>
           </div>
         </>
@@ -481,7 +502,7 @@ export default function FileDispatchAndCustodyPage() {
                     </td>
                   </tr>
                 ) : (
-                  auditLogs.map((log) => (
+                  paginatedAuditLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
                         {new Date(log.createdAt).toLocaleString('en-GB')}
@@ -519,6 +540,14 @@ export default function FileDispatchAndCustodyPage() {
                 )}
               </tbody>
             </table>
+            <Pagination
+              currentPage={auditPage}
+              totalPages={totalAuditPages}
+              totalItems={auditLogs.length}
+              pageSize={auditPageSize}
+              onPageChange={setAuditPage}
+              onPageSizeChange={setAuditPageSize}
+            />
           </div>
         </div>
       )}

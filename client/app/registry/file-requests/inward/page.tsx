@@ -24,11 +24,18 @@ import { RequisitionStatusStepper, FileRequisitionStatus } from '@/components/fi
 import { LodgeRequisitionModal } from '@/components/fileRequisition/LodgeRequisitionModal';
 import { CustodyReleaseReceiptModal } from '@/components/fileRequisition/CustodyReleaseReceiptModal';
 import { DigitalTranscriptViewerModal } from '@/components/fileRequisition/DigitalTranscriptViewerModal';
+import Pagination from '@/components/ui/Pagination';
 
 export default function RegistryInwardFileRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [requisitions, setRequisitions] = useState<any[]>([]);
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const paginatedRequisitions = requisitions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(requisitions.length / pageSize) || 1;
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -275,7 +282,7 @@ export default function RegistryInwardFileRequestsPage() {
                   </td>
                 </tr>
               ) : (
-                requisitions.map((req) => {
+                paginatedRequisitions.map((req) => {
                   const isSubmitted = req.status === 'SUBMITTED';
                   const isWithRegistrar = req.status === 'ACKNOWLEDGED_PENDING_REGISTRAR';
                   const isRejected = req.status === 'REJECTED_BY_REGISTRY';
@@ -401,6 +408,14 @@ export default function RegistryInwardFileRequestsPage() {
               )}
             </tbody>
           </table>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={requisitions.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       </div>
 

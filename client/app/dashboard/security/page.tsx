@@ -5,6 +5,7 @@ import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSocket } from '@/context/SocketContext';
 import VideoConferenceModal from '@/components/ui/VideoConferenceModal';
+import Pagination from '@/components/ui/Pagination';
 import { 
   Shield, AlertTriangle, Users, FileText, Send, CheckCircle, 
   Clock, MapPin, PlusCircle, RefreshCw, Eye, EyeOff, Video 
@@ -115,6 +116,11 @@ export default function SecurityDashboard() {
   const [loans, setLoans] = useState<any[]>([]);
   const [loadingGear, setLoadingGear] = useState(true);
   const [loadingLoans, setLoadingLoans] = useState(true);
+  const [loansPage, setLoansPage] = useState(1);
+  const [loansPageSize, setLoansPageSize] = useState(10);
+
+  const paginatedLoans = loans.slice((loansPage - 1) * loansPageSize, loansPage * loansPageSize);
+  const totalLoansPages = Math.ceil(loans.length / loansPageSize) || 1;
 
   const [isAddGearModalOpen, setIsAddGearModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
@@ -956,7 +962,7 @@ export default function SecurityDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {loans.map((l) => (
+                      {paginatedLoans.map((l) => (
                         <tr key={l.id} className="hover:bg-slate-50/30">
                           <td className="p-3 font-bold text-slate-800">{l.gear.name}</td>
                           <td className="p-3">
@@ -986,6 +992,14 @@ export default function SecurityDashboard() {
                       ))}
                     </tbody>
                   </table>
+                  <Pagination
+                    currentPage={loansPage}
+                    totalPages={totalLoansPages}
+                    totalItems={loans.length}
+                    pageSize={loansPageSize}
+                    onPageChange={setLoansPage}
+                    onPageSizeChange={setLoansPageSize}
+                  />
                 </div>
               )}
             </div>

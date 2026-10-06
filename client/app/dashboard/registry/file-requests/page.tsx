@@ -31,6 +31,7 @@ import { LodgeRequisitionModal } from '@/components/fileRequisition/LodgeRequisi
 import { CustodyReleaseReceiptModal } from '@/components/fileRequisition/CustodyReleaseReceiptModal';
 import { DigitalTranscriptViewerModal } from '@/components/fileRequisition/DigitalTranscriptViewerModal';
 import { useAuth } from '@/hooks/useAuth';
+import Pagination from '@/components/ui/Pagination';
 
 export default function RegistryFileRequestsGatewayPage() {
   const { user } = useAuth();
@@ -198,6 +199,35 @@ export default function RegistryFileRequestsGatewayPage() {
       req.dispatchReceiptNumber?.toLowerCase().includes(term)
     );
   });
+
+  const filteredAudit = auditLogs.filter((log) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      log.fileRequisition?.requisitionNumber?.toLowerCase().includes(term) ||
+      log.actor?.name?.toLowerCase().includes(term) ||
+      log.actorRole?.toLowerCase().includes(term) ||
+      log.action?.toLowerCase().includes(term) ||
+      log.notes?.toLowerCase().includes(term)
+    );
+  });
+
+  // Pagination states
+  const [inwardPage, setInwardPage] = useState(1);
+  const [inwardPageSize, setInwardPageSize] = useState(10);
+  const [dispatchPage, setDispatchPage] = useState(1);
+  const [dispatchPageSize, setDispatchPageSize] = useState(10);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(10);
+
+  const paginatedInward = filteredInward.slice((inwardPage - 1) * inwardPageSize, inwardPage * inwardPageSize);
+  const totalInwardPages = Math.ceil(filteredInward.length / inwardPageSize) || 1;
+
+  const paginatedDispatch = filteredDispatch.slice((dispatchPage - 1) * dispatchPageSize, dispatchPage * dispatchPageSize);
+  const totalDispatchPages = Math.ceil(filteredDispatch.length / dispatchPageSize) || 1;
+
+  const paginatedAudit = filteredAudit.slice((auditPage - 1) * auditPageSize, auditPage * auditPageSize);
+  const totalAuditPages = Math.ceil(filteredAudit.length / auditPageSize) || 1;
 
   const pendingInwardCount = inwardQueue.filter((r) => r.status === 'SUBMITTED').length;
   const readyDispatchCount = dispatchQueue.filter((r) => r.status === 'AUTHORIZED_BY_REGISTRAR').length;
@@ -410,7 +440,7 @@ export default function RegistryFileRequestsGatewayPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {filteredInward.map((req) => (
+                    {paginatedInward.map((req) => (
                       <tr key={req.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-4 py-3.5 font-mono font-bold text-emerald-900">
                           {req.requisitionNumber}
@@ -485,6 +515,14 @@ export default function RegistryFileRequestsGatewayPage() {
                     ))}
                   </tbody>
                 </table>
+                <Pagination
+                  currentPage={inwardPage}
+                  totalPages={totalInwardPages}
+                  totalItems={filteredInward.length}
+                  pageSize={inwardPageSize}
+                  onPageChange={setInwardPage}
+                  onPageSizeChange={setInwardPageSize}
+                />
               </div>
             )}
           </div>
@@ -519,7 +557,7 @@ export default function RegistryFileRequestsGatewayPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {filteredDispatch.map((req) => (
+                    {paginatedDispatch.map((req) => (
                       <tr key={req.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-4 py-3.5 font-mono font-bold text-slate-900">
                           {req.requisitionNumber}
@@ -601,6 +639,14 @@ export default function RegistryFileRequestsGatewayPage() {
                     ))}
                   </tbody>
                 </table>
+                <Pagination
+                  currentPage={dispatchPage}
+                  totalPages={totalDispatchPages}
+                  totalItems={filteredDispatch.length}
+                  pageSize={dispatchPageSize}
+                  onPageChange={setDispatchPage}
+                  onPageSizeChange={setDispatchPageSize}
+                />
               </div>
             )}
           </div>
@@ -613,10 +659,10 @@ export default function RegistryFileRequestsGatewayPage() {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Official Chain of Custody Audit Ledger
               </span>
-              <span className="text-xs text-slate-400">{auditLogs.length} audit entries</span>
+              <span className="text-xs text-slate-400">{filteredAudit.length} audit entries</span>
             </div>
 
-            {auditLogs.length === 0 ? (
+            {filteredAudit.length === 0 ? (
               <div className="py-14 text-center text-slate-400">
                 <History className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-xs font-medium">No custody audit logs recorded yet.</p>
@@ -635,7 +681,7 @@ export default function RegistryFileRequestsGatewayPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
-                    {auditLogs.map((log) => (
+                    {paginatedAudit.map((log) => (
                       <tr key={log.id} className="hover:bg-slate-50/70">
                         <td className="px-4 py-3 whitespace-nowrap text-slate-500 font-sans">
                           {new Date(log.timestamp).toLocaleString()}
@@ -670,6 +716,14 @@ export default function RegistryFileRequestsGatewayPage() {
                     ))}
                   </tbody>
                 </table>
+                <Pagination
+                  currentPage={auditPage}
+                  totalPages={totalAuditPages}
+                  totalItems={filteredAudit.length}
+                  pageSize={auditPageSize}
+                  onPageChange={setAuditPage}
+                  onPageSizeChange={setAuditPageSize}
+                />
               </div>
             )}
           </div>

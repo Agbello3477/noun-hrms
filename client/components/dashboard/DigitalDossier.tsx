@@ -6,6 +6,7 @@ import api from '../../lib/api';
 import UploadDocumentModal from './UploadDocumentModal';
 import BatchDossierUploadModal from './BatchDossierUploadModal';
 import DocumentViewerModal from './DocumentViewerModal';
+import Pagination from '../ui/Pagination';
 
 interface Document {
     id: string;
@@ -26,6 +27,12 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
     const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
     const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
     const [error, setError] = useState('');
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const paginatedDocs = documents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalPages = Math.ceil(documents.length / pageSize) || 1;
 
     const fetchDossier = async () => {
         try {
@@ -165,7 +172,7 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {documents.map(doc => (
+                            {paginatedDocs.map(doc => (
                                 <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{doc.title}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -198,6 +205,14 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
                             ))}
                         </tbody>
                     </table>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={documents.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={setPageSize}
+                    />
                 </div>
             )}
 

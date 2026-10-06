@@ -6,6 +6,7 @@ import { FileText, Download, Trash2, Plus, Eye, Loader2 } from 'lucide-react';
 import PasswordConfirmationModal from '../../../components/modals/PasswordConfirmationModal';
 import { useAuth } from '../../../hooks/useAuth';
 import UploadDocumentModal from '../../../components/dashboard/UploadDocumentModal';
+import Pagination from '../../../components/ui/Pagination';
 
 interface Document {
     id: string;
@@ -20,6 +21,12 @@ export default function MyDocumentsPage() {
     const { user } = useAuth();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const paginatedDocs = documents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalPages = Math.ceil(documents.length / pageSize) || 1;
 
     // Upload State
     const [showUpload, setShowUpload] = useState(false);
@@ -144,7 +151,7 @@ export default function MyDocumentsPage() {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {documents.map(doc => (
+                            {paginatedDocs.map(doc => (
                                 <tr key={doc.id}>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center">
@@ -179,6 +186,14 @@ export default function MyDocumentsPage() {
                             )}
                         </tbody>
                     </table>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={documents.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={setPageSize}
+                    />
                 </div>
             )}
 

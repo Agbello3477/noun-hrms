@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 import { Button } from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
 import {
     CheckCircle2,
     XCircle,
@@ -53,6 +54,11 @@ export default function RegistrarCockpitPage() {
     const [pendingFileReleases, setPendingFileReleases] = useState<any[]>([]);
     const [pendingApplications, setPendingApplications] = useState<any[]>([]);
     const [audits, setAudits] = useState<any[]>([]);
+
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditPageSize, setAuditPageSize] = useState(10);
+    const paginatedAudits = audits.slice((auditPage - 1) * auditPageSize, auditPage * auditPageSize);
+    const totalAuditPages = Math.ceil(audits.length / auditPageSize) || 1;
 
     const [loadingQueue, setLoadingQueue] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -1722,7 +1728,7 @@ export default function RegistrarCockpitPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {audits.map((a) => (
+                                    {paginatedAudits.map((a) => (
                                         <tr key={a.id} className="hover:bg-slate-50/50">
                                             <td className="py-2.5 px-3 font-bold text-slate-800">{a.entityType}</td>
                                             <td className="py-2.5 px-3">
@@ -1740,6 +1746,14 @@ export default function RegistrarCockpitPage() {
                                     ))}
                                 </tbody>
                             </table>
+                            <Pagination
+                                currentPage={auditPage}
+                                totalPages={totalAuditPages}
+                                totalItems={audits.length}
+                                pageSize={auditPageSize}
+                                onPageChange={setAuditPage}
+                                onPageSizeChange={setAuditPageSize}
+                            />
                         </div>
                     )}
                 </div>

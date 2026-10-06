@@ -5,11 +5,17 @@ import { Plus, Calendar, ToggleLeft, ToggleRight, Edit, Loader2 } from 'lucide-r
 import api from '../../../../lib/api';
 import { AperSession } from '../../../../types/aper';
 import AperClosingBanner from '../../../../components/aper/AperClosingBanner';
+import Pagination from '../../../../components/ui/Pagination';
 
 export default function HRAperDashboard() {
     const [sessions, setSessions] = useState<AperSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const paginatedSessions = sessions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalPages = Math.ceil(sessions.length / pageSize) || 1;
 
     // Form State
     const [formData, setFormData] = useState({
@@ -166,7 +172,7 @@ export default function HRAperDashboard() {
                                 </td>
                             </tr>
                         ) : (
-                            sessions.map(session => (
+                            paginatedSessions.map(session => (
                                 <tr key={session.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-900">{session.title}</div>
@@ -201,6 +207,14 @@ export default function HRAperDashboard() {
                         )}
                     </tbody>
                 </table>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={sessions.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                />
             </div>
         </div>
     );

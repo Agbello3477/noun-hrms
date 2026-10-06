@@ -10,6 +10,7 @@ import {
     Building, User, Tag, Printer, Sparkles, Stamp
 } from 'lucide-react';
 import StampedAcknowledgmentModal from '../../../../components/applications/StampedAcknowledgmentModal';
+import Pagination from '../../../../components/ui/Pagination';
 
 interface OfficialApplication {
     id: string;
@@ -51,6 +52,7 @@ export default function RegistryApplicationsPage() {
     const [categoryFilter, setCategoryFilter] = useState('ALL');
     const [urgencyFilter, setUrgencyFilter] = useState('ALL');
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
     const [totalPages, setTotalPages] = useState(1);
     const [counts, setCounts] = useState({ pending: 0, acknowledged: 0, total: 0 });
 
@@ -83,7 +85,7 @@ export default function RegistryApplicationsPage() {
                     urgency: urgencyFilter,
                     search: search.trim() || undefined,
                     page,
-                    limit: 15
+                    limit: pageSize
                 }
             });
 
@@ -97,7 +99,7 @@ export default function RegistryApplicationsPage() {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, categoryFilter, urgencyFilter, search, page]);
+    }, [statusFilter, categoryFilter, urgencyFilter, search, page, pageSize]);
 
     useEffect(() => {
         if (user && ALLOWED_REGISTRY_ROLES.includes(user.role)) {
@@ -389,6 +391,14 @@ export default function RegistryApplicationsPage() {
                                 })}
                             </tbody>
                         </table>
+                        <Pagination
+                            currentPage={page}
+                            totalPages={totalPages}
+                            totalItems={counts.total || applications.length}
+                            pageSize={pageSize}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </div>
                 )}
             </div>

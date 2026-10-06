@@ -5,6 +5,7 @@ import { Loader2, CheckCircle, Star, MessageSquare, ChevronRight, X } from 'luci
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import OfficialAperForm from '../../../../components/aper/OfficialAperForm';
+import Pagination from '../../../../components/ui/Pagination';
 
 export default function UnitAperReview() {
     const { user } = useAuth();
@@ -14,6 +15,11 @@ export default function UnitAperReview() {
     const [loading, setLoading] = useState(false);
     const [reviewForm, setReviewForm] = useState<any>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const paginatedForms = forms.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalPages = Math.ceil(forms.length / pageSize) || 1;
 
     useEffect(() => {
         const fetchSessions = async () => {
@@ -116,7 +122,7 @@ export default function UnitAperReview() {
                         ) : forms.length === 0 ? (
                             <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-medium">No APER appraisal forms submitted for this unit session yet.</td></tr>
                         ) : (
-                            forms.map(form => (
+                            paginatedForms.map(form => (
                                 <tr key={form.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-900">{form.staff?.user?.name || 'Staff Member'}</div>
@@ -148,6 +154,14 @@ export default function UnitAperReview() {
                         )}
                     </tbody>
                 </table>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={forms.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                />
             </div>
 
             {/* HOD Full APER Review Modal */}
