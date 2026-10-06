@@ -57,6 +57,7 @@ function LeavesContent() {
     const appIdParam = searchParams.get('appId');
     const router = useRouter();
     const { user, refreshUser } = useAuth();
+    const canAccessFileRequisitions = Boolean(user?.role && String(user.role).toUpperCase() !== 'STAFF');
 
     // Primary Active Tab: 'institutional' | 'official' | 'leaves' | 'file-requisitions'
     const [mainTab, setMainTab] = useState<'institutional' | 'official' | 'leaves' | 'file-requisitions'>('institutional');
@@ -76,6 +77,7 @@ function LeavesContent() {
     const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
 
     const fetchMyFileRequisitions = useCallback(async () => {
+        if (!canAccessFileRequisitions) return;
         setLoadingFileReqs(true);
         try {
             const res = await api.get('/api/v1/registry/file-requests/my');
@@ -87,7 +89,7 @@ function LeavesContent() {
         } finally {
             setLoadingFileReqs(false);
         }
-    }, []);
+    }, [canAccessFileRequisitions]);
 
     // Resubmit Drawer State for Institutional Applications
     const [resubmittingApp, setResubmittingApp] = useState<any | null>(null);
@@ -162,8 +164,10 @@ function LeavesContent() {
     useEffect(() => {
         fetchInstitutionalApps();
         fetchOfficialApps();
-        fetchMyFileRequisitions();
-    }, [fetchInstitutionalApps, fetchOfficialApps, fetchMyFileRequisitions]);
+        if (canAccessFileRequisitions) {
+            fetchMyFileRequisitions();
+        }
+    }, [fetchInstitutionalApps, fetchOfficialApps, fetchMyFileRequisitions, canAccessFileRequisitions]);
 
     // Handle Query parameters
     useEffect(() => {
@@ -179,7 +183,7 @@ function LeavesContent() {
         } else if (openParam === 'institutional') {
             setWriteModalMode('THROUGH_DIRECTOR');
             setIsWriteModalOpen(true);
-        } else if (openParam === 'file-requisition') {
+        } else if (openParam === 'file-requisition' && canAccessFileRequisitions) {
             setMainTab('file-requisitions');
             setIsLodgeRequisitionOpen(true);
         }
@@ -190,10 +194,10 @@ function LeavesContent() {
             setMainTab('official');
         } else if (tabParam === 'institutional') {
             setMainTab('institutional');
-        } else if (tabParam === 'file-requisitions') {
+        } else if (tabParam === 'file-requisitions' && canAccessFileRequisitions) {
             setMainTab('file-requisitions');
         }
-    }, [openParam, tabParam]);
+    }, [openParam, tabParam, canAccessFileRequisitions]);
 
     // Deep link to direct official app
     useEffect(() => {
@@ -289,14 +293,16 @@ function LeavesContent() {
                         <Send size={14} />
                         <span>Write Application</span>
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setIsLodgeRequisitionOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-emerald-300 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold transition-all shadow-xs active:scale-95"
-                    >
-                        <FolderOpen size={14} className="stroke-[2.5]" />
-                        <span>Lodge File Requisition</span>
-                    </button>
+                    {canAccessFileRequisitions && (
+                        <button
+                            type="button"
+                            onClick={() => setIsLodgeRequisitionOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-emerald-300 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold transition-all shadow-xs active:scale-95"
+                        >
+                            <FolderOpen size={14} className="stroke-[2.5]" />
+                            <span>Lodge File Requisition</span>
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={() => setIsApplyModalOpen(true)}
@@ -351,24 +357,26 @@ function LeavesContent() {
                     )}
                 </button>
 
-                <button
-                    onClick={() => setMainTab('file-requisitions')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
-                        mainTab === 'file-requisitions'
-                            ? 'bg-[#006533] text-white shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                >
-                    <FolderOpen size={16} />
-                    <span>File Requisitions &amp; Custody</span>
-                    {fileRequisitions.length > 0 && (
-                        <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
-                            mainTab === 'file-requisitions' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                        }`}>
-                            {fileRequisitions.length}
-                        </span>
-                    )}
-                </button>
+                {canAccessFileRequisitions && (
+                    <button
+                        onClick={() => setMainTab('file-requisitions')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                            mainTab === 'file-requisitions'
+                                ? 'bg-[#006533] text-white shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                    >
+                        <FolderOpen size={16} />
+                        <span>File Requisitions &amp; Custody</span>
+                        {fileRequisitions.length > 0 && (
+                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                                mainTab === 'file-requisitions' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                                {fileRequisitions.length}
+                            </span>
+                        )}
+                    </button>
+                )}
 
                 <button
                     onClick={() => setMainTab('leaves')}
@@ -655,7 +663,7 @@ function LeavesContent() {
             )}
 
             {/* TAB: FILE REQUISITIONS & CUSTODY */}
-            {mainTab === 'file-requisitions' && (
+            {canAccessFileRequisitions && mainTab === 'file-requisitions' && (
                 <div className="space-y-5 animate-in fade-in duration-150">
                     {/* Header Card / Quick CTA */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
@@ -1028,7 +1036,7 @@ function LeavesContent() {
             />
 
             {/* Lodge File Requisition Modal */}
-            {isLodgeRequisitionOpen && (
+            {canAccessFileRequisitions && isLodgeRequisitionOpen && (
                 <LodgeRequisitionModal
                     isOpen={isLodgeRequisitionOpen}
                     onClose={() => setIsLodgeRequisitionOpen(false)}
@@ -1040,7 +1048,7 @@ function LeavesContent() {
             )}
 
             {/* Custody Release Receipt Modal */}
-            {isReceiptModalOpen && selectedRequisition && (
+            {canAccessFileRequisitions && isReceiptModalOpen && selectedRequisition && (
                 <CustodyReleaseReceiptModal
                     isOpen={isReceiptModalOpen}
                     onClose={() => setIsReceiptModalOpen(false)}
@@ -1049,7 +1057,7 @@ function LeavesContent() {
             )}
 
             {/* Digital Transcript Viewer Modal */}
-            {isDigitalViewerOpen && selectedRequisition && (
+            {canAccessFileRequisitions && isDigitalViewerOpen && selectedRequisition && (
                 <DigitalTranscriptViewerModal
                     isOpen={isDigitalViewerOpen}
                     onClose={() => setIsDigitalViewerOpen(false)}
