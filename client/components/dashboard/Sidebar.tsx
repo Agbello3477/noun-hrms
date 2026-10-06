@@ -94,8 +94,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isVC || isAdmin;
     const isManager = role === 'STUDY_CENTER_MANAGER' || isAdmin;
 
-    // Academic check
-    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || isVC || isSuperUser || isAdmin;
+    // Academic check (Academic cadre staff, HODs, Deans, Directors, Registrar, VC, and Admins)
+    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || ['UNIT_HEAD', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR', 'REGISTRY_ADMIN', 'HR_ADMIN'].includes(role || '');
 
     // Clinic & Security Access checks
     const isClinic = ['CLINIC_HEAD', 'CLINIC_NURSE', 'CLINIC_DOCTOR', 'CLINIC_LAB_SCIENTIST', 'CLINIC_PHARMACIST'].includes(role || '') || isAdmin;
@@ -228,8 +228,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Academic &amp; Research
                         </div>
-                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
-                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
+                        <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="New" />
                         <LinkItem href="/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" />
                         {(isUnitHead || isRegistry || isAdmin) && (
                             <LinkItem href="/academic/workload/allocation" icon={Layers} label="Course Allocation Matrix" badge="HOD / Desk" />
@@ -237,6 +236,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         {(isUnitHead || isRegistrar || isAdmin || isVC) && (
                             <LinkItem href="/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
                         )}
+                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
+                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
                     </>
                 )}
 
