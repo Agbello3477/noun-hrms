@@ -6,7 +6,7 @@ import api, { getImageUrl } from '../../lib/api';
 import { 
     FileText, MapPin, DollarSign, ClipboardCheck, ArrowRight, Bell, 
     Loader2, CheckCircle, AlertTriangle, AlertOctagon, Info, Clock, History, Calendar,
-    Filter, Users, TrendingUp, BarChart2, Shield, Phone, Building
+    Filter, Users, TrendingUp, BarChart2, Shield, Phone, Building, BookOpen, Layers, GraduationCap
 } from 'lucide-react';
 import { useSwrData } from '../../hooks/useSwrData';
 import Link from 'next/link';
@@ -793,11 +793,18 @@ export default function DashboardHome() {
                                 <p className="text-[11px] text-gray-500">Conduct APER reviews</p>
                             </div>
                         </Link>
-                        <Link href="/dashboard/registry/queries" className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-red-200 hover:bg-red-50/20 transition-all group">
-                            <span className="p-2.5 bg-red-50 text-red-700 rounded-lg group-hover:scale-110 transition-transform"><AlertTriangle size={20} /></span>
+                        <Link href="/academic/workload/allocation" className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/20 transition-all group">
+                            <span className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg group-hover:scale-110 transition-transform"><BookOpen size={20} /></span>
                             <div>
-                                <h4 className="text-sm font-bold text-gray-855">Staff Queries</h4>
-                                <p className="text-[11px] text-gray-500">Disciplinary oversight</p>
+                                <h4 className="text-sm font-bold text-emerald-950">Course Allocation</h4>
+                                <p className="text-[11px] text-gray-500">HOD Workload Engine</p>
+                            </div>
+                        </Link>
+                        <Link href="/faculty/workload/review" className="flex items-center gap-3 p-4 rounded-xl border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
+                            <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-lg group-hover:scale-110 transition-transform"><ClipboardCheck size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-indigo-950">Dean Ratification</h4>
+                                <p className="text-[11px] text-gray-500">Review &amp; sign off dockets</p>
                             </div>
                         </Link>
                     </div>
@@ -980,6 +987,14 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
+                    <Link href="/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
+                        <div className="mb-4 rounded-full bg-emerald-50 p-4 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
+                            <Users size={28} />
+                        </div>
+                        <h3 className="font-bold text-gray-800">Teaching Workload</h3>
+                        <p className="text-xs text-slate-500 mt-1 font-medium">Courses, ETE &amp; Credits</p>
+                    </Link>
+
                     <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
                         <div className="mb-4 rounded-full bg-purple-50 p-4 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                             <MapPin size={28} />
@@ -987,14 +1002,44 @@ export default function DashboardHome() {
                         <h3 className="font-semibold text-gray-800">Leave Request</h3>
                         <p className="text-xs text-gray-500 mt-1">Apply for time off</p>
                     </Link>
+                </div>
 
-                    <Link href="/dashboard/staff/aper" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
-                        <div className="mb-4 rounded-full bg-orange-50 p-4 text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                            <ClipboardCheck size={28} />
+                {/* Academic Affairs & Workload Subsystem Quick Banner */}
+                <div className="rounded-2xl bg-gradient-to-br from-emerald-900 via-[#006533] to-slate-950 p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="space-y-1.5 max-w-xl">
+                        <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase tracking-wider">
+                                Academic Affairs Subsystem
+                            </span>
+                            <span className="text-xs text-emerald-200/60 font-medium">NUC Workload Engine</span>
                         </div>
-                        <h3 className="font-semibold text-gray-800">Appraisal</h3>
-                        <p className="text-xs text-gray-500 mt-1">Submit APER form</p>
-                    </Link>
+                        <h3 className="text-lg font-black text-white">
+                            Teaching Workload Allocation &amp; Verification
+                        </h3>
+                        <p className="text-xs text-emerald-100/80 leading-relaxed font-medium">
+                            Explore institutional course allocations, ODL student cohort scaling, statutory cadre capacity meters, and dean ratification cockpits.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Link
+                            href="/portal/my-teaching-workload"
+                            className="px-4 py-2.5 bg-white text-[#006533] hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                            My Teaching Dossier
+                        </Link>
+                        <Link
+                            href="/academic/workload/allocation"
+                            className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                            HOD Allocation Desk
+                        </Link>
+                        <Link
+                            href="/faculty/workload/review"
+                            className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                            Dean Review Cockpit
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Notifications & Status */}
