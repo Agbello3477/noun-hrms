@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Pagination from '@/components/ui/Pagination';
@@ -116,6 +117,14 @@ interface StaffMatrixItem {
 
 export default function CourseAllocationMatrixPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname === '/academic/workload/allocation') {
+      router.replace('/dashboard/academic/workload/allocation');
+    }
+  }, [pathname, router]);
 
   // State Filters
   const [faculties, setFaculties] = useState<Faculty[]>([]);

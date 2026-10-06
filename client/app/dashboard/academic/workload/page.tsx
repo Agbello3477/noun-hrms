@@ -35,7 +35,7 @@ export default function UnifiedWorkloadHubPage() {
       {isManagerOrAdmin && (
         <div className="p-4 md:p-8 pb-0 max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
-            href="/academic/workload/allocation"
+            href="/dashboard/academic/workload/allocation"
             className="group bg-white rounded-2xl border border-emerald-200/80 p-5 shadow-xs hover:shadow-md hover:border-emerald-500 transition flex items-center justify-between gap-4"
           >
             <div className="flex items-center gap-3.5">
@@ -56,7 +56,7 @@ export default function UnifiedWorkloadHubPage() {
           </Link>
 
           <Link
-            href="/faculty/workload/review"
+            href="/dashboard/faculty/workload/review"
             className="group bg-white rounded-2xl border border-indigo-200/80 p-5 shadow-xs hover:shadow-md hover:border-indigo-500 transition flex items-center justify-between gap-4"
           >
             <div className="flex items-center gap-3.5">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -71,6 +72,14 @@ interface WorkloadDossier {
 
 export default function LecturerTeachingWorkloadPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname === '/portal/my-teaching-workload') {
+      router.replace('/dashboard/portal/my-teaching-workload');
+    }
+  }, [pathname, router]);
 
   const [selectedSession, setSelectedSession] = useState<string>('2026/2027');
   const [selectedSemester, setSelectedSemester] = useState<string>('FIRST_SEMESTER');

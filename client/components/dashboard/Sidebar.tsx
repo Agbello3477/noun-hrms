@@ -222,24 +222,16 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     )}
                 </>
 
-                {/* Academic Research Services */}
-                {isAcademic && (
-                    <>
-                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Academic &amp; Research
-                        </div>
-                        <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="New" />
-                        <LinkItem href="/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" />
-                        {(isUnitHead || isRegistry || isAdmin) && (
-                            <LinkItem href="/academic/workload/allocation" icon={Layers} label="Course Allocation Matrix" badge="HOD / Desk" />
-                        )}
-                        {(isUnitHead || isRegistrar || isAdmin || isVC) && (
-                            <LinkItem href="/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
-                        )}
-                        <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
-                        <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
-                    </>
-                )}
+                {/* Academic Structure & Workload Management */}
+                <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Academic &amp; Workload Engine
+                </div>
+                <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="Engine" />
+                <LinkItem href="/dashboard/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" badge="Lecturer" />
+                <LinkItem href="/dashboard/academic/workload/allocation" icon={BookOpen} label="Course Allocation Matrix" badge="HOD Desk" />
+                <LinkItem href="/dashboard/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
+                <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
+                <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
 
                 {/* General Staff Self-Service */}
                 <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">

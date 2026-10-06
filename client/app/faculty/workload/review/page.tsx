@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import Pagination from '@/components/ui/Pagination';
@@ -58,6 +59,14 @@ interface DepartmentMatrix {
 
 export default function DeanWorkloadReviewPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname === '/faculty/workload/review') {
+      router.replace('/dashboard/faculty/workload/review');
+    }
+  }, [pathname, router]);
 
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('cmp');

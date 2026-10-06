@@ -793,14 +793,14 @@ export default function DashboardHome() {
                                 <p className="text-[11px] text-gray-500">Conduct APER reviews</p>
                             </div>
                         </Link>
-                        <Link href="/academic/workload/allocation" className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/20 transition-all group">
+                        <Link href="/dashboard/academic/workload/allocation" className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/20 transition-all group">
                             <span className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg group-hover:scale-110 transition-transform"><BookOpen size={20} /></span>
                             <div>
                                 <h4 className="text-sm font-bold text-emerald-950">Course Allocation</h4>
                                 <p className="text-[11px] text-gray-500">HOD Workload Engine</p>
                             </div>
                         </Link>
-                        <Link href="/faculty/workload/review" className="flex items-center gap-3 p-4 rounded-xl border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
+                        <Link href="/dashboard/faculty/workload/review" className="flex items-center gap-3 p-4 rounded-xl border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
                             <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-lg group-hover:scale-110 transition-transform"><ClipboardCheck size={20} /></span>
                             <div>
                                 <h4 className="text-sm font-bold text-indigo-950">Dean Ratification</h4>
@@ -987,7 +987,7 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
-                    <Link href="/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
+                    <Link href="/dashboard/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
                         <div className="mb-4 rounded-full bg-emerald-50 p-4 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
                             <Users size={28} />
                         </div>
@@ -1022,19 +1022,19 @@ export default function DashboardHome() {
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                         <Link
-                            href="/portal/my-teaching-workload"
+                            href="/dashboard/portal/my-teaching-workload"
                             className="px-4 py-2.5 bg-white text-[#006533] hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
                         >
                             My Teaching Dossier
                         </Link>
                         <Link
-                            href="/academic/workload/allocation"
+                            href="/dashboard/academic/workload/allocation"
                             className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
                         >
                             HOD Allocation Desk
                         </Link>
                         <Link
-                            href="/faculty/workload/review"
+                            href="/dashboard/faculty/workload/review"
                             className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
                         >
                             Dean Review Cockpit
