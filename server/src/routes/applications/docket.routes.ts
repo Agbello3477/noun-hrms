@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { verifyToken } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/requireRole';
 import { cacheMiddleware } from '../../middleware/cacheMiddleware';
+import { upload } from '../../middleware/upload.middleware';
 import {
   submitApplication,
   resubmitApplication,
+  uploadApplicationAttachment,
   directorAction,
   registryAcknowledge,
   registrarDecision,
@@ -26,12 +28,16 @@ router.use(verifyToken);
 // TIER 1: STAFF SUBMISSION & REVISION
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Submit a new application routed through Director
-router.post('/submit', submitApplication);
+// Dedicated supporting document upload for all authenticated staff
+router.post('/upload-attachment', upload.single('file'), uploadApplicationAttachment);
+router.post('/upload', upload.single('file'), uploadApplicationAttachment);
 
-// Resubmit application after Director rewrite request (supports both PUT and POST)
-router.put('/:id/resubmit', resubmitApplication);
-router.post('/:id/resubmit', resubmitApplication);
+// Submit a new application routed through Director (supports JSON or multipart)
+router.post('/submit', upload.array('files', 10), submitApplication);
+
+// Resubmit application after Director rewrite request (supports JSON or multipart)
+router.put('/:id/resubmit', upload.array('files', 10), resubmitApplication);
+router.post('/:id/resubmit', upload.array('files', 10), resubmitApplication);
 
 // Fetch my submitted applications (supports /my-applications and /my)
 router.get('/my-applications', getMyApplications);

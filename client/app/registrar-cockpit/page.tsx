@@ -26,7 +26,8 @@ import {
     ShieldAlert,
     FolderOpen,
     ExternalLink,
-    Lock
+    Lock,
+    Paperclip
 } from 'lucide-react';
 
 export default function RegistrarCockpitPage() {
@@ -1412,6 +1413,66 @@ export default function RegistrarCockpitPage() {
                                                 <p className="text-slate-800 leading-relaxed whitespace-pre-line text-xs font-serif bg-white p-3 rounded-lg border border-slate-100 max-h-48 overflow-y-auto">
                                                     {selectedApplication.content}
                                                 </p>
+
+                                                {/* Supporting Document Attachments */}
+                                                {(() => {
+                                                    const resolveFileUrl = (url: string) => {
+                                                        if (!url) return '';
+                                                        if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+                                                            return url;
+                                                        }
+                                                        const backendBase = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://noun-hrms.onrender.com';
+                                                        const cleanBase = backendBase.replace(/\/$/, '');
+                                                        const cleanPath = url.startsWith('/') ? url : `/${url}`;
+                                                        return `${cleanBase}${cleanPath}`;
+                                                    };
+
+                                                    const atts: { name: string; url: string }[] = [];
+                                                    if (Array.isArray(selectedApplication.attachmentUrls)) {
+                                                        selectedApplication.attachmentUrls.forEach((url: string, idx: number) => {
+                                                            if (typeof url === 'string' && url.trim()) {
+                                                                const rawName = url.split('/').pop()?.split('?')[0] || `Attachment #${idx + 1}`;
+                                                                atts.push({
+                                                                    name: decodeURIComponent(rawName.replace(/^\d+-/, '')),
+                                                                    url: resolveFileUrl(url)
+                                                                });
+                                                            }
+                                                        });
+                                                    }
+                                                    if (selectedApplication.attachmentUrl && !atts.some(a => a.url === resolveFileUrl(selectedApplication.attachmentUrl))) {
+                                                        const rawName = selectedApplication.attachmentName || selectedApplication.attachmentUrl.split('/').pop()?.split('?')[0] || 'Attachment';
+                                                        atts.push({
+                                                            name: decodeURIComponent(rawName.replace(/^\d+-/, '')),
+                                                            url: resolveFileUrl(selectedApplication.attachmentUrl)
+                                                        });
+                                                    }
+
+                                                    if (atts.length === 0) return null;
+
+                                                    return (
+                                                        <div className="mt-3 pt-3 border-t border-slate-200">
+                                                            <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[10px] uppercase mb-2">
+                                                                <Paperclip size={12} className="text-emerald-700" />
+                                                                <span>Supporting Document Attachments ({atts.length})</span>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {atts.map((item, idx) => (
+                                                                    <a
+                                                                        key={idx}
+                                                                        href={item.url}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:shadow-xs"
+                                                                    >
+                                                                        <FileText size={13} className="text-emerald-700" />
+                                                                        <span className="truncate max-w-[200px]">{item.name}</span>
+                                                                        <ExternalLink size={11} className="text-emerald-600 ml-0.5" />
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
 
                                             <div className="border-t border-slate-100 pt-4">

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import ApplicationStatusBadge from '@/components/applications/ApplicationStatusBadge';
 import ApplicationDetailsModal from '@/components/applications/ApplicationDetailsModal';
+import { Paperclip, FileText } from 'lucide-react';
 
 export default function RegistrarApplicationsPage() {
   const [applications, setApplications] = useState<any[]>([]);
@@ -197,6 +198,33 @@ export default function RegistrarApplicationsPage() {
                     <div className="text-xs text-gray-600 line-clamp-3 bg-slate-50 p-3 rounded border border-slate-100">
                       {app.content}
                     </div>
+
+                    {/* Supporting Documents Quick Badge */}
+                    {((app.attachmentUrls && app.attachmentUrls.length > 0) || app.attachmentUrl) && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                          <Paperclip size={12} className="text-emerald-600" />
+                          Attachments:
+                        </span>
+                        {(app.attachmentUrls || (app.attachmentUrl ? [app.attachmentUrl] : [])).map((url: string, idx: number) => {
+                          const name = decodeURIComponent(url.split('/').pop()?.replace(/^\d+-/, '') || `Attachment #${idx + 1}`);
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedApp(app);
+                                setIsDetailsModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition-colors"
+                            >
+                              <FileText size={11} className="text-emerald-600" />
+                              <span className="truncate max-w-[160px]">{name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-slate-50/70 p-3.5 rounded-lg border border-slate-200 text-xs space-y-1.5">

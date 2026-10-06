@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
-import { Sparkles, ShieldCheck, Lock, Info, CheckCircle2 } from 'lucide-react';
+import { Sparkles, ShieldCheck, Lock, Info, CheckCircle2, Paperclip, Upload, FileText, Trash2, Loader2, Link2 } from 'lucide-react';
 
 interface DirectorOption {
   id: string;
@@ -83,7 +83,10 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
   const [designatedDirector, setDesignatedDirector] = useState<DesignatedDirectorInfo | null>(null);
   const [content, setContent] = useState('');
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<{ name: string; size: number; url: string }[]>([]);
   const [newAttachment, setNewAttachment] = useState('');
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [directors, setDirectors] = useState<DirectorOption[]>([]);
   const [loadingDirectors, setLoadingDirectors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -128,15 +131,64 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingFiles(true);
+    setError(null);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        let res: any;
+        try {
+          res = await api.post('/api/v1/applications/upload-attachment', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch {
+          res = await api.post('/api/v1/applications/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        }
+
+        if (res.data?.url) {
+          const fileUrl = res.data.url;
+          setAttachmentUrls((prev) => [...prev, fileUrl]);
+          setAttachmentFiles((prev) => [
+            ...prev,
+            { name: file.name, size: file.size, url: fileUrl },
+          ]);
+        }
+      } catch (uploadErr: any) {
+        console.error('Attachment upload failed:', uploadErr);
+        setError(`Failed to upload ${file.name}. Please ensure it is under 50MB and in PDF/Word/Image format.`);
+      }
+    }
+
+    setUploadingFiles(false);
+    e.target.value = '';
+  };
+
   const handleAddAttachment = () => {
     if (newAttachment.trim()) {
-      setAttachmentUrls((prev) => [...prev, newAttachment.trim()]);
+      const url = newAttachment.trim();
+      setAttachmentUrls((prev) => [...prev, url]);
+      setAttachmentFiles((prev) => [
+        ...prev,
+        { name: url.split('/').pop() || 'External Document', size: 0, url },
+      ]);
       setNewAttachment('');
+      setShowUrlInput(false);
     }
   };
 
   const handleRemoveAttachment = (idx: number) => {
     setAttachmentUrls((prev) => prev.filter((_, i) => i !== idx));
+    setAttachmentFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -413,41 +465,95 @@ export default function NewApplicationModal({ isOpen, onClose, onSuccess }: Prop
           </div>
 
           {/* Attachments Section */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
-              Supporting Document Links / Storage URLs
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                placeholder="https://... (link to scanned letter, admission notice, etc.)"
-                value={newAttachment}
-                onChange={(e) => setNewAttachment(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-              />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700 uppercase flex items-center gap-1.5">
+                <Paperclip size={13} className="text-blue-600" />
+                Supporting Documents / Attachments (Optional)
+              </label>
               <button
                 type="button"
-                onClick={handleAddAttachment}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                onClick={() => setShowUrlInput(!showUrlInput)}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
               >
-                Add URL
+                <Link2 size={12} />
+                {showUrlInput ? 'Hide URL link' : '+ Add external link'}
               </button>
             </div>
-            {attachmentUrls.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {attachmentUrls.map((url, i) => (
-                  <li key={i} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded border border-slate-200">
-                    <span className="truncate max-w-md text-blue-600">{url}</span>
+
+            {/* File Upload Area */}
+            <div className="border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl p-4 bg-slate-50/50 transition-colors">
+              <label className="flex flex-col items-center justify-center cursor-pointer">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-1">
+                  {uploadingFiles ? (
+                    <>
+                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                      <span>Uploading documents...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 text-blue-600" />
+                      <span>Choose file(s) or drag & drop</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 text-center">
+                  PDF, Word (.doc, .docx), PNG, JPG up to 50MB (scanned letters, admission slips, certificates)
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  disabled={uploadingFiles || submitting}
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Optional URL input toggle */}
+            {showUrlInput && (
+              <div className="flex gap-2 animate-in fade-in duration-150">
+                <input
+                  type="url"
+                  placeholder="https://... (direct link to scanned document)"
+                  value={newAttachment}
+                  onChange={(e) => setNewAttachment(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAttachment}
+                  className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            {/* Attached files list */}
+            {attachmentFiles.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                {attachmentFiles.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs">
+                    <div className="flex items-center gap-2 truncate max-w-md">
+                      <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="font-semibold text-slate-800 truncate">{item.name}</span>
+                      {item.size > 0 && (
+                        <span className="text-[10px] text-slate-400 font-mono">({Math.round(item.size / 1024)} KB)</span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(i)}
-                      className="text-red-500 hover:text-red-700 ml-2"
+                      className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition"
+                      title="Remove attachment"
                     >
-                      Remove
+                      <Trash2 size={14} />
                     </button>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
 

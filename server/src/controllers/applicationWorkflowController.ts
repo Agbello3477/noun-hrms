@@ -10,6 +10,7 @@ import {
 } from '../services/docketNotification.service';
 import { notifyUser } from './notification.controller';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
+import { StorageService } from '../services/storage.service';
 import { ApplicationCategory, Role } from '@prisma/client';
 
 export const ELIGIBLE_DIRECTOR_ROLES: Role[] = [
@@ -87,6 +88,41 @@ async function generateDocketFolioNumber(): Promise<string> {
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 1: STAFF SUBMISSION & REVISION
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/applications/upload-attachment
+ * Allows any authenticated staff to upload supporting documents for applications
+ */
+export async function uploadApplicationAttachment(req: Request, res: Response) {
+  try {
+    const callerId = (req as any).user?.id;
+    if (!callerId) {
+      return res.status(401).json({ success: false, error: 'Authentication required. Please log in.' });
+    }
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ success: false, error: 'No file provided for attachment upload.' });
+    }
+
+    const url = await StorageService.uploadFile(file, 'applications');
+
+    return res.status(201).json({
+      success: true,
+      url,
+      filename: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+    });
+  } catch (error: any) {
+    console.error('Error in uploadApplicationAttachment:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to upload attachment file.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+}
 
 /**
  * POST /api/v1/applications/submit
@@ -291,9 +327,48 @@ export async function submitApplication(req: Request, res: Response) {
     }
 
     const referenceNumber = await generateReferenceNumber();
-    const cleanAttachments = Array.isArray(attachmentUrls)
-      ? attachmentUrls.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
-      : [];
+
+    // Process attachments: direct file uploads + provided attachment URLs
+    const cleanAttachments: string[] = [];
+
+    // 1. Direct files from Multer (upload.array or upload.single)
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const f of req.files as Express.Multer.File[]) {
+        const fileUrl = await StorageService.uploadFile(f, 'applications');
+        if (fileUrl) cleanAttachments.push(fileUrl);
+      }
+    } else if (req.file) {
+      const fileUrl = await StorageService.uploadFile(req.file, 'applications');
+      if (fileUrl) cleanAttachments.push(fileUrl);
+    }
+
+    // 2. Provided attachmentUrls (array, JSON string, or single string)
+    if (attachmentUrls) {
+      if (Array.isArray(attachmentUrls)) {
+        for (const url of attachmentUrls) {
+          if (typeof url === 'string' && url.trim().length > 0) {
+            cleanAttachments.push(url.trim());
+          }
+        }
+      } else if (typeof attachmentUrls === 'string') {
+        try {
+          const parsed = JSON.parse(attachmentUrls);
+          if (Array.isArray(parsed)) {
+            for (const url of parsed) {
+              if (typeof url === 'string' && url.trim().length > 0) {
+                cleanAttachments.push(url.trim());
+              }
+            }
+          } else if (typeof parsed === 'string' && parsed.trim().length > 0) {
+            cleanAttachments.push(parsed.trim());
+          }
+        } catch {
+          if (attachmentUrls.trim().length > 0) {
+            cleanAttachments.push(attachmentUrls.trim());
+          }
+        }
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const app = await tx.institutionalApplication.create({
@@ -430,9 +505,49 @@ export async function resubmitApplication(req: Request, res: Response) {
       });
     }
 
-    const cleanAttachments = Array.isArray(attachmentUrls)
-      ? attachmentUrls
-      : application.attachmentUrls;
+    // Process attachments: direct file uploads + provided attachment URLs
+    const cleanAttachments: string[] = [];
+
+    // 1. Direct files from Multer
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const f of req.files as Express.Multer.File[]) {
+        const fileUrl = await StorageService.uploadFile(f, 'applications');
+        if (fileUrl) cleanAttachments.push(fileUrl);
+      }
+    } else if (req.file) {
+      const fileUrl = await StorageService.uploadFile(req.file, 'applications');
+      if (fileUrl) cleanAttachments.push(fileUrl);
+    }
+
+    // 2. Provided attachmentUrls (array, JSON string, or single string)
+    if (attachmentUrls) {
+      if (Array.isArray(attachmentUrls)) {
+        for (const url of attachmentUrls) {
+          if (typeof url === 'string' && url.trim().length > 0) {
+            cleanAttachments.push(url.trim());
+          }
+        }
+      } else if (typeof attachmentUrls === 'string') {
+        try {
+          const parsed = JSON.parse(attachmentUrls);
+          if (Array.isArray(parsed)) {
+            for (const url of parsed) {
+              if (typeof url === 'string' && url.trim().length > 0) {
+                cleanAttachments.push(url.trim());
+              }
+            }
+          } else if (typeof parsed === 'string' && parsed.trim().length > 0) {
+            cleanAttachments.push(parsed.trim());
+          }
+        } catch {
+          if (attachmentUrls.trim().length > 0) {
+            cleanAttachments.push(attachmentUrls.trim());
+          }
+        }
+      }
+    } else if (cleanAttachments.length === 0 && application.attachmentUrls) {
+      cleanAttachments.push(...application.attachmentUrls);
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const app = await tx.institutionalApplication.update({

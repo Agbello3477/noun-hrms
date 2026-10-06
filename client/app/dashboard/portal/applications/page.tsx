@@ -6,8 +6,9 @@ import ApplicationStatusBadge from '@/components/applications/ApplicationStatusB
 import ApplicationProgressStepper from '@/components/applications/ApplicationProgressStepper';
 import ApplicationDetailsModal from '@/components/applications/ApplicationDetailsModal';
 import NewApplicationModal from '@/components/applications/NewApplicationModal';
+import { Paperclip, FileText, Upload, Trash2, Loader2 } from 'lucide-react';
 
-export default function MyApplicationsPage() {
+export default function DashboardMyApplicationsPage() {
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<any | null>(null);
@@ -18,6 +19,8 @@ export default function MyApplicationsPage() {
   const [resubmittingApp, setResubmittingApp] = useState<any | null>(null);
   const [resubmitContent, setResubmitContent] = useState('');
   const [resubmitComments, setResubmitComments] = useState('');
+  const [resubmitAttachments, setResubmitAttachments] = useState<string[]>([]);
+  const [uploadingResubmitFile, setUploadingResubmitFile] = useState(false);
   const [isResubmitting, setIsResubmitting] = useState(false);
   const [resubmitError, setResubmitError] = useState<string | null>(null);
 
@@ -53,7 +56,45 @@ export default function MyApplicationsPage() {
     setResubmittingApp(app);
     setResubmitContent(app.content || '');
     setResubmitComments('');
+    setResubmitAttachments(Array.isArray(app.attachmentUrls) ? [...app.attachmentUrls] : app.attachmentUrl ? [app.attachmentUrl] : []);
     setResubmitError(null);
+  };
+
+  const handleResubmitFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingResubmitFile(true);
+    setResubmitError(null);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        let res: any;
+        try {
+          res = await api.post('/api/v1/applications/upload-attachment', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch {
+          res = await api.post('/api/v1/applications/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        }
+
+        if (res.data?.url) {
+          setResubmitAttachments((prev) => [...prev, res.data.url]);
+        }
+      } catch (uploadErr: any) {
+        console.error('Attachment upload failed:', uploadErr);
+        setResubmitError(`Failed to upload ${file.name}.`);
+      }
+    }
+
+    setUploadingResubmitFile(false);
+    e.target.value = '';
   };
 
   const handleExecuteResubmit = async (e: React.FormEvent) => {
@@ -65,7 +106,8 @@ export default function MyApplicationsPage() {
       setResubmitError(null);
       const res = await api.post(`/api/v1/applications/${resubmittingApp.id}/resubmit`, {
         content: resubmitContent,
-        comments: resubmitComments
+        applicantRemarks: resubmitComments,
+        attachmentUrls: resubmitAttachments
       });
 
       if (res.data?.success) {
@@ -169,11 +211,48 @@ export default function MyApplicationsPage() {
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-gray-900">{app.subject}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Category: <span className="font-medium text-gray-700">{app.category ? String(app.category).replace(/_/g, ' ') : 'General Application'}</span> · 
-                  Director: <span className="font-medium text-gray-700">{app.director?.staffProfile ? `${app.director.staffProfile.firstName || ''} ${app.director.staffProfile.lastName || ''}`.trim() : app.director?.name || app.director?.email || 'Directorate'}</span>
-                </p>
+                {(() => {
+                  const dirProf = app.director?.staffProfile;
+                  const dirName = dirProf?.title
+                    ? `${dirProf.title} ${dirProf.surname || ''} ${dirProf.otherNames || ''}`.trim()
+                    : dirProf?.surname
+                    ? `${dirProf.surname} ${dirProf.otherNames || ''}`.trim()
+                    : app.director?.name || app.director?.email || 'Directorate';
+
+                  return (
+                    <>
+                      <h3 className="text-base font-bold text-gray-900">{app.subject}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Category: <span className="font-medium text-gray-700">{app.category ? String(app.category).replace(/_/g, ' ') : 'General Application'}</span> · 
+                        Director: <span className="font-medium text-gray-700">{dirName}</span>
+                      </p>
+                    </>
+                  );
+                })()}
+
+                {/* Supporting Documents Quick Badge */}
+                {((app.attachmentUrls && app.attachmentUrls.length > 0) || app.attachmentUrl) && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                    <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                      <Paperclip size={12} className="text-emerald-600" />
+                      Attached Documents:
+                    </span>
+                    {(app.attachmentUrls || (app.attachmentUrl ? [app.attachmentUrl] : [])).map((url: string, idx: number) => {
+                      const name = decodeURIComponent(url.split('/').pop()?.replace(/^\d+-/, '') || `Attachment #${idx + 1}`);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleOpenDetails(app)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition-colors"
+                        >
+                          <FileText size={11} className="text-emerald-600" />
+                          <span className="truncate max-w-[160px]">{name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Progress Stepper inline */}
@@ -240,6 +319,46 @@ export default function MyApplicationsPage() {
                   onChange={(e) => setResubmitComments(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Attachments Section in Resubmission */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1 flex items-center gap-1">
+                  <Paperclip size={13} className="text-orange-600" />
+                  Supporting Attachments
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  disabled={uploadingResubmitFile || isResubmitting}
+                  onChange={handleResubmitFileUpload}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer"
+                />
+                {uploadingResubmitFile && (
+                  <p className="text-[11px] text-orange-600 flex items-center gap-1 mt-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Uploading attachment...
+                  </p>
+                )}
+                {resubmitAttachments.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {resubmitAttachments.map((url, i) => {
+                      const name = decodeURIComponent(url.split('/').pop()?.replace(/^\d+-/, '') || `Attachment #${i + 1}`);
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs bg-orange-50/60 p-2 rounded border border-orange-200">
+                          <span className="truncate text-orange-950 font-semibold">{name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setResubmitAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t">

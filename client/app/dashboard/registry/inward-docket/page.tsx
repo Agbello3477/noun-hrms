@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Stamp,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Paperclip
 } from 'lucide-react';
 
 type RegistryTabType = 'AWAITING' | 'DOCKETED' | 'APPROVED' | 'DECLINED' | 'ALL';
@@ -345,6 +346,33 @@ export default function RegistryInwardDocketPage() {
                     <p className="text-xs text-gray-600 line-clamp-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100 font-sans leading-relaxed">
                       {app.content}
                     </p>
+
+                    {/* Supporting Documents Quick Badge */}
+                    {((app.attachmentUrls && app.attachmentUrls.length > 0) || app.attachmentUrl) && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                          <Paperclip size={12} className="text-emerald-600" />
+                          Attachments:
+                        </span>
+                        {(app.attachmentUrls || (app.attachmentUrl ? [app.attachmentUrl] : [])).map((url: string, idx: number) => {
+                          const name = decodeURIComponent(url.split('/').pop()?.replace(/^\d+-/, '') || `Attachment #${idx + 1}`);
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedApp(app);
+                                setIsDetailsModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition-colors"
+                            >
+                              <FileText size={11} className="text-emerald-600" />
+                              <span className="truncate max-w-[160px]">{name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Director's Minute Callout */}
                     <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs space-y-1">

@@ -273,25 +273,55 @@ ${defaultUnit}`
                     const uploadData = new FormData();
                     uploadData.append('file', file);
                     try {
-                        const uploadRes = await api.post('/api/registry/upload', uploadData, {
+                        const uploadRes = await api.post('/api/v1/applications/upload-attachment', uploadData, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                         });
                         if (uploadRes.data?.url) {
                             payload.attachmentUrls = [uploadRes.data.url];
                         }
                     } catch (uploadErr) {
-                        console.warn('File upload fallback:', uploadErr);
+                        try {
+                            const uploadRes2 = await api.post('/api/v1/applications/upload', uploadData, {
+                                headers: { 'Content-Type': 'multipart/form-data' }
+                            });
+                            if (uploadRes2.data?.url) {
+                                payload.attachmentUrls = [uploadRes2.data.url];
+                            }
+                        } catch (err2) {
+                            console.warn('Pre-upload fallback triggered, will send directly as multipart:', err2);
+                        }
                     }
                 }
 
                 let res: any;
-                try {
-                    res = await api.post('/api/v1/applications/submit', payload);
-                } catch (firstErr) {
+                // If file is attached but pre-upload didn't set attachmentUrls, submit directly as multipart/form-data
+                if (file && (!payload.attachmentUrls || payload.attachmentUrls.length === 0)) {
+                    const multiForm = new FormData();
+                    multiForm.append('subject', payload.subject);
+                    multiForm.append('category', payload.category);
+                    multiForm.append('urgency', payload.urgency);
+                    multiForm.append('content', payload.content);
+                    if (payload.directorId) multiForm.append('directorId', payload.directorId);
+                    multiForm.append('files', file);
+
                     try {
-                        res = await api.post('/api/applications/submit', payload);
-                    } catch (fallbackErr: any) {
-                        throw fallbackErr?.response ? fallbackErr : firstErr;
+                        res = await api.post('/api/v1/applications/submit', multiForm, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                    } catch (firstErr) {
+                        res = await api.post('/api/applications/submit', multiForm, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                    }
+                } else {
+                    try {
+                        res = await api.post('/api/v1/applications/submit', payload);
+                    } catch (firstErr) {
+                        try {
+                            res = await api.post('/api/applications/submit', payload);
+                        } catch (fallbackErr: any) {
+                            throw fallbackErr?.response ? fallbackErr : firstErr;
+                        }
                     }
                 }
 

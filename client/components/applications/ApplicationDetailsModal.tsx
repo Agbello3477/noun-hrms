@@ -27,7 +27,11 @@ interface ApplicationData {
   subject: string;
   category: string;
   content: string;
-  attachmentUrls: string[];
+  attachmentUrls?: string[];
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachments?: any[];
+  documents?: any[];
   status: string;
   currentHolderRole: string;
   createdAt: string;
@@ -217,32 +221,95 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
             </div>
 
             {/* Attachments */}
-            {application.attachmentUrls && application.attachmentUrls.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Supporting Documents</h4>
-                <div className="flex flex-wrap gap-2">
-                  {application.attachmentUrls.map((url, i) => (
-                    <a
-                      key={i}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded border border-blue-200 transition-colors"
-                    >
-                      <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                        />
+            {(() => {
+              const resolveFileUrl = (url: string) => {
+                if (!url) return '';
+                if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+                  return url;
+                }
+                const backendBase = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://noun-hrms.onrender.com';
+                const cleanBase = backendBase.replace(/\/$/, '');
+                const cleanPath = url.startsWith('/') ? url : `/${url}`;
+                return `${cleanBase}${cleanPath}`;
+              };
+
+              const allAttachments: { name: string; url: string; isExternal: boolean }[] = [];
+
+              if (Array.isArray(application.attachmentUrls)) {
+                application.attachmentUrls.forEach((url, i) => {
+                  if (typeof url === 'string' && url.trim()) {
+                    const cleanUrl = url.trim();
+                    const rawName = cleanUrl.split('/').pop()?.split('?')[0] || `Attachment #${i + 1}`;
+                    const displayName = decodeURIComponent(rawName.replace(/^\d+-/, ''));
+                    allAttachments.push({
+                      name: displayName || `Attachment #${i + 1}`,
+                      url: resolveFileUrl(cleanUrl),
+                      isExternal: cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')
+                    });
+                  }
+                });
+              }
+
+              if (application.attachmentUrl && !allAttachments.some(a => a.url === resolveFileUrl(application.attachmentUrl!))) {
+                const rawName = application.attachmentName || application.attachmentUrl.split('/').pop()?.split('?')[0] || 'Attachment';
+                allAttachments.push({
+                  name: decodeURIComponent(rawName.replace(/^\d+-/, '')),
+                  url: resolveFileUrl(application.attachmentUrl),
+                  isExternal: application.attachmentUrl.startsWith('http://') || application.attachmentUrl.startsWith('https://')
+                });
+              }
+
+              if (allAttachments.length === 0) return null;
+
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                       </svg>
-                      Attachment #{i + 1}
-                    </a>
-                  ))}
+                      Attached Supporting Documents ({allAttachments.length})
+                    </h4>
+                    <span className="text-[10px] text-gray-400 font-medium">Click to open/download in new tab</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {allAttachments.map((att, i) => (
+                      <a
+                        key={i}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-emerald-500 bg-slate-50/80 hover:bg-emerald-50/40 transition-all shadow-xs"
+                      >
+                        <div className="flex items-center gap-2.5 truncate max-w-[80%]">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 truncate">
+                              {att.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              Attachment #{i + 1}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-white px-2 py-1 rounded-md border border-emerald-200 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all shrink-0">
+                          <span>View</span>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Statutory Minutes & Endorsements */}
