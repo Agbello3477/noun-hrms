@@ -1,6 +1,6 @@
 "use strict";
 
-// next.config.js
+// client/next.config.js
 var nextConfig = {
   output: "standalone",
   swcMinify: true,

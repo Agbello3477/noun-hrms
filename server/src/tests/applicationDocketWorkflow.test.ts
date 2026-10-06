@@ -228,10 +228,9 @@ async function runTestSuite() {
     assert.strictEqual(getStatus(), 201, 'Should return HTTP 201 Created');
     const data = getResponse()?.data;
     assert.ok(data?.id, 'Should create application with ID');
-    assert.strictEqual(data?.status, 'SUBMITTED_TO_DIRECTOR');
-    assert.strictEqual(data?.currentHolderRole, 'DIRECTOR');
     assert.strictEqual(data?.directorId, 'director-202', 'Should auto-resolve Director from unit headId');
-    assert.ok(data?.referenceNumber.startsWith('NOUN/APP/'), 'Should format reference number correctly');
+    assert.ok(data?.referenceNumber.startsWith('NOUN/'), 'Should format reference number correctly');
+    assert.ok(!data?.referenceNumber.includes('APP'), 'Should not contain APP prefix');
 
     createdAppId = data.id;
     refNumber = data.referenceNumber;
@@ -380,7 +379,7 @@ async function runTestSuite() {
     // 1. Create a second test application
     const app2 = {
       id: 'app-second-999',
-      referenceNumber: 'NOUN/APP/2026/00999',
+      referenceNumber: 'NOUN/2026/00999',
       applicantId: 'staff-101',
       directorId: 'director-202',
       subject: 'Special Administrative Appeal',

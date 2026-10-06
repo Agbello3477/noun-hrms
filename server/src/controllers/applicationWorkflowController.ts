@@ -24,7 +24,7 @@ export const ELIGIBLE_DIRECTOR_ROLES: Role[] = [
 ];
 
 /**
- * Generate unique Institutional Reference Number: NOUN/APP/YYYY/NNNNN
+ * Generate unique Institutional Reference Number: NOUN/YYYY/NNNNN
  */
 async function generateReferenceNumber(): Promise<string> {
   const year = new Date().getFullYear();
@@ -39,7 +39,7 @@ async function generateReferenceNumber(): Promise<string> {
       });
       const seq = String(count + 1 + attempt).padStart(5, '0');
       const salt = attempt > 0 ? `-${Math.floor(100 + Math.random() * 900)}` : '';
-      const refNo = `NOUN/APP/${year}/${seq}${salt}`;
+      const refNo = `NOUN/${year}/${seq}${salt}`;
 
       const exists = await prisma.institutionalApplication.findUnique({
         where: { referenceNumber: refNo },
@@ -51,7 +51,7 @@ async function generateReferenceNumber(): Promise<string> {
       break;
     }
   }
-  return `NOUN/APP/${year}/${Date.now().toString().slice(-5)}-${Math.floor(100 + Math.random() * 900)}`;
+  return `NOUN/${year}/${Date.now().toString().slice(-5)}-${Math.floor(100 + Math.random() * 900)}`;
 }
 
 /**

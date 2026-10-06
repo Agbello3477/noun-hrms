@@ -485,7 +485,7 @@ export default function RegistryInwardDocketPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Leave blank for automatic Folio generation (e.g. NOUN/REG/APP/2026/001)"
+                  placeholder="Leave blank for automatic Folio generation (e.g. NOUN/REG/FOLIO/2026/00001)"
                   value={folioInput}
                   onChange={(e) => setFolioInput(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs text-gray-900 font-mono focus:ring-2 focus:ring-purple-500"

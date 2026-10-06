@@ -5,7 +5,7 @@ import { notifyUser } from './notification.controller';
 import { StorageService } from '../services/storage.service';
 
 /**
- * Generate a sequential/unique Reference Number: APP/NOUN/REG/YYYY/XXXX
+ * Generate a sequential/unique Reference Number: NOUN/REG/YYYY/XXXX
  */
 async function generateReferenceNumber(): Promise<string> {
     const year = new Date().getFullYear();
@@ -18,7 +18,7 @@ async function generateReferenceNumber(): Promise<string> {
         }
     });
     const serial = String(count + 1).padStart(4, '0');
-    return `APP/NOUN/REG/${year}/${serial}`;
+    return `NOUN/REG/${year}/${serial}`;
 }
 
 /**
