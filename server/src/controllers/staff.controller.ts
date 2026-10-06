@@ -139,7 +139,13 @@ export const getAllStaff = async (req: Request, res: Response) => {
         }
 
         if (statuses.length > 0) {
-            profileFilters.status = { in: statuses as any };
+            const expandedStatuses = new Set<string>();
+            for (const s of statuses) {
+                expandedStatuses.add(s);
+                if (s === 'TERMINATED') expandedStatuses.add('FIRED');
+                if (s === 'FIRED') expandedStatuses.add('TERMINATED');
+            }
+            profileFilters.status = { in: Array.from(expandedStatuses) as any };
         } else {
             // Default to only ACTIVE-like status if none specified
             whereClause.isActive = true;
@@ -939,9 +945,9 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
 
         if (isAdmin && status) {
             const upperStatus = status.toUpperCase();
-            if (['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(upperStatus)) {
-                finalStatus = upperStatus as any;
-                if (['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(upperStatus)) {
+            if (['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'RETIRED', 'DECEASED', 'RESIGNED', 'TERMINATED', 'FIRED'].includes(upperStatus)) {
+                finalStatus = (upperStatus === 'FIRED' ? 'TERMINATED' : upperStatus) as any;
+                if (['RETIRED', 'DECEASED', 'RESIGNED', 'TERMINATED', 'FIRED'].includes(upperStatus)) {
                     finalIsActive = false;
                     finalIsDeleted = true;
                     finalDeletedAt = new Date();

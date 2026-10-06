@@ -178,7 +178,7 @@ export default function StaffPage() {
         if (s === 'RETIRED') return 'bg-amber-500/10 text-amber-700 border-amber-500/20';
         if (s === 'DECEASED') return 'bg-slate-500/10 text-slate-700 border-slate-500/20';
         if (s === 'RESIGNED') return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
-        if (s === 'FIRED') return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
+        if (s === 'TERMINATED' || s === 'FIRED') return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
         if (s === 'ON_LEAVE') return 'bg-indigo-500/10 text-indigo-700 border-indigo-500/20';
         if (s === 'SUSPENDED') return 'bg-rose-500/10 text-rose-700 border-rose-500/20';
         return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
@@ -403,7 +403,7 @@ export default function StaffPage() {
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 font-semibold">Status</span>
                         <div className="flex flex-wrap gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                            {['ACTIVE', 'RETIRED', 'DECEASED', 'RESIGNED', 'FIRED', 'ON_LEAVE', 'SUSPENDED'].map(st => {
+                            {['ACTIVE', 'RETIRED', 'DECEASED', 'RESIGNED', 'TERMINATED', 'ON_LEAVE', 'SUSPENDED'].map(st => {
                                 const isSelected = selectedStatuses.includes(st);
                                 return (
                                     <button
@@ -425,7 +425,7 @@ export default function StaffPage() {
                                                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/60'
                                         }`}
                                     >
-                                        {st.replace('_', ' ')}
+                                        {st === 'TERMINATED' ? 'Terminated' : st.replace('_', ' ')}
                                     </button>
                                 );
                             })}
@@ -652,7 +652,7 @@ export default function StaffPage() {
                                                         {getRoleDisplayName(staff)}
                                                     </span>
                                                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(staff.staffProfile?.status || 'ACTIVE')}`}>
-                                                        {(staff.staffProfile?.status || 'ACTIVE').replace('_', ' ')}
+                                                        {((staff.staffProfile?.status || 'ACTIVE').toUpperCase() === 'FIRED' ? 'TERMINATED' : (staff.staffProfile?.status || 'ACTIVE')).replace('_', ' ')}
                                                     </span>
                                                 </div>
                                             </td>

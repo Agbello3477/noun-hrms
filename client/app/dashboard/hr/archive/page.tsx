@@ -78,9 +78,11 @@ export default function RegistryArchivePage() {
     }
 
     if (statusFilter) {
-      filtered = filtered.filter(
-        file => (file.status || 'ACTIVE').toUpperCase() === statusFilter.toUpperCase()
-      );
+      filtered = filtered.filter(file => {
+        const s = (file.status || 'ACTIVE').toUpperCase();
+        if (statusFilter === 'TERMINATED') return s === 'TERMINATED' || s === 'FIRED';
+        return s === statusFilter.toUpperCase();
+      });
     }
 
     setFilteredFiles(filtered);
@@ -228,7 +230,7 @@ export default function RegistryArchivePage() {
             <option value="RETIRED">Retired</option>
             <option value="DECEASED">Deceased</option>
             <option value="RESIGNED">Resigned</option>
-            <option value="FIRED">Fired</option>
+            <option value="TERMINATED">Terminated</option>
           </select>
         </div>
       </div>
@@ -288,10 +290,10 @@ export default function RegistryArchivePage() {
                       file.status === 'RETIRED' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                       file.status === 'DECEASED' ? 'bg-gray-50 text-gray-700 border-gray-200' :
                       file.status === 'RESIGNED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                      file.status === 'FIRED' ? 'bg-red-50 text-red-700 border-red-200' :
+                      (file.status === 'TERMINATED' || file.status === 'FIRED') ? 'bg-red-50 text-red-700 border-red-200' :
                       'bg-gray-50 text-gray-650 border-gray-200'
                     }`}>
-                      {file.status || 'Archived'}
+                      {file.status === 'FIRED' ? 'TERMINATED' : (file.status || 'Archived')}
                     </span>
                   </div>
                   {file.deletedAt && (

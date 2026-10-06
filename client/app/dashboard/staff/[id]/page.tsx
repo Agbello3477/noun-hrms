@@ -336,7 +336,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 setEditGender(staffData.staffProfile?.gender || '');
                 setEditDateOfBirth(staffData.staffProfile?.dateOfBirth ? staffData.staffProfile.dateOfBirth.substring(0, 10) : '');
                 setEditDateOfFirstAppointment(staffData.staffProfile?.dateOfFirstAppointment ? staffData.staffProfile.dateOfFirstAppointment.substring(0, 10) : '');
-                setEditStatus(staffData.staffProfile?.status || 'ACTIVE');
+                const rawStatus = (staffData.staffProfile?.status || 'ACTIVE').toUpperCase();
+                setEditStatus(rawStatus === 'FIRED' ? 'TERMINATED' : rawStatus);
 
                 // Initialize promotion state variables
                 if (staffData.staffProfile?.lastPromotionDate) {
@@ -431,8 +432,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 }
             }
 
-            const isArchivedStatus = ['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(editStatus);
-            const wasActive = !['RETIRED', 'DECEASED', 'RESIGNED', 'FIRED'].includes(staff?.staffProfile?.status || 'ACTIVE');
+            const isArchivedStatus = ['RETIRED', 'DECEASED', 'RESIGNED', 'TERMINATED', 'FIRED'].includes(editStatus);
+            const wasActive = !['RETIRED', 'DECEASED', 'RESIGNED', 'TERMINATED', 'FIRED'].includes(staff?.staffProfile?.status || 'ACTIVE');
 
             if (isArchivedStatus && wasActive) {
                 const confirmed = confirm(
@@ -1090,7 +1091,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                                         <option value="RETIRED">Retired</option>
                                         <option value="DECEASED">Deceased</option>
                                         <option value="RESIGNED">Resigned</option>
-                                        <option value="FIRED">Fired</option>
+                                        <option value="TERMINATED">Terminated</option>
                                     </select>
                                 </div>
                                 {/* Calculated Retirement Date */}
