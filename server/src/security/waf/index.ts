@@ -16,6 +16,7 @@ import {
   extractClientIp,
   isIpJailed,
   recordCriticalViolation,
+  isExemptFromRateLimiting,
   checkGlobalRateLimit,
   isSensitiveEndpoint,
   checkSensitiveRateLimit,
@@ -204,55 +205,57 @@ export function createWafPreParserMiddleware(options: WafOptions = {}) {
       );
     }
 
-    // 6. Adaptive Token-Bucket Rate Limiting
-    // A. Global route limiter: 120 req/min
-    const globalRate = await checkGlobalRateLimit(clientIp);
-    if (!globalRate.allowed) {
-      res.setHeader('Retry-After', globalRate.retryAfterSec);
-      return blockRequest(
-        429,
-        'ERR_GLOBAL_RATE_LIMIT_EXCEEDED',
-        WAF_RULES.GLOBAL_RATE_LIMIT_EXCEEDED,
-        'Too many requests. Please slow down and try again shortly.',
-        'MEDIUM'
-      );
-    }
-
-    // B. Sensitive module protection: 30 req/min
-    if (isSensitiveEndpoint(req.path)) {
-      const sensitiveRate = await checkSensitiveRateLimit(clientIp);
-      if (!sensitiveRate.allowed) {
-        res.setHeader('Retry-After', sensitiveRate.retryAfterSec);
+    // 6. Adaptive Token-Bucket Rate Limiting (skipped for exempt routes like healthchecks, uploads, metadata, OPTIONS)
+    if (!isExemptFromRateLimiting(req.path, req.method)) {
+      // A. Global route limiter: 1200 req/min
+      const globalRate = await checkGlobalRateLimit(clientIp);
+      if (!globalRate.allowed) {
+        res.setHeader('Retry-After', globalRate.retryAfterSec);
         return blockRequest(
           429,
-          'ERR_SENSITIVE_RATE_LIMIT_EXCEEDED',
-          WAF_RULES.SENSITIVE_RATE_LIMIT_EXCEEDED,
-          'Rate limit exceeded on sensitive operational module. Try again after 1 minute.',
-          'HIGH'
-        );
-      }
-    }
-
-    // C. Strict Authentication limiter: Max 5 failed attempts per 15 min
-    if (isAuthEndpoint(req.path)) {
-      const authLimit = await checkFailedAuthLimit(clientIp);
-      if (!authLimit.allowed) {
-        res.setHeader('Retry-After', authLimit.retryAfterSec);
-        return blockRequest(
-          429,
-          'ERR_AUTH_RATE_LIMIT_EXCEEDED',
-          WAF_RULES.AUTH_BRUTE_FORCE_EXCEEDED,
-          'Too many failed login attempts. Authentication has been temporarily restricted for 15 minutes.',
-          'HIGH'
+          'ERR_GLOBAL_RATE_LIMIT_EXCEEDED',
+          WAF_RULES.GLOBAL_RATE_LIMIT_EXCEEDED,
+          'Too many requests. Please slow down and try again shortly.',
+          'MEDIUM'
         );
       }
 
-      // Track failed attempt on response finish
-      res.on('finish', () => {
-        if (res.statusCode === 401 || res.statusCode === 400 || res.statusCode === 403) {
-          recordFailedAuth(clientIp).catch(() => {});
+      // B. Sensitive module protection: 120 req/min
+      if (isSensitiveEndpoint(req.path)) {
+        const sensitiveRate = await checkSensitiveRateLimit(clientIp);
+        if (!sensitiveRate.allowed) {
+          res.setHeader('Retry-After', sensitiveRate.retryAfterSec);
+          return blockRequest(
+            429,
+            'ERR_SENSITIVE_RATE_LIMIT_EXCEEDED',
+            WAF_RULES.SENSITIVE_RATE_LIMIT_EXCEEDED,
+            'Rate limit exceeded on sensitive operational module. Try again after 1 minute.',
+            'HIGH'
+          );
         }
-      });
+      }
+
+      // C. Strict Authentication limiter: Max 25 failed attempts per 15 min
+      if (isAuthEndpoint(req.path)) {
+        const authLimit = await checkFailedAuthLimit(clientIp);
+        if (!authLimit.allowed) {
+          res.setHeader('Retry-After', authLimit.retryAfterSec);
+          return blockRequest(
+            429,
+            'ERR_AUTH_RATE_LIMIT_EXCEEDED',
+            WAF_RULES.AUTH_BRUTE_FORCE_EXCEEDED,
+            'Too many failed login attempts. Authentication has been temporarily restricted for 15 minutes.',
+            'HIGH'
+          );
+        }
+
+        // Track failed attempt on response finish
+        res.on('finish', () => {
+          if (res.statusCode === 401 || res.statusCode === 400 || res.statusCode === 403) {
+            recordFailedAuth(clientIp).catch(() => {});
+          }
+        });
+      }
     }
 
     // Check overhead latency

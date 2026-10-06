@@ -178,15 +178,32 @@ async function checkBucket(key: string, limit: number, windowSec: number): Promi
 }
 
 /**
- * Global Route Limiter: 120 requests/minute per client IP
+ * Check if path or method is exempt from rate limiting (healthchecks, static assets, OPTIONS).
+ */
+export function isExemptFromRateLimiting(path: string, method: string = 'GET'): boolean {
+  if (method === 'OPTIONS') return true;
+  const lower = path.toLowerCase();
+  return (
+    lower === '/' ||
+    lower === '/api/health' ||
+    lower === '/healthz' ||
+    lower.startsWith('/uploads') ||
+    lower.startsWith('/api/meta') ||
+    lower.startsWith('/api/v1/meta')
+  );
+}
+
+/**
+ * Global Route Limiter: 1200 requests/minute per client IP (supports high-traffic SPAs, websockets & NATs)
  */
 export async function checkGlobalRateLimit(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
-  const res = await checkBucket(`waf:ratelimit:global:${ip}`, 120, 60);
+  const limit = parseInt(process.env.WAF_GLOBAL_RATE_LIMIT || '1200', 10);
+  const res = await checkBucket(`waf:ratelimit:global:${ip}`, limit, 60);
   return { allowed: res.allowed, retryAfterSec: res.retryAfterSec };
 }
 
 /**
- * Sensitive Module Protection: 30 requests/minute for payroll & broadcast dispatch
+ * Sensitive Module Protection: 120 requests/minute for payroll & broadcast dispatch
  */
 export function isSensitiveEndpoint(path: string): boolean {
   const lower = path.toLowerCase();
@@ -200,12 +217,13 @@ export function isSensitiveEndpoint(path: string): boolean {
 }
 
 export async function checkSensitiveRateLimit(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
-  const res = await checkBucket(`waf:ratelimit:sensitive:${ip}`, 30, 60);
+  const limit = parseInt(process.env.WAF_SENSITIVE_RATE_LIMIT || '120', 10);
+  const res = await checkBucket(`waf:ratelimit:sensitive:${ip}`, limit, 60);
   return { allowed: res.allowed, retryAfterSec: res.retryAfterSec };
 }
 
 /**
- * Strict Authentication Limiter: Max 5 failed attempts per 15 minutes (900 seconds)
+ * Strict Authentication Limiter: Max 25 failed attempts per 15 minutes (900 seconds)
  */
 export function isAuthEndpoint(path: string): boolean {
   const lower = path.toLowerCase();
@@ -222,7 +240,7 @@ const memoryFailedAuthStore = new Map<string, MemoryLimitRecord>();
 export async function checkFailedAuthLimit(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
   const now = Date.now();
   const windowSec = 900; // 15 minutes
-  const limit = 5;
+  const limit = parseInt(process.env.WAF_AUTH_FAIL_LIMIT || '25', 10);
 
   if (redisService.isOnline()) {
     try {
@@ -268,8 +286,8 @@ export async function recordFailedAuth(ip: string): Promise<boolean> {
     if (rec.count > count) count = rec.count;
   }
 
-  // If 5 failed attempts reached, treat as a critical violation toward jail
-  if (count >= 5) {
+  // If 25 failed attempts reached, treat as a critical violation toward jail
+  if (count >= 25) {
     await recordCriticalViolation(ip);
     return true;
   }

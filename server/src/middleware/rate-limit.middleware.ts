@@ -59,16 +59,16 @@ export const rateLimit = (options: RateLimitOptions) => {
     };
 };
 
-// Authentication rate limiter: 5 attempts max per 1 minute window
+// Authentication rate limiter: 30 attempts max per 1 minute window
 export const authRateLimit = rateLimit({
     windowMs: 60 * 1000,
-    max: 5,
+    max: 30,
     message: 'Too many authentication attempts. Please try again after 1 minute.'
 });
 
-// General API rate limiter: 100 requests max per 1 minute window
+// General API rate limiter: 1200 requests max per 1 minute window
 export const apiRateLimit = rateLimit({
     windowMs: 60 * 1000,
-    max: 100,
+    max: 1200,
     message: 'Too many requests on this endpoint. Please try again after 1 minute.'
 });
