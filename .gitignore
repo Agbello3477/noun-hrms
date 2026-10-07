@@ -4,6 +4,8 @@ node_modules
 .firebase
 dist
 build
+out
+client/out
 .cache
 
 # Environment
