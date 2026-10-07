@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Search, Plus, ChevronRight, Users, UserCheck, UserX, Loader2 } from 'lucide-react';
+import { Search, Plus, ChevronRight, Users, UserCheck, UserX, Loader2, History, FileText, X, FileCheck } from 'lucide-react';
 import api from '../../../../lib/api';
 import AddStaffModal from '../../../../components/dashboard/AddStaffModal';
 import Pagination from '../../../../components/ui/Pagination';
+import TransferHistoryTab from '../../../../components/hr/dossier/TransferHistoryTab';
+import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../hooks/useAuth';
@@ -15,10 +17,12 @@ interface Staff {
     email: string;
     role: string;
     staffProfile?: {
+        id?: string;
         staffId?: string;
         department?: string;
         rank?: string;
         cadre?: string;
+        phone?: string;
         unit?: { name: string };
         studyCenter?: { name: string };
         status?: string;
@@ -47,6 +51,8 @@ export default function UnitStaffPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'ON_LEAVE'>('ALL');
     const [showModal, setShowModal] = useState(false);
+    const [selectedStaffForModal, setSelectedStaffForModal] = useState<Staff | null>(null);
+    const [activeDirectorTab, setActiveDirectorTab] = useState<'transfers' | 'dossier'>('transfers');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
@@ -277,12 +283,24 @@ export default function UnitStaffPage() {
 
                                             {/* Action */}
                                             <td className="px-5 py-3.5 text-right">
-                                                <Link
-                                                    href={`/dashboard/staff/${staff.id}`}
-                                                    className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition"
-                                                >
-                                                    View Profile <ChevronRight size={13} />
-                                                </Link>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedStaffForModal(staff);
+                                                            setActiveDirectorTab('transfers');
+                                                        }}
+                                                        className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg border border-indigo-200 shadow-2xs transition"
+                                                    >
+                                                        <History size={13} />
+                                                        Dossier &amp; History
+                                                    </button>
+                                                    <Link
+                                                        href={`/dashboard/staff/${staff.id}`}
+                                                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition"
+                                                    >
+                                                        Profile <ChevronRight size={13} />
+                                                    </Link>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -306,11 +324,121 @@ export default function UnitStaffPage() {
                 )}
             </div>
 
+            {/* Add Staff Modal */}
             {showModal && (
                 <AddStaffModal
                     onClose={() => setShowModal(false)}
                     onSuccess={fetchUnitStaff}
                 />
+            )}
+
+            {/* Director Personnel Modal: Posting & Transfer History vs Digital Dossier & Credentials */}
+            {selectedStaffForModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in-50 duration-200 border border-slate-200">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-indigo-50/40 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                    {selectedStaffForModal.name?.charAt(0) || 'S'}
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                        <span>{selectedStaffForModal.name}</span>
+                                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                            {selectedStaffForModal.staffProfile?.staffId || 'NO ID'}
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Directorate Staff Audit &bull; {selectedStaffForModal.staffProfile?.rank || selectedStaffForModal.role} &bull; {selectedStaffForModal.staffProfile?.unit?.name || selectedStaffForModal.staffProfile?.studyCenter?.name || 'Unit'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedStaffForModal(null)}
+                                className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Navigation Tab Switcher */}
+                        <div className="flex border-b border-slate-100 bg-slate-50/60 px-6 pt-2 gap-2">
+                            <button
+                                onClick={() => setActiveDirectorTab('transfers')}
+                                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+                                    activeDirectorTab === 'transfers'
+                                        ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-lg shadow-2xs'
+                                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                <History size={14} />
+                                <span>Posting &amp; Transfer History</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveDirectorTab('dossier')}
+                                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+                                    activeDirectorTab === 'dossier'
+                                        ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-lg shadow-2xs'
+                                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                <FileText size={14} />
+                                <span>Digital Dossier &amp; Credentials</span>
+                            </button>
+                        </div>
+
+                        {/* Modal Content Body */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* Metadata Summary Banner */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Unit / Department</span>
+                                    <span className="text-xs font-bold text-slate-800 mt-1 block truncate">
+                                        {selectedStaffForModal.staffProfile?.unit?.name || 'Unassigned Unit'}
+                                    </span>
+                                </div>
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Study Centre</span>
+                                    <span className="text-xs font-bold text-slate-800 mt-1 block truncate">
+                                        {selectedStaffForModal.staffProfile?.studyCenter?.name || 'HQ'}
+                                    </span>
+                                </div>
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Current Status</span>
+                                    <span className="text-xs font-bold text-emerald-700 mt-1 block">
+                                        {selectedStaffForModal.staffProfile?.status === 'ON_LEAVE' ? 'On Approved Leave' : 'Active Duty'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Tab Content */}
+                            {activeDirectorTab === 'transfers' ? (
+                                <div className="animate-in fade-in duration-200">
+                                    <TransferHistoryTab staffId={selectedStaffForModal.id || selectedStaffForModal.staffProfile?.id || ''} />
+                                </div>
+                            ) : (
+                                <div className="animate-in fade-in duration-200">
+                                    <DigitalDossier
+                                        staffId={selectedStaffForModal.staffProfile?.id || selectedStaffForModal.id}
+                                        staffName={selectedStaffForModal.name}
+                                        readOnly={true}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="bg-slate-50 border-t border-slate-100 px-6 py-3.5 flex justify-end">
+                            <button
+                                onClick={() => setSelectedStaffForModal(null)}
+                                className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-colors shadow-2xs"
+                            >
+                                Close Modal
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

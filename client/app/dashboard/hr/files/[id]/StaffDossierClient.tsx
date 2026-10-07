@@ -11,10 +11,19 @@ import TransferHistoryTab from '../../../../../components/hr/dossier/TransferHis
 import QueryHistoryTab from '../../../../../components/hr/dossier/QueryHistoryTab';
 import AperHistoryTab from '../../../../../components/hr/dossier/AperHistoryTab';
 
-export default function StaffDossierPage({ params }: { params?: { id?: string } }) {
+export default function StaffDossierPage({ params, onBack }: { params?: { id?: string }; onBack?: () => void }) {
     const routeParams = useParams();
-    const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
+    const [urlId, setUrlId] = useState<string>('');
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const queryId = new URLSearchParams(window.location.search).get('id');
+            if (queryId) setUrlId(queryId);
+        }
+    }, []);
+
+    const id = params?.id || (routeParams?.id as string) || urlId || '';
     const [staff, setStaff] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -43,7 +52,11 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
             });
             alert('Staff file successfully archived.');
             setShowDeleteConfirm(false);
-            router.push('/dashboard/hr/files');
+            if (onBack) {
+                onBack();
+            } else {
+                router.push('/dashboard/hr/files');
+            }
         } catch (err: any) {
             setConfirmError(err.response?.data?.message || 'Verification failed. Incorrect password.');
         } finally {
@@ -51,10 +64,22 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
         }
     };
 
+    const handleBack = () => {
+        if (onBack) {
+            onBack();
+        } else {
+            router.push('/dashboard/hr/files');
+        }
+    };
+
     useEffect(() => {
         const fetchStaff = async () => {
-            if (!id) return;
+            if (!id || id === 'default') {
+                setLoading(false);
+                return;
+            }
             try {
+                setLoading(true);
                 const { data } = await api.get(`/api/registry/files/${id}`);
                 setStaff(data);
             } catch (err: any) {
@@ -67,12 +92,17 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
         fetchStaff();
     }, [id]);
 
-    if (loading) return <div className="p-8 text-center">Loading Staff Dossier...</div>;
+    if (loading) return (
+        <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-nounGreen border-t-transparent" />
+            <span className="text-gray-500 text-sm font-medium">Loading Staff Dossier...</span>
+        </div>
+    );
 
     if (error) return (
         <div className="p-8">
-            <button onClick={() => router.back()} className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
-                <ArrowLeft className="mr-2" size={20} /> Back
+            <button onClick={handleBack} className="flex items-center text-gray-600 hover:text-gray-900 mb-4 font-semibold text-sm">
+                <ArrowLeft className="mr-2" size={18} /> Back to Registry
             </button>
             <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200">
                 {error}
@@ -80,12 +110,21 @@ export default function StaffDossierPage({ params }: { params?: { id?: string } 
         </div>
     );
 
-    if (!staff) return null;
+    if (!staff) return (
+        <div className="p-8">
+            <button onClick={handleBack} className="flex items-center text-gray-600 hover:text-gray-900 mb-4 font-semibold text-sm">
+                <ArrowLeft className="mr-2" size={18} /> Back to Registry
+            </button>
+            <div className="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200">
+                Staff record not found or inaccessible.
+            </div>
+        </div>
+    );
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-center mb-6">
-                <button onClick={() => router.back()} className="flex items-center text-gray-500 hover:text-nounGreen transition-colors">
+                <button onClick={handleBack} className="flex items-center text-gray-600 hover:text-nounGreen transition-colors font-bold text-sm bg-white border border-gray-200 shadow-xs px-3.5 py-2 rounded-xl">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Back to Registry
                 </button>
                 <button

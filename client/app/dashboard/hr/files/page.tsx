@@ -6,7 +6,8 @@ import api from '../../../../lib/api';
 import { FolderIcon } from '../../../../components/hr/FolderIcon';
 import StaffFileForm from '../../../../components/hr/StaffFileForm';
 import BatchDossierUploadModal from '../../../../components/dashboard/BatchDossierUploadModal';
-import { Search, Plus, FileInput, X, Archive, TrendingUp, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle, FolderUp, PackageCheck, FolderOpen } from 'lucide-react';
+import StaffDossierPage from './[id]/StaffDossierClient';
+import { Search, Plus, FileInput, X, Archive, ShieldCheck, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../../hooks/useAuth';
 import Button from '../../../../components/ui/Button';
 
@@ -41,6 +42,7 @@ export default function FileRegistryPage() {
     const [filteredFiles, setFilteredFiles] = useState<FileUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [selectedStaffFileId, setSelectedStaffFileId] = useState<string | null>(null);
 
     // Tab view: 'ALL' or 'PENDING_CLEARANCE'
     const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING_CLEARANCE'>('ALL');
@@ -86,6 +88,15 @@ export default function FileRegistryPage() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const queryId = new URLSearchParams(window.location.search).get('id');
+            if (queryId) {
+                setSelectedStaffFileId(queryId);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         try {
@@ -174,6 +185,20 @@ export default function FileRegistryPage() {
 
     const pendingClearanceCount = files.filter(f => f.staffProfile?.accountStatus === 'PENDING_REGISTRAR_CLEARANCE').length;
 
+    if (selectedStaffFileId) {
+        return (
+            <StaffDossierPage
+                params={{ id: selectedStaffFileId }}
+                onBack={() => {
+                    setSelectedStaffFileId(null);
+                    if (typeof window !== 'undefined' && window.location.search) {
+                        window.history.replaceState(null, '', '/dashboard/hr/files');
+                    }
+                }}
+            />
+        );
+    }
+
     return (
         <div className="p-6 min-h-screen bg-gray-50 flex flex-col pb-12">
             {/* Header */}
@@ -183,27 +208,6 @@ export default function FileRegistryPage() {
                     <p className="text-gray-500 text-sm">Digitized staff files with dual-control Registrar clearance</p>
                 </div>
                 <div className="flex flex-wrap gap-2.5 items-center">
-                    <button
-                        onClick={() => router.push('/dashboard/registry/file-requests/inward')}
-                        className="flex items-center gap-2 px-3.5 py-2 border border-emerald-400 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-xs text-sm font-semibold transition"
-                    >
-                        <FolderOpen size={16} />
-                        File Intake &amp; Folio Desk
-                    </button>
-                    <button
-                        onClick={() => router.push('/dashboard/registry/file-requests/ready-for-dispatch')}
-                        className="flex items-center gap-2 px-3.5 py-2 border border-blue-400 bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-xs text-sm font-semibold transition"
-                    >
-                        <PackageCheck size={16} />
-                        File Dispatch &amp; Custody
-                    </button>
-                    <button
-                        onClick={() => router.push('/dashboard/registry/due-for-promotion')}
-                        className="flex items-center gap-2 px-4 py-2 border border-emerald-300 text-emerald-800 bg-emerald-50/90 rounded-lg hover:bg-emerald-100 shadow-sm text-sm font-semibold transition"
-                    >
-                        <TrendingUp size={16} className="text-emerald-700" />
-                        Promotion Maturity &amp; Scheduling
-                    </button>
                     {['HR_ADMIN', 'REGISTRAR', 'SUPER_USER'].includes(user?.role || '') && (
                         <button
                             onClick={() => router.push('/dashboard/hr/archive')}
@@ -213,13 +217,6 @@ export default function FileRegistryPage() {
                             View Archive
                         </button>
                     )}
-                    <button
-                        onClick={() => setShowBatchModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 border border-blue-300 text-blue-800 bg-blue-50/80 hover:bg-blue-100 rounded-lg shadow-sm text-sm font-semibold transition"
-                    >
-                        <FolderUp size={16} className="text-blue-700" />
-                        Batch Dossier Upload
-                    </button>
                     <button
                         onClick={() => setShowExistingModal(true)}
                         className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 shadow-sm text-sm font-medium"
@@ -352,7 +349,7 @@ export default function FileRegistryPage() {
                                     color={folderColor}
                                     role={file.role}
                                     designation={designation}
-                                    onClick={() => router.push(`/dashboard/hr/files/${file.id}`)}
+                                    onClick={() => setSelectedStaffFileId(file.id)}
                                 />
 
                                 {isPendingClearance && (

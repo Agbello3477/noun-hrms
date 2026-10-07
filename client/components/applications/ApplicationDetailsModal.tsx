@@ -1,8 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
 import ApplicationProgressStepper from './ApplicationProgressStepper';
+import TransferHistoryTab from '@/components/hr/dossier/TransferHistoryTab';
+import DigitalDossier from '@/components/dashboard/DigitalDossier';
+import { FileText, History, FileCheck } from 'lucide-react';
 
 interface Revision {
   id: string;
@@ -116,6 +119,8 @@ interface Props {
 }
 
 export default function ApplicationDetailsModal({ application, isOpen, onClose }: Props) {
+  const [activeModalTab, setActiveModalTab] = useState<'APPLICATION' | 'TRANSFERS' | 'DOSSIER'>('APPLICATION');
+
   if (!isOpen || !application) return null;
 
   const applicant = application.applicant?.staffProfile;
@@ -138,6 +143,9 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
 
   const staffId = applicant?.staffId || applicant?.staffNumber || 'N/A';
   const unitOrDept = applicant?.unit?.name || (typeof applicant?.department === 'string' ? applicant.department : applicant?.department?.name) || 'Registry Division';
+
+  const applicantUserId = application.applicant?.id || '';
+  const applicantProfileId = applicant?.id || '';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -170,15 +178,66 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
           </button>
         </div>
 
+        {/* Modal Navigation Tabs */}
+        <div className="flex border-b border-gray-200 bg-slate-100/70 px-6 pt-2 gap-2">
+          <button
+            onClick={() => setActiveModalTab('APPLICATION')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+              activeModalTab === 'APPLICATION'
+                ? 'border-blue-600 text-blue-700 bg-white rounded-t-lg shadow-xs'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <FileText size={14} />
+            <span>Application &amp; Justification</span>
+          </button>
+          <button
+            onClick={() => setActiveModalTab('TRANSFERS')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+              activeModalTab === 'TRANSFERS'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-lg shadow-xs'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <History size={14} />
+            <span>Posting &amp; Transfer History</span>
+          </button>
+          <button
+            onClick={() => setActiveModalTab('DOSSIER')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+              activeModalTab === 'DOSSIER'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-lg shadow-xs'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <FileCheck size={14} />
+            <span>Digital Dossier &amp; Credentials</span>
+          </button>
+        </div>
+
         {/* Modal Scrollable Body */}
         <div className="px-6 py-5 overflow-y-auto space-y-6 flex-1">
-          {/* Progress Tracker */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Institutional Statutory Progress
-            </h3>
-            <ApplicationProgressStepper status={application.status} />
-          </div>
+          {activeModalTab === 'TRANSFERS' ? (
+            <div className="animate-in fade-in duration-300">
+              <TransferHistoryTab staffId={applicantUserId || applicantProfileId || staffId} />
+            </div>
+          ) : activeModalTab === 'DOSSIER' ? (
+            <div className="animate-in fade-in duration-300">
+              <DigitalDossier
+                staffId={applicantProfileId || applicantUserId || staffId}
+                staffName={applicantName}
+                readOnly={true}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Progress Tracker */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  Institutional Statutory Progress
+                </h3>
+                <ApplicationProgressStepper status={application.status} />
+              </div>
 
           {/* Dossier Metadata Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white border border-gray-200 rounded-lg p-4 text-sm">
@@ -381,6 +440,8 @@ export default function ApplicationDetailsModal({ application, isOpen, onClose }
                 ))}
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
 
