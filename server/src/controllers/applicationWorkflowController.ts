@@ -11,6 +11,7 @@ import {
 import { notifyUser } from './notification.controller';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
 import { StorageService } from '../services/storage.service';
+import { resolveStaffDirector } from '../services/leaveEntitlement.service';
 import { ApplicationCategory, Role } from '@prisma/client';
 
 export const ELIGIBLE_DIRECTOR_ROLES: Role[] = [
@@ -227,102 +228,20 @@ export async function submitApplication(req: Request, res: Response) {
 
     // Auto-resolve if not found or not provided
     if (!directorUser) {
-      let callerProfile: any = applicantUser.staffProfile;
-      if (!callerProfile || !callerProfile.unit) {
-        callerProfile = await prisma.staffProfile.findUnique({
-          where: { userId: resolvedApplicantId },
-          include: { unit: true, studyCenter: true },
+      const resolvedDirect = await resolveStaffDirector(resolvedApplicantId);
+      if (resolvedDirect.length > 0) {
+        resolvedDirectorId = resolvedDirect[0].id;
+        directorUser = await prisma.user.findUnique({
+          where: { id: resolvedDirectorId },
+          include: { staffProfile: true },
         });
-      }
-
-      if (callerProfile?.unit?.headId && callerProfile.unit.headId !== resolvedApplicantId) {
-        let headUser = await prisma.user.findUnique({
-          where: { id: callerProfile.unit.headId },
-        });
-        if (!headUser) {
-          const headProf = await prisma.staffProfile.findUnique({
-            where: { id: callerProfile.unit.headId },
-            include: { user: true },
-          });
-          if (headProf?.user) {
-            headUser = headProf.user;
-          }
-        }
-        if (headUser && headUser.isActive) {
-          directorUser = headUser;
-          resolvedDirectorId = headUser.id;
-        }
-      }
-
-      if (!directorUser && callerProfile?.unitId) {
-        const unitLeader = await prisma.user.findFirst({
-          where: {
-            role: { in: ELIGIBLE_DIRECTOR_ROLES },
-            staffProfile: { unitId: callerProfile.unitId },
-            isActive: true,
-            id: { not: resolvedApplicantId },
-          },
-        });
-        if (unitLeader) {
-          directorUser = unitLeader;
-          resolvedDirectorId = unitLeader.id;
-        } else {
-          const staffLeader = await prisma.staffProfile.findFirst({
-            where: {
-              unitId: callerProfile.unitId,
-              userId: { not: resolvedApplicantId },
-              user: { isActive: true },
-              OR: [
-                { rank: { contains: 'Director', mode: 'insensitive' } },
-                { rank: { contains: 'Dean', mode: 'insensitive' } },
-                { rank: { contains: 'Head', mode: 'insensitive' } },
-                { rank: { contains: 'HOD', mode: 'insensitive' } },
-                { rank: { contains: 'Professor', mode: 'insensitive' } },
-              ],
-            },
-            include: { user: true },
-          });
-          if (staffLeader?.user) {
-            directorUser = staffLeader.user;
-            resolvedDirectorId = staffLeader.user.id;
-          }
-        }
-      }
-
-      if (!directorUser && callerProfile?.centerId) {
-        const centerManager = await prisma.user.findFirst({
-          where: {
-            role: { in: [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.SUPER_USER, Role.ADMIN] },
-            staffProfile: { centerId: callerProfile.centerId },
-            isActive: true,
-            id: { not: resolvedApplicantId },
-          },
-        });
-        if (centerManager) {
-          directorUser = centerManager;
-          resolvedDirectorId = centerManager.id;
-        }
-      }
-
-      if (!directorUser) {
-        const leadershipUser = await prisma.user.findFirst({
-          where: {
-            role: { in: ELIGIBLE_DIRECTOR_ROLES },
-            isActive: true,
-            id: { not: resolvedApplicantId },
-          },
-        });
-        if (leadershipUser) {
-          directorUser = leadershipUser;
-          resolvedDirectorId = leadershipUser.id;
-        }
       }
     }
 
     if (!directorUser || !resolvedDirectorId) {
       return res.status(400).json({
         success: false,
-        error: 'Could not resolve Designated Director or Unit Head. Please designate a Director from the list.',
+        error: 'Could not resolve your Designated Director or Unit Head. Please select your Director from the list.',
       });
     }
 
@@ -1358,7 +1277,7 @@ export async function getDirectorQueue(req: Request, res: Response) {
     let directorUserIds = [callerId];
     const directorProfile = await prisma.staffProfile.findFirst({
       where: { OR: [{ userId: callerId }, { id: callerId }] },
-      select: { id: true, userId: true, unitId: true, centerId: true },
+      include: { unit: true, studyCenter: true },
     });
     if (directorProfile) {
       if (directorProfile.userId) directorUserIds.push(directorProfile.userId);
@@ -1366,14 +1285,79 @@ export async function getDirectorQueue(req: Request, res: Response) {
     }
     directorUserIds = Array.from(new Set(directorUserIds.filter(Boolean)));
 
-    const baseScope: any = {
-      OR: [
-        { directorId: { in: directorUserIds } },
-        ...(directorProfile?.unitId ? [{ applicant: { staffProfile: { unitId: directorProfile.unitId } } }] : []),
-        ...(directorProfile?.centerId ? [{ applicant: { staffProfile: { centerId: directorProfile.centerId } } }] : []),
-        ...(callerRole === 'SUPER_USER' || callerRole === 'ADMIN' || callerRole === 'VICE_CHANCELLOR' ? [{ directorId: { not: '' } }] : []),
-      ],
-    };
+    const isCentralExecutive = ['SUPER_USER', 'VICE_CHANCELLOR'].includes(callerRole);
+    let baseScope: any;
+
+    if (isCentralExecutive) {
+      baseScope = { directorId: { not: '' } };
+    } else {
+      const orConditions: any[] = [
+        { directorId: { in: directorUserIds } }
+      ];
+
+      const targetUnitIds: string[] = [];
+      if (directorProfile?.unitId) {
+        targetUnitIds.push(directorProfile.unitId);
+      }
+
+      const headedUnits = await prisma.unit.findMany({
+        where: {
+          OR: [
+            { headId: callerId },
+            ...(directorProfile?.id ? [{ headId: directorProfile.id }] : [])
+          ]
+        },
+        select: { id: true, code: true, type: true }
+      });
+      for (const u of headedUnits) {
+        if (!targetUnitIds.includes(u.id)) {
+          targetUnitIds.push(u.id);
+        }
+      }
+
+      const allHeadedOrAssignedUnits = [
+        ...(directorProfile?.unit ? [directorProfile.unit] : []),
+        ...headedUnits
+      ];
+
+      for (const u of allHeadedOrAssignedUnits) {
+        if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+          const facultyDeptMapping: Record<string, string[]> = {
+            'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+            'FAC-LAW': ['DEP-LAW'],
+            'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+            'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+            'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+            'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+            'FAC-AGRIC': ['DEP-AGR'],
+            'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+            'FAC-COMPU': ['DEP-CMP']
+          };
+          const deptCodes = facultyDeptMapping[u.code || ''] || [];
+          if (deptCodes.length > 0) {
+            const relatedUnits = await prisma.unit.findMany({
+              where: { code: { in: deptCodes } },
+              select: { id: true }
+            });
+            for (const ru of relatedUnits) {
+              if (!targetUnitIds.includes(ru.id)) {
+                targetUnitIds.push(ru.id);
+              }
+            }
+          }
+        }
+      }
+
+      if (targetUnitIds.length > 0) {
+        orConditions.push({ applicant: { staffProfile: { unitId: { in: targetUnitIds } } } });
+      }
+
+      if (directorProfile?.centerId) {
+        orConditions.push({ applicant: { staffProfile: { centerId: directorProfile.centerId } } });
+      }
+
+      baseScope = { OR: orConditions };
+    }
 
     let statusCondition: any = undefined;
     const statusParam = status ? String(status).toUpperCase().trim() : 'ALL';
@@ -1867,198 +1851,38 @@ export async function getEligibleDirectors(req: Request, res: Response) {
         }
       }
 
-      // 1. Direct unit head via unit.headId (may be User.id or StaffProfile.id)
-      if (callerProfile?.unit?.headId && callerProfile.unit.headId !== callerId) {
-        let headUser = await prisma.user.findUnique({
-          where: { id: callerProfile.unit.headId },
-          include: {
-            staffProfile: {
-              include: { unit: true, studyCenter: true },
-            },
-          },
-        });
-
-        if (!headUser) {
-          const headProfile = await prisma.staffProfile.findUnique({
-            where: { id: callerProfile.unit.headId },
-            include: {
-              user: true,
-              unit: true,
-              studyCenter: true,
-            },
-          });
-          if (headProfile?.user) {
-            headUser = {
-              ...headProfile.user,
-              staffProfile: headProfile,
-            } as any;
-          }
-        }
-
-        if (headUser && headUser.id !== callerId && headUser.isActive) {
-          const formatted = formatDirectorName(headUser);
-          designatedDirector = {
-            id: headUser.id,
-            name: formatted,
-            email: headUser.email,
-            unit: callerProfile.unit.name,
-            role: headUser.role,
-            title: headUser.staffProfile?.title,
-            rank: headUser.staffProfile?.rank,
-            reason: `Designated Unit Head for ${callerProfile.unit.name}`,
-          };
-        }
+      // Resolve designated Director / Dean / HOD using unified strict resolver
+      const resolvedList = await resolveStaffDirector(callerId);
+      if (resolvedList.length > 0) {
+        const primary = resolvedList[0];
+        designatedDirector = {
+          id: primary.id,
+          name: primary.name,
+          email: primary.email,
+          unit: primary.unitName || callerProfile?.unit?.name || callerProfile?.studyCenter?.name || 'Designated Directorate',
+          role: primary.role,
+          title: primary.title,
+          reason: primary.reason || `Designated Supervisor for ${callerProfile?.unit?.name || 'Unit'}`
+        };
       }
+    }
 
-      // 2. Unit Leadership by unitId
-      if (!designatedDirector && callerProfile?.unitId) {
-        const unitLeader = await prisma.user.findFirst({
-          where: {
-            role: { in: ELIGIBLE_DIRECTOR_ROLES },
-            staffProfile: { unitId: callerProfile.unitId },
-            isActive: true,
-            id: { not: callerId },
-          },
-          include: {
-            staffProfile: {
-              include: { unit: true, studyCenter: true },
-            },
-          },
+    // Ensure designated director is at the top of the selectable list if present
+    if (designatedDirector) {
+      const existsIndex = directors.findIndex(d => d.id === designatedDirector.id);
+      if (existsIndex > -1) {
+        const [match] = directors.splice(existsIndex, 1);
+        directors.unshift(match);
+      } else {
+        directors.unshift({
+          id: designatedDirector.id,
+          name: designatedDirector.name,
+          email: designatedDirector.email,
+          unit: designatedDirector.unit,
+          role: designatedDirector.role,
+          title: designatedDirector.title,
+          rank: designatedDirector.rank,
         });
-
-        if (unitLeader) {
-          const formatted = formatDirectorName(unitLeader);
-          designatedDirector = {
-            id: unitLeader.id,
-            name: formatted,
-            email: unitLeader.email,
-            unit: callerProfile.unit?.name || unitLeader.staffProfile?.unit?.name || 'Unit',
-            role: unitLeader.role,
-            title: unitLeader.staffProfile?.title,
-            rank: unitLeader.staffProfile?.rank,
-            reason: `Head / Director of ${callerProfile.unit?.name || 'Unit'}`,
-          };
-        } else {
-          const leaderProfile = await prisma.staffProfile.findFirst({
-            where: {
-              unitId: callerProfile.unitId,
-              userId: { not: callerId },
-              user: { isActive: true },
-              OR: [
-                { rank: { contains: 'Director', mode: 'insensitive' } },
-                { rank: { contains: 'Dean', mode: 'insensitive' } },
-                { rank: { contains: 'Head', mode: 'insensitive' } },
-                { rank: { contains: 'HOD', mode: 'insensitive' } },
-                { rank: { contains: 'Professor', mode: 'insensitive' } },
-              ],
-            },
-            include: { user: true, unit: true, studyCenter: true },
-          });
-          if (leaderProfile?.user) {
-            const formatted = formatDirectorName({ ...leaderProfile.user, staffProfile: leaderProfile });
-            designatedDirector = {
-              id: leaderProfile.user.id,
-              name: formatted,
-              email: leaderProfile.user.email,
-              unit: callerProfile.unit?.name || leaderProfile.unit?.name || 'Unit',
-              role: leaderProfile.user.role,
-              title: leaderProfile.title,
-              rank: leaderProfile.rank,
-              reason: `Head / Director of ${callerProfile.unit?.name || 'Unit'}`,
-            };
-          }
-        }
-      }
-
-      // 3. Study Center Manager
-      if (!designatedDirector && callerProfile?.centerId && callerProfile?.studyCenter) {
-        const centerManager = await prisma.user.findFirst({
-          where: {
-            role: { in: [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD, Role.SUPER_USER, Role.ADMIN] },
-            staffProfile: { centerId: callerProfile.centerId },
-            isActive: true,
-            id: { not: callerId },
-          },
-          include: {
-            staffProfile: {
-              include: { studyCenter: true, unit: true },
-            },
-          },
-        });
-        if (centerManager) {
-          const formatted = formatDirectorName(centerManager);
-          designatedDirector = {
-            id: centerManager.id,
-            name: formatted,
-            email: centerManager.email,
-            unit: callerProfile.studyCenter.name,
-            role: centerManager.role,
-            title: centerManager.staffProfile?.title,
-            rank: centerManager.staffProfile?.rank,
-            reason: `Study Centre Director for ${callerProfile.studyCenter.name}`,
-          };
-        }
-      }
-
-      // 4. Department leadership match
-      if (!designatedDirector && callerProfile?.department) {
-        const deptLeader = await prisma.user.findFirst({
-          where: {
-            role: { in: ELIGIBLE_DIRECTOR_ROLES },
-            staffProfile: { department: callerProfile.department },
-            isActive: true,
-            id: { not: callerId },
-          },
-          include: {
-            staffProfile: {
-              include: { unit: true, studyCenter: true },
-            },
-          },
-        });
-        if (deptLeader) {
-          const formatted = formatDirectorName(deptLeader);
-          designatedDirector = {
-            id: deptLeader.id,
-            name: formatted,
-            email: deptLeader.email,
-            unit: callerProfile.department,
-            role: deptLeader.role,
-            title: deptLeader.staffProfile?.title,
-            rank: deptLeader.staffProfile?.rank,
-            reason: `Department Head for ${callerProfile.department}`,
-          };
-        }
-      }
-
-      // 5. Name match across loaded directors list
-      if (!designatedDirector && directors.length > 0) {
-        const unitMatch = directors.find((d) =>
-          d.id !== callerId &&
-          callerProfile?.unit?.name &&
-          d.unit?.toLowerCase() === callerProfile.unit.name.toLowerCase()
-        );
-        if (unitMatch) {
-          designatedDirector = {
-            id: unitMatch.id,
-            name: unitMatch.name,
-            email: unitMatch.email,
-            unit: unitMatch.unit,
-            role: unitMatch.role,
-            reason: `Designated Head for ${unitMatch.unit}`,
-          };
-        } else {
-          const fallback = directors.find((d) => d.id !== callerId);
-          if (fallback) {
-            designatedDirector = {
-              id: fallback.id,
-              name: fallback.name,
-              email: fallback.email,
-              unit: fallback.unit,
-              role: fallback.role,
-              reason: 'Institutional Leadership',
-            };
-          }
-        }
       }
     }
 
