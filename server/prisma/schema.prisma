@@ -132,10 +132,16 @@ model User {
 
   // Academic Hierarchy & Workload Relations
   deanFaculties                          Faculty[]                     @relation("FacultyDean")
+  facultyOfficerFaculties                Faculty[]                     @relation("FacultyOfficer")
+  facultySecretaryFaculties              Faculty[]                     @relation("FacultySecretary")
   hodDepartments                         Department[]                  @relation("DepartmentHod")
+  examOfficerDepartments                 Department[]                  @relation("DepartmentExamOfficer")
+  adminOfficerDepartments                Department[]                  @relation("DepartmentAdmin")
   assignedWorkloads                      CourseWorkloadAllocation[]    @relation("AssignedWorkloads")
   approvedWorkloads                      CourseWorkloadAllocation[]    @relation("ApprovedWorkloads")
   ratifiedWorkloads                      CourseWorkloadAllocation[]    @relation("RatifiedWorkloads")
+  staffWorkloadComplaints                WorkloadComplaint[]           @relation("StaffWorkloadComplaints")
+  hodResolvedComplaints                  WorkloadComplaint[]           @relation("HodResolvedComplaints")
 
   @@map("users")
 }
@@ -519,31 +525,41 @@ enum WorkloadAllocationStatus {
 }
 
 model Faculty {
-  id          String              @id // Standardized code: agr, art, edu, hsc, law, msc, sci, ssc, cmp
-  facultyCode String              @unique // e.g. F01, F02, F03, ...
-  name        String              // e.g. Faculty of Agricultural Sciences
-  deanId      String?
-  dean        User?               @relation("FacultyDean", fields: [deanId], references: [id], onDelete: SetNull)
-  departments Department[]
-  programmes  AcademicProgramme[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  id                 String              @id // Standardized code: agr, art, edu, hsc, law, msc, sci, ssc, cmp
+  facultyCode        String              @unique // e.g. F01, F02, F03, ...
+  name               String              // e.g. Faculty of Agricultural Sciences
+  deanId             String?
+  dean               User?               @relation("FacultyDean", fields: [deanId], references: [id], onDelete: SetNull)
+  facultyOfficerId   String?
+  facultyOfficer     User?               @relation("FacultyOfficer", fields: [facultyOfficerId], references: [id], onDelete: SetNull)
+  facultySecretaryId String?
+  facultySecretary   User?               @relation("FacultySecretary", fields: [facultySecretaryId], references: [id], onDelete: SetNull)
+  departments        Department[]
+  programmes         AcademicProgramme[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([facultyCode])
   @@map("faculties")
 }
 
 model Department {
-  id          String              @id // Standardized code: AEE, ASF, CSI, LNG, RST, ENG, etc.
-  facultyId   String
-  faculty     Faculty             @relation(fields: [facultyId], references: [id], onDelete: Restrict)
-  name        String              // e.g. Agricultural Economics And Extension
-  hodId       String?
-  hod         User?               @relation("DepartmentHod", fields: [hodId], references: [id], onDelete: SetNull)
-  programmes  AcademicProgramme[]
-  courses     AcademicCourse[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  id                 String              @id // Standardized code: AEE, ASF, CSI, LNG, RST, ENG, etc.
+  facultyId          String
+  faculty            Faculty             @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  name               String              // e.g. Agricultural Economics And Extension
+  code               String?             @unique // e.g. DEP-CS, DEP-LAW
+  hodId              String?
+  hod                User?               @relation("DepartmentHod", fields: [hodId], references: [id], onDelete: SetNull)
+  examOfficerId      String?
+  examOfficer        User?               @relation("DepartmentExamOfficer", fields: [examOfficerId], references: [id], onDelete: SetNull)
+  departmentAdminId  String?
+  departmentAdmin    User?               @relation("DepartmentAdmin", fields: [departmentAdminId], references: [id], onDelete: SetNull)
+  programmes         AcademicProgramme[]
+  courses            AcademicCourse[]
+  complaints         WorkloadComplaint[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([facultyId])
   @@map("academic_departments")
@@ -593,6 +609,7 @@ model AcademicCourse {
   session        String                     @default("2026/2027") // e.g. "2026/2027"
   level          Int                        @default(100) // 100, 200, 300, 400, 500, 700, 800, 900
   allocations    CourseWorkloadAllocation[]
+  complaints     WorkloadComplaint[]
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
@@ -625,6 +642,7 @@ model CourseWorkloadAllocation {
   courseMaterialCreditUnits   Decimal                   @default(0.0) @db.Decimal(4, 2)
   administrativeReliefUnits   Decimal                   @default(0.0) @db.Decimal(4, 2)
   effectiveTeachingEquivalent Decimal                   @default(0.0) @db.Decimal(6, 2)
+  complaints                  WorkloadComplaint[]
   createdAt                   DateTime                  @default(now())
   updatedAt                   DateTime                  @updatedAt
 
@@ -632,6 +650,47 @@ model CourseWorkloadAllocation {
   @@index([academicStaffId, academicSession])
   @@index([allocationStatus])
   @@map("course_workload_allocations")
+}
+
+enum ComplaintStatus {
+  PENDING_HOD_REVIEW
+  UNDER_REVIEW
+  RESOLVED_ADJUSTED
+  REJECTED_MAINTAINED
+}
+
+model WorkloadComplaint {
+  id                    String                    @id @default(uuid())
+  staffId               String
+  staff                 User                      @relation("StaffWorkloadComplaints", fields: [staffId], references: [id], onDelete: Cascade)
+  departmentId          String
+  department            Department                @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  allocationId          String?
+  allocation            CourseWorkloadAllocation? @relation(fields: [allocationId], references: [id], onDelete: SetNull)
+  courseId              String?
+  course                AcademicCourse?           @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  
+  session               String                    // e.g. "2026/2027"
+  semester              AcademicSemester          @default(FIRST_SEMESTER)
+  
+  complaintType         String                    // "COURSE_MISMATCH", "EXCESSIVE_UNITS", "SCHEDULE_CLASH", "HEALTH_CONSTRAINT", "OTHER"
+  subject               String
+  details               String                    @db.Text
+  suggestedAdjustment   String?                   @db.Text
+  
+  status                ComplaintStatus           @default(PENDING_HOD_REVIEW)
+  hodRemarks            String?                   @db.Text
+  resolvedById          String?
+  resolvedBy            User?                     @relation("HodResolvedComplaints", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt            DateTime?
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@index([staffId])
+  @@index([departmentId])
+  @@index([status])
+  @@map("workload_complaints")
 }
 
 model Publication {

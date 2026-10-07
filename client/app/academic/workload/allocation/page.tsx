@@ -23,7 +23,17 @@ import {
   FileCheck,
   ChevronRight,
   Info,
-  X
+  X,
+  MessageSquarePlus,
+  MessageSquare,
+  Award,
+  UserCheck,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Clock3,
+  Building,
+  Briefcase
 } from 'lucide-react';
 
 interface Faculty {
@@ -38,7 +48,9 @@ interface Department {
   name: string;
   facultyId: string;
   faculty: { id: string; name: string };
-  hod?: { name: string; staffProfile?: { staffId: string; surname: string; otherNames: string } };
+  hod?: { id: string; name: string; email: string; staffProfile?: { staffId: string; surname: string; otherNames: string; rank?: string } };
+  examOfficer?: { id: string; name: string; email: string; staffProfile?: { staffId: string; surname: string; otherNames: string } };
+  departmentAdmin?: { id: string; name: string; email: string; staffProfile?: { staffId: string; surname: string; otherNames: string } };
   _count?: { programmes: number; courses: number };
 }
 
@@ -115,6 +127,29 @@ interface StaffMatrixItem {
   allocations: AllocationItem[];
 }
 
+interface WorkloadComplaint {
+  id: string;
+  staffId: string;
+  departmentId: string;
+  allocationId?: string | null;
+  courseId?: string | null;
+  session: string;
+  semester: string;
+  complaintType: string;
+  subject: string;
+  details: string;
+  suggestedAdjustment?: string | null;
+  status: 'PENDING_HOD_REVIEW' | 'UNDER_REVIEW' | 'RESOLVED_ADJUSTED' | 'REJECTED_MAINTAINED';
+  hodRemarks?: string | null;
+  resolvedById?: string | null;
+  resolvedBy?: { id: string; name: string; email: string };
+  resolvedAt?: string | null;
+  createdAt: string;
+  staff?: { id: string; name: string; email: string; staffProfile?: { staffId: string; surname: string; otherNames: string; rank: string; currentAcademicRank?: string } };
+  course?: { id: string; courseCode: string; courseTitle: string; creditUnits: number };
+  department?: { id: string; name: string };
+}
+
 export default function CourseAllocationMatrixPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -137,6 +172,9 @@ export default function CourseAllocationMatrixPage() {
   const [selectedSession, setSelectedSession] = useState<string>('2026/2027');
   const [selectedSemester, setSelectedSemester] = useState<string>('FIRST_SEMESTER');
 
+  // Active View Tab: 'matrix' | 'complaints'
+  const [activeTab, setActiveTab] = useState<'matrix' | 'complaints'>('matrix');
+
   // Matrix Data & Status
   const [loading, setLoading] = useState<boolean>(true);
   const [matrixData, setMatrixData] = useState<{
@@ -145,6 +183,15 @@ export default function CourseAllocationMatrixPage() {
     statistics?: any;
     staffMatrix: StaffMatrixItem[];
   }>({ staffMatrix: [] });
+
+  // Complaints State
+  const [complaints, setComplaints] = useState<WorkloadComplaint[]>([]);
+  const [complaintsLoading, setComplaintsLoading] = useState<boolean>(false);
+  const [selectedComplaint, setSelectedComplaint] = useState<WorkloadComplaint | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState<boolean>(false);
+  const [reviewDecision, setReviewDecision] = useState<'RESOLVED_ADJUSTED' | 'REJECTED_MAINTAINED' | 'UNDER_REVIEW'>('RESOLVED_ADJUSTED');
+  const [reviewRemarks, setReviewRemarks] = useState<string>('');
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
 
   // Pagination for Allocations Ledger
   const [page, setPage] = useState<number>(1);
@@ -214,8 +261,25 @@ export default function CourseAllocationMatrixPage() {
     }
   };
 
+  // 3. Fetch Departmental Complaints
+  const fetchComplaints = async () => {
+    if (!selectedDepartment) return;
+    setComplaintsLoading(true);
+    try {
+      const res = await api.get('/api/v1/academic/workload/complaints', {
+        params: { departmentId: selectedDepartment, session: selectedSession, semester: selectedSemester },
+      });
+      setComplaints(res.data || []);
+    } catch (err) {
+      console.error('Error fetching departmental complaints:', err);
+    } finally {
+      setComplaintsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchMatrix();
+    fetchComplaints();
   }, [selectedDepartment, selectedSession, selectedSemester]);
 
   // Handle Faculty Switch
@@ -228,10 +292,14 @@ export default function CourseAllocationMatrixPage() {
   };
 
   // Open Allocation Modal for a Staff
-  const handleOpenAllocateModal = (staff: StaffMatrixItem) => {
+  const handleOpenAllocateModal = (staff: StaffMatrixItem, prefilledCourseId?: string) => {
     setModalStaff(staff);
     const deptCourses = courses.filter((c) => c.departmentId === selectedDepartment && c.semester === selectedSemester);
-    if (deptCourses.length > 0) {
+    if (prefilledCourseId) {
+      setSelectedCourseId(prefilledCourseId);
+      const sel = courses.find(c => c.id === prefilledCourseId);
+      if (sel) setAssignedCU(sel.creditUnits);
+    } else if (deptCourses.length > 0) {
       setSelectedCourseId(deptCourses[0].id);
       setAssignedCU(deptCourses[0].creditUnits);
     } else if (courses.length > 0) {
@@ -264,7 +332,7 @@ export default function CourseAllocationMatrixPage() {
         courseMaterialCreditUnits: courseMaterialCU,
       });
 
-      setFeedback({ type: 'success', message: 'Course successfully allocated with updated ETE!' });
+      setFeedback({ type: 'success', message: 'Course successfully allocated with updated ETE calculation!' });
       setShowAllocateModal(false);
       fetchMatrix();
     } catch (err: any) {
@@ -307,6 +375,46 @@ export default function CourseAllocationMatrixPage() {
     }
   };
 
+  // Review Complaint Action
+  const handleOpenReviewModal = (complaint: WorkloadComplaint) => {
+    setSelectedComplaint(complaint);
+    setReviewDecision('RESOLVED_ADJUSTED');
+    setReviewRemarks(complaint.hodRemarks || '');
+    setShowReviewModal(true);
+  };
+
+  const handleSaveComplaintReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComplaint) return;
+
+    setSubmittingReview(true);
+    try {
+      await api.put(`/api/v1/academic/workload/complaints/${selectedComplaint.id}/review`, {
+        decision: reviewDecision,
+        hodRemarks: reviewRemarks.trim() || 'Reviewed by Head of Department (HOD)',
+      });
+
+      setFeedback({
+        type: 'success',
+        message: `Allocation complaint has been ${
+          reviewDecision === 'RESOLVED_ADJUSTED'
+            ? 'resolved & adjusted'
+            : reviewDecision === 'REJECTED_MAINTAINED'
+            ? 'reviewed and maintained'
+            : 'placed under review'
+        }. Lecturer has been notified.`,
+      });
+      setShowReviewModal(false);
+      fetchComplaints();
+      fetchMatrix();
+    } catch (err: any) {
+      console.error('Error reviewing complaint:', err);
+      setFeedback({ type: 'error', message: err?.response?.data?.message || 'Failed to review complaint.' });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   // Export CSV
   const handleExportCSV = () => {
     const url = `${api.defaults.baseURL || ''}/api/v1/academic/workload/export-audit?session=${selectedSession}&semester=${selectedSemester}&format=csv`;
@@ -315,6 +423,14 @@ export default function CourseAllocationMatrixPage() {
 
   // Filtered Programmes for the current department
   const filteredProgrammes = programmes.filter((p) => p.departmentId === selectedDepartment);
+
+  // Active department record
+  const currentDept = departments.find((d) => d.id === selectedDepartment);
+
+  // Pending complaints count
+  const pendingComplaintsCount = complaints.filter(
+    (c) => c.status === 'PENDING_HOD_REVIEW' || c.status === 'UNDER_REVIEW'
+  ).length;
 
   // Flattened active allocations for table
   const allDepartmentAllocations = matrixData.staffMatrix.flatMap((staff) =>
@@ -350,7 +466,7 @@ export default function CourseAllocationMatrixPage() {
               HOD Course Allocation &amp; Staff Capacity Matrix
             </h1>
             <p className="text-emerald-100 text-xs md:text-sm max-w-2xl font-medium">
-              Statutory credit unit budgeting, ODL student cohort weighting, and maker-checker departmental workload ratification.
+              Departmental academic leadership, statutory course allocation, lecturer complaint reviews, and maker-checker workload submission to Dean.
             </p>
           </div>
 
@@ -370,6 +486,75 @@ export default function CourseAllocationMatrixPage() {
               <Send className="w-4 h-4" />
               Submit Docket to Dean
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Department Governance Hierarchy Cards */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+            <Building className="w-4 h-4 text-[#006533]" />
+            Departmental Administrative &amp; Academic Leadership Hierarchy
+          </div>
+          <span className="text-xs font-bold text-slate-500">
+            {currentDept?.name || 'Department'} ({currentDept?.id})
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          {/* HOD Card */}
+          <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#006533] text-white flex items-center justify-center font-black shrink-0">
+              <Award className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-[#006533] uppercase tracking-wider">
+                Head of Department (HOD)
+              </div>
+              <div className="font-black text-slate-900">
+                {currentDept?.hod?.name || 'Designated HOD'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentDept?.hod?.email || 'Leads course allocation & complaint reviews'}
+              </div>
+            </div>
+          </div>
+
+          {/* Exam Officer Card */}
+          <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-700 text-white flex items-center justify-center font-black shrink-0">
+              <FileCheck className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">
+                Departmental Exam Officer
+              </div>
+              <div className="font-black text-slate-900">
+                {currentDept?.examOfficer?.name || 'Assigned Exam Officer'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentDept?.examOfficer?.email || 'Coordinates exam moderation & schedules'}
+              </div>
+            </div>
+          </div>
+
+          {/* Department Admin Card */}
+          <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200/80 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-700 text-white flex items-center justify-center font-black shrink-0">
+              <Briefcase className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider">
+                Department Administrative Officer
+              </div>
+              <div className="font-black text-slate-900">
+                {currentDept?.departmentAdmin?.name || 'Departmental Secretary'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentDept?.departmentAdmin?.email || 'Maintains records & student folios'}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -401,12 +586,12 @@ export default function CourseAllocationMatrixPage() {
             Academic Taxonomy &amp; Term Scoping
           </div>
           <button
-            onClick={fetchMatrix}
+            onClick={() => { fetchMatrix(); fetchComplaints(); }}
             disabled={loading}
             className="text-xs font-bold text-slate-600 hover:text-[#006533] flex items-center gap-1.5 transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Matrix
+            Refresh Matrix &amp; Complaints
           </button>
         </div>
 
@@ -501,273 +686,495 @@ export default function CourseAllocationMatrixPage() {
         </div>
       </div>
 
-      {/* Summary Metrics Bar */}
-      {matrixData.statistics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <span>Department Staff</span>
-              <Users className="w-4 h-4 text-emerald-600" />
+      {/* Tabs Switcher */}
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
+        <button
+          onClick={() => setActiveTab('matrix')}
+          className={`px-4 py-2 text-xs font-extrabold rounded-xl transition flex items-center gap-2 ${
+            activeTab === 'matrix'
+              ? 'bg-[#006533] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Course Allocation &amp; Capacity Matrix
+        </button>
+
+        <button
+          onClick={() => setActiveTab('complaints')}
+          className={`px-4 py-2 text-xs font-extrabold rounded-xl transition flex items-center gap-2 ${
+            activeTab === 'complaints'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          Lecturer Allocation Complaints
+          {pendingComplaintsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
+              {pendingComplaintsCount} Pending
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 1: ALLOCATION MATRIX */}
+      {activeTab === 'matrix' && (
+        <>
+          {/* Summary Metrics Bar */}
+          {matrixData.statistics && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
+                  <span>Department Staff</span>
+                  <Users className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900">{matrixData.statistics.totalStaff}</div>
+                <div className="text-[11px] text-slate-400 font-medium mt-1">Academic Cadre Personnel</div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
+                  <span>Allocated Courses</span>
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900">{matrixData.statistics.totalAllocations}</div>
+                <div className="text-[11px] text-slate-400 font-medium mt-1">Active Course Units</div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
+                  <span>Overload Alerts</span>
+                  <AlertTriangle className="w-4 h-4 text-rose-500" />
+                </div>
+                <div className="text-2xl font-black text-rose-600">{matrixData.statistics.totalOverloadCount}</div>
+                <div className="text-[11px] text-rose-500 font-semibold mt-1">Exceeds cadre ceiling</div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
+                  <span>NUC Compliance</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-emerald-700">{matrixData.statistics.complianceRate}%</div>
+                <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+                  {matrixData.statistics.totalCompliantCount} of {matrixData.statistics.totalStaff} within norms
+                </div>
+              </div>
             </div>
-            <div className="text-2xl font-black text-slate-900">{matrixData.statistics.totalStaff}</div>
-            <div className="text-[11px] text-slate-400 font-medium mt-1">Academic Cadre Personnel</div>
+          )}
+
+          {/* Staff Capacity Cards & Meters */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base md:text-lg font-black text-slate-900 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-[#006533]" />
+                Academic Cadre Capacity &amp; Allocation Ledger
+              </h2>
+              <span className="text-xs font-semibold text-slate-500">
+                {matrixData.staffMatrix.length} Academic Staff Registered
+              </span>
+            </div>
+
+            {loading ? (
+              <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80">
+                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-500">Evaluating departmental workload metrics...</p>
+              </div>
+            ) : matrixData.staffMatrix.length === 0 ? (
+              <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80">
+                <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">No academic staff members found in this department.</p>
+                <p className="text-xs text-slate-400 mt-1">Select another department or assign academic staff.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {matrixData.staffMatrix.map((staff) => {
+                  const maxCU = staff.effectivePermissibleMaxCU || 10;
+                  const totalCU = staff.totalAssignedCreditUnits + staff.totalCourseMaterialCreditUnits;
+                  const percentage = Math.min(100, Math.round((totalCU / (maxCU || 1)) * 100));
+
+                  return (
+                    <div
+                      key={staff.staffProfileId}
+                      className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition space-y-4 flex flex-col justify-between"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 leading-tight">{staff.staffName}</h3>
+                            <p className="text-[11px] font-bold text-slate-400">{staff.staffId}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold uppercase tracking-wide">
+                            {staff.academicRank}
+                          </span>
+                        </div>
+
+                        {staff.administrativeRole && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-bold">
+                            <Info className="w-3 h-3" />
+                            {staff.administrativeRole} ({staff.administrativeRebateCU} CU Relief)
+                          </div>
+                        )}
+
+                        {/* Capacity Progress Meter */}
+                        <div className="space-y-1.5 pt-2">
+                          <div className="flex items-center justify-between text-xs font-black">
+                            <span className="text-slate-600">
+                              {totalCU.toFixed(1)} / {maxCU} CU
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                                staff.statusColor === 'emerald'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : staff.statusColor === 'red'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {staff.statusLabel}
+                            </span>
+                          </div>
+
+                          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 rounded-full ${
+                                staff.statusColor === 'emerald'
+                                  ? 'bg-emerald-500'
+                                  : staff.statusColor === 'red'
+                                  ? 'bg-rose-500'
+                                  : 'bg-amber-500'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+                            <span>Min: {staff.effectiveRequiredMinCU} CU</span>
+                            <span>Max: {maxCU} CU</span>
+                          </div>
+                        </div>
+
+                        {/* Weekly Contact & ETE Stats */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
+                          <div>
+                            <span className="text-slate-400 font-bold block">Contact Hours</span>
+                            <span className="text-slate-800 font-black">
+                              {staff.totalWeeklyContactHours.toFixed(1)} hrs/wk (Max {staff.cadreMaxContactHours})
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-bold block">Effective Teaching Eq.</span>
+                            <span className="text-emerald-700 font-black">{staff.totalEffectiveTeachingEquivalent.toFixed(1)} ETE</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Allocate Action */}
+                      <div className="pt-2">
+                        <button
+                          onClick={() => handleOpenAllocateModal(staff)}
+                          className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#006533] rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Allocate Course Unit
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <span>Allocated Courses</span>
-              <BookOpen className="w-4 h-4 text-blue-600" />
+          {/* Active Allocations Ledger Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm md:text-base font-black text-slate-900 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#006533]" />
+                  Allocated Courses &amp; Teaching Schedule Breakdown
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  Verified allocation docket for {selectedSession} • {selectedSemester.replace('_', ' ')}
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">
+                Total {allDepartmentAllocations.length} Allocations
+              </span>
             </div>
-            <div className="text-2xl font-black text-slate-900">{matrixData.statistics.totalAllocations}</div>
-            <div className="text-[11px] text-slate-400 font-medium mt-1">Active Course Units</div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider">
+                    <th className="py-3 px-4">Course Code</th>
+                    <th className="py-3 px-4">Course Title</th>
+                    <th className="py-3 px-4">Lecturer</th>
+                    <th className="py-3 px-4">Cadre</th>
+                    <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4 text-center">CU</th>
+                    <th className="py-3 px-4 text-center">Cohort</th>
+                    <th className="py-3 px-4 text-center">Contact Hrs</th>
+                    <th className="py-3 px-4 text-center">ETE</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                  {paginatedAllocations.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="py-10 text-center text-slate-400 font-bold">
+                        No course allocations recorded for this semester yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedAllocations.map((alloc, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/60 transition">
+                        <td className="py-3 px-4 font-black text-slate-900">{alloc.courseCode}</td>
+                        <td className="py-3 px-4 max-w-xs truncate">{alloc.courseTitle}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{alloc.staffName}</td>
+                        <td className="py-3 px-4 text-[11px] text-slate-500 font-semibold">{alloc.academicRank}</td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold">
+                            {alloc.role.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-black">{alloc.assignedCreditUnits}</td>
+                        <td className="py-3 px-4 text-center">{alloc.enrolledStudentsCount}</td>
+                        <td className="py-3 px-4 text-center font-bold text-slate-800">{alloc.effectiveContactHoursWeekly}h</td>
+                        <td className="py-3 px-4 text-center font-black text-emerald-700">{alloc.effectiveTeachingEquivalent}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              alloc.status === 'RATIFIED_ACADEMIC_PLANNING'
+                                ? 'bg-purple-100 text-purple-800'
+                                : alloc.status === 'APPROVED_BY_DEAN'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : alloc.status === 'SUBMITTED_BY_HOD'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {alloc.status.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => alloc.id && handleDeleteAllocation(alloc.id, alloc.courseCode)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50"
+                            title="Revoke Allocation"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {allDepartmentAllocations.length > pageSize && (
+              <Pagination
+                currentPage={page}
+                totalPages={Math.ceil(allDepartmentAllocations.length / pageSize)}
+                totalItems={allDepartmentAllocations.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* TAB 2: LECTURER ALLOCATION COMPLAINTS */}
+      {activeTab === 'complaints' && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-amber-600" />
+                Lecturer Course Allocation Complaints &amp; Recourse Reviews
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Lecturers in this department can submit formal complaints regarding unsuitable course allocations or credit overload. Review, remark, and adjust allocations below.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold self-start sm:self-auto">
+              {complaints.length} Total Complaints
+            </span>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <span>Overload Alerts</span>
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
+          {complaintsLoading ? (
+            <div className="py-16 text-center">
+              <RefreshCw className="w-8 h-8 text-amber-600 animate-spin mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-500">Loading lecturer complaints...</p>
             </div>
-            <div className="text-2xl font-black text-rose-600">{matrixData.statistics.totalOverloadCount}</div>
-            <div className="text-[11px] text-rose-500 font-semibold mt-1">Exceeds cadre ceiling</div>
-          </div>
+          ) : complaints.length === 0 ? (
+            <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-800">No Allocation Complaints on File</p>
+              <p className="text-xs text-slate-400 mt-1">All allocated courses are currently accepted without dispute.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {complaints.map((c) => (
+                <div key={c.id} className="py-4 space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-black text-sm text-slate-900">{c.subject}</span>
+                        {c.course && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-bold text-xs">
+                            {c.course.courseCode} ({c.course.courseTitle})
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 font-bold text-[10px] border border-amber-200">
+                          {c.complaintType.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-600 font-semibold flex items-center gap-2">
+                        <span>
+                          Lecturer: <strong>{c.staff?.name}</strong> ({c.staff?.staffProfile?.currentAcademicRank || c.staff?.staffProfile?.rank || 'Lecturer'})
+                        </span>
+                        <span>•</span>
+                        <span>Submitted: {new Date(c.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <span>NUC Compliance</span>
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <div className="flex items-center gap-3 self-start md:self-auto">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 ${
+                          c.status === 'RESOLVED_ADJUSTED'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : c.status === 'REJECTED_MAINTAINED'
+                            ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                            : c.status === 'UNDER_REVIEW'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}
+                      >
+                        {c.status === 'RESOLVED_ADJUSTED' && <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />}
+                        {c.status === 'REJECTED_MAINTAINED' && <XCircle className="w-3.5 h-3.5 text-slate-500" />}
+                        {c.status === 'UNDER_REVIEW' && <Clock3 className="w-3.5 h-3.5 text-blue-600" />}
+                        {c.status === 'PENDING_HOD_REVIEW' && <Clock3 className="w-3.5 h-3.5 text-amber-600" />}
+                        {c.status.replace(/_/g, ' ')}
+                      </span>
+
+                      <button
+                        onClick={() => handleOpenReviewModal(c)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                      >
+                        Review &amp; Action
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
+                    <div>
+                      <strong className="text-slate-900 font-extrabold">Lecturer&apos;s Detailed Grounds:</strong>{' '}
+                      <span className="text-slate-700">{c.details}</span>
+                    </div>
+                    {c.suggestedAdjustment && (
+                      <div>
+                        <strong className="text-emerald-800 font-extrabold">Suggested Course / Solution:</strong>{' '}
+                        <span className="text-emerald-700 font-medium">{c.suggestedAdjustment}</span>
+                      </div>
+                    )}
+                    {c.hodRemarks && (
+                      <div className="mt-2 pt-2 border-t border-slate-200 text-slate-800">
+                        <strong className="text-slate-900 font-extrabold">HOD Review Remarks:</strong>{' '}
+                        <span>{c.hodRemarks}</span>
+                        {c.resolvedBy && <span className="text-slate-400"> (by {c.resolvedBy.name})</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="text-2xl font-black text-emerald-700">{matrixData.statistics.complianceRate}%</div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-              {matrixData.statistics.totalCompliantCount} of {matrixData.statistics.totalStaff} within norms
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Staff Capacity Cards & Meters */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base md:text-lg font-black text-slate-900 flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-[#006533]" />
-            Academic Cadre Capacity &amp; Allocation Ledger
-          </h2>
-          <span className="text-xs font-semibold text-slate-500">
-            {matrixData.staffMatrix.length} Academic Staff Registered
-          </span>
-        </div>
+      {/* Review Complaint Modal */}
+      {showReviewModal && selectedComplaint && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-slate-900 font-black text-base">
+                <MessageSquarePlus className="w-5 h-5 text-amber-600" />
+                HOD Review: Course Allocation Complaint
+              </div>
+              <button onClick={() => setShowReviewModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        {loading ? (
-          <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80">
-            <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
-            <p className="text-xs font-bold text-slate-500">Evaluating departmental workload metrics...</p>
-          </div>
-        ) : matrixData.staffMatrix.length === 0 ? (
-          <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80">
-            <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-700">No academic staff members found in this department.</p>
-            <p className="text-xs text-slate-400 mt-1">Select another department or add academic staff.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {matrixData.staffMatrix.map((staff) => {
-              const maxCU = staff.effectivePermissibleMaxCU || 10;
-              const totalCU = staff.totalAssignedCreditUnits + staff.totalCourseMaterialCreditUnits;
-              const percentage = Math.min(100, Math.round((totalCU / (maxCU || 1)) * 100));
-
-              return (
-                <div
-                  key={staff.staffProfileId}
-                  className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition space-y-4 flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-black text-slate-900 leading-tight">{staff.staffName}</h3>
-                        <p className="text-[11px] font-bold text-slate-400">{staff.staffId}</p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold uppercase tracking-wide">
-                        {staff.academicRank}
-                      </span>
-                    </div>
-
-                    {staff.administrativeRole && (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-bold">
-                        <Info className="w-3 h-3" />
-                        {staff.administrativeRole} ({staff.administrativeRebateCU} CU Relief)
-                      </div>
-                    )}
-
-                    {/* Capacity Progress Meter */}
-                    <div className="space-y-1.5 pt-2">
-                      <div className="flex items-center justify-between text-xs font-black">
-                        <span className="text-slate-600">
-                          {totalCU.toFixed(1)} / {maxCU} CU
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
-                            staff.statusColor === 'emerald'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : staff.statusColor === 'red'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {staff.statusLabel}
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-300 rounded-full ${
-                            staff.statusColor === 'emerald'
-                              ? 'bg-emerald-500'
-                              : staff.statusColor === 'red'
-                              ? 'bg-rose-500'
-                              : 'bg-amber-500'
-                          }`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                        <span>Min: {staff.effectiveRequiredMinCU} CU</span>
-                        <span>Max: {maxCU} CU</span>
-                      </div>
-                    </div>
-
-                    {/* Weekly Contact & ETE Stats */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
-                      <div>
-                        <span className="text-slate-400 font-bold block">Contact Hours</span>
-                        <span className="text-slate-800 font-black">
-                          {staff.totalWeeklyContactHours.toFixed(1)} hrs/wk (Max {staff.cadreMaxContactHours})
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-bold block">Effective Teaching Eq.</span>
-                        <span className="text-emerald-700 font-black">{staff.totalEffectiveTeachingEquivalent.toFixed(1)} ETE</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Allocate Action */}
-                  <div className="pt-2">
-                    <button
-                      onClick={() => handleOpenAllocateModal(staff)}
-                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#006533] rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Allocate Course Unit
-                    </button>
-                  </div>
+            <form onSubmit={handleSaveComplaintReview} className="space-y-4 text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <div className="font-extrabold text-slate-900">{selectedComplaint.subject}</div>
+                <div className="text-slate-600">
+                  Lecturer: <strong className="text-slate-800">{selectedComplaint.staff?.name}</strong> •{' '}
+                  {selectedComplaint.course?.courseCode}
                 </div>
-              );
-            })}
+                <p className="text-slate-700 pt-1">{selectedComplaint.details}</p>
+                {selectedComplaint.suggestedAdjustment && (
+                  <p className="text-emerald-700 font-bold pt-1">
+                    Suggested Adjustment: {selectedComplaint.suggestedAdjustment}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800">HOD Review Decision</label>
+                <select
+                  value={reviewDecision}
+                  onChange={(e) => setReviewDecision(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="RESOLVED_ADJUSTED">✅ Allocation Adjusted &amp; Resolved (Change course/units)</option>
+                  <option value="UNDER_REVIEW">🔍 Under Review (Discuss with Departmental Committee)</option>
+                  <option value="REJECTED_MAINTAINED">⚠️ Maintain Current Allocation (Cannot reassign)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800">Official HOD Remarks / Directions *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={reviewRemarks}
+                  onChange={(e) => setReviewRemarks(e.target.value)}
+                  placeholder="Enter explanation of decision, reallocated course code, or committee guidance..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingReview}
+                  className="px-5 py-2.5 bg-[#006533] hover:bg-emerald-800 text-white text-xs font-black rounded-xl shadow-md transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {submittingReview && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  Submit Decision
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
-
-      {/* Active Allocations Ledger Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm md:text-base font-black text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#006533]" />
-              Allocated Courses &amp; Teaching Schedule Breakdown
-            </h3>
-            <p className="text-xs text-slate-400 font-medium">
-              Verified allocation docket for {selectedSession} • {selectedSemester.replace('_', ' ')}
-            </p>
-          </div>
-          <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">
-            Total {allDepartmentAllocations.length} Allocations
-          </span>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider">
-                <th className="py-3 px-4">Course Code</th>
-                <th className="py-3 px-4">Course Title</th>
-                <th className="py-3 px-4">Lecturer</th>
-                <th className="py-3 px-4">Cadre</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4 text-center">CU</th>
-                <th className="py-3 px-4 text-center">Cohort</th>
-                <th className="py-3 px-4 text-center">Contact Hrs</th>
-                <th className="py-3 px-4 text-center">ETE</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-              {paginatedAllocations.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="py-10 text-center text-slate-400 font-bold">
-                    No course allocations recorded for this semester yet.
-                  </td>
-                </tr>
-              ) : (
-                paginatedAllocations.map((alloc, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/60 transition">
-                    <td className="py-3 px-4 font-black text-slate-900">{alloc.courseCode}</td>
-                    <td className="py-3 px-4 max-w-xs truncate">{alloc.courseTitle}</td>
-                    <td className="py-3 px-4 font-bold text-slate-900">{alloc.staffName}</td>
-                    <td className="py-3 px-4 text-[11px] text-slate-500 font-semibold">{alloc.academicRank}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold">
-                        {alloc.role.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center font-black">{alloc.assignedCreditUnits}</td>
-                    <td className="py-3 px-4 text-center">{alloc.enrolledStudentsCount}</td>
-                    <td className="py-3 px-4 text-center font-bold text-slate-800">{alloc.effectiveContactHoursWeekly}h</td>
-                    <td className="py-3 px-4 text-center font-black text-emerald-700">{alloc.effectiveTeachingEquivalent}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                          alloc.status === 'RATIFIED_ACADEMIC_PLANNING'
-                            ? 'bg-purple-100 text-purple-800'
-                            : alloc.status === 'APPROVED_BY_DEAN'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : alloc.status === 'SUBMITTED_BY_HOD'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {alloc.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => alloc.id && handleDeleteAllocation(alloc.id, alloc.courseCode)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50"
-                        title="Revoke Allocation"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {allDepartmentAllocations.length > pageSize && (
-          <Pagination
-            currentPage={page}
-            totalPages={Math.ceil(allDepartmentAllocations.length / pageSize)}
-            totalItems={allDepartmentAllocations.length}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setPage(1);
-            }}
-          />
-        )}
-      </div>
+      )}
 
       {/* Course Allocation Modal */}
       {showAllocateModal && modalStaff && (

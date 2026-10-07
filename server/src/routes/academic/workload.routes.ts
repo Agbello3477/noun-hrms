@@ -13,6 +13,12 @@ import {
   authorizeDepartmentalDocket,
   ratifyDepartmentalDocket,
   exportWorkloadAuditReport,
+  getFacultyHierarchy,
+  updateFacultyOfficers,
+  updateDepartmentOfficers,
+  submitWorkloadComplaint,
+  getWorkloadComplaints,
+  reviewWorkloadComplaint,
 } from '../../controllers/academicWorkload.controller';
 import { verifyToken, requireRole } from '../../middleware/auth.middleware';
 import { Role } from '@prisma/client';
@@ -21,9 +27,26 @@ const router = Router();
 
 // Public / Read access to academic structure with authentication
 router.get('/faculties', verifyToken, getFaculties);
+router.get('/faculties/hierarchy', verifyToken, getFacultyHierarchy);
+router.get('/hierarchy', verifyToken, getFacultyHierarchy);
 router.get('/departments', verifyToken, getDepartments);
 router.get('/programmes', verifyToken, getAcademicProgrammes);
 router.get('/courses', verifyToken, getAcademicCourses);
+
+// Faculty & Department Officer Appointments (Dean, Faculty Officer, Secretary, HOD, Exam Officer, Department Admin)
+router.put(
+  '/faculties/:id/officers',
+  verifyToken,
+  requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
+  updateFacultyOfficers
+);
+
+router.put(
+  '/departments/:id/officers',
+  verifyToken,
+  requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.UNIT_HEAD, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
+  updateDepartmentOfficers
+);
 
 // Workload Dossier for staff
 router.get('/workload/staff/:staffProfileId', verifyToken, getStaffWorkloadDossier);
@@ -56,6 +79,26 @@ router.delete(
   verifyToken,
   requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.UNIT_HEAD, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
   revokeWorkloadAllocation
+);
+
+// Course Allocation Complaints & Review Subsystem (Lecturer -> HOD -> Dean)
+router.post(
+  '/workload/complaints',
+  verifyToken,
+  submitWorkloadComplaint
+);
+
+router.get(
+  '/workload/complaints',
+  verifyToken,
+  getWorkloadComplaints
+);
+
+router.put(
+  '/workload/complaints/:id/review',
+  verifyToken,
+  requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.UNIT_HEAD, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
+  reviewWorkloadComplaint
 );
 
 // Maker-Checker Docket Workflow

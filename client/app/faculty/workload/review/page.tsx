@@ -23,15 +23,22 @@ import {
   ChevronUp,
   X,
   RotateCcw,
-  Check
+  Check,
+  Award,
+  Briefcase,
+  UserCheck,
+  Settings,
+  MessageSquare
 } from 'lucide-react';
 
 interface Faculty {
   id: string;
   facultyCode: string;
   name: string;
-  dean?: { name: string; email: string };
-  departments: { id: string; name: string }[];
+  dean?: { id?: string; name: string; email: string };
+  facultyOfficer?: { id?: string; name: string; email: string };
+  facultySecretary?: { id?: string; name: string; email: string };
+  departments: { id: string; name: string; code?: string }[];
 }
 
 interface DepartmentMatrix {
@@ -40,6 +47,8 @@ interface DepartmentMatrix {
     name: string;
     faculty: any;
     hod?: any;
+    examOfficer?: any;
+    departmentAdmin?: any;
     programmesCount: number;
     coursesCount: number;
   };
@@ -84,6 +93,13 @@ export default function DeanWorkloadReviewPage() {
   const [authRemarks, setAuthRemarks] = useState<string>('');
   const [submittingAuth, setSubmittingAuth] = useState<boolean>(false);
 
+  // Officers Management Modal
+  const [showOfficersModal, setShowOfficersModal] = useState<boolean>(false);
+  const [submittingOfficers, setSubmittingOfficers] = useState<boolean>(false);
+  const [facultyOfficerId, setFacultyOfficerId] = useState<string>('');
+  const [facultySecretaryId, setFacultySecretaryId] = useState<string>('');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+
   // Pagination for all faculty allocations
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -91,19 +107,20 @@ export default function DeanWorkloadReviewPage() {
   // Feedback Alerts
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // 1. Initial Load of Faculties
-  useEffect(() => {
-    async function loadFaculties() {
-      try {
-        const res = await api.get('/api/v1/academic/faculties');
-        setFaculties(res.data || []);
-        if (res.data?.length > 0) {
-          setSelectedFacultyId(res.data[0].id);
-        }
-      } catch (err) {
-        console.error('Error fetching faculties:', err);
+  // 1. Initial Load of Faculties & Hierarchy
+  const loadFaculties = async () => {
+    try {
+      const res = await api.get('/api/v1/academic/faculties/hierarchy');
+      setFaculties(res.data || []);
+      if (res.data?.length > 0 && !selectedFacultyId) {
+        setSelectedFacultyId(res.data[0].id);
       }
+    } catch (err) {
+      console.error('Error fetching faculties hierarchy:', err);
     }
+  };
+
+  useEffect(() => {
     loadFaculties();
   }, []);
 
@@ -113,7 +130,6 @@ export default function DeanWorkloadReviewPage() {
     setLoading(true);
     setFeedback(null);
     try {
-      // Find all departments for this faculty
       const deptsRes = await api.get('/api/v1/academic/departments', {
         params: { facultyId: selectedFacultyId },
       });
@@ -125,7 +141,14 @@ export default function DeanWorkloadReviewPage() {
             const mRes = await api.get(`/api/v1/academic/workload/department/${d.id}`, {
               params: { session: selectedSession, semester: selectedSemester },
             });
-            return mRes.data as DepartmentMatrix;
+            return {
+              ...mRes.data,
+              department: {
+                ...mRes.data.department,
+                examOfficer: d.examOfficer,
+                departmentAdmin: d.departmentAdmin,
+              }
+            } as DepartmentMatrix;
           } catch {
             return null;
           }
@@ -191,6 +214,40 @@ export default function DeanWorkloadReviewPage() {
     }
   };
 
+  // Open Officers Setup Modal
+  const handleOpenOfficersModal = async () => {
+    try {
+      const uRes = await api.get('/api/users');
+      setAllUsers(uRes.data || []);
+      const current = faculties.find(f => f.id === selectedFacultyId);
+      setFacultyOfficerId(current?.facultyOfficer?.id || '');
+      setFacultySecretaryId(current?.facultySecretary?.id || '');
+      setShowOfficersModal(true);
+    } catch (err) {
+      console.error('Error loading users for officer appointment:', err);
+    }
+  };
+
+  const handleSaveFacultyOfficers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFacultyId) return;
+    setSubmittingOfficers(true);
+    try {
+      await api.put(`/api/v1/academic/faculties/${selectedFacultyId}/officers`, {
+        facultyOfficerId: facultyOfficerId || null,
+        facultySecretaryId: facultySecretaryId || null
+      });
+      setFeedback({ type: 'success', message: 'Faculty Administrative Officers updated successfully!' });
+      setShowOfficersModal(false);
+      loadFaculties();
+    } catch (err: any) {
+      console.error('Error saving faculty officers:', err);
+      setFeedback({ type: 'error', message: err?.response?.data?.message || 'Failed to update faculty officers.' });
+    } finally {
+      setSubmittingOfficers(false);
+    }
+  };
+
   // Export CSV
   const handleExportCSV = () => {
     const url = `${api.defaults.baseURL || ''}/api/v1/academic/workload/export-audit?session=${selectedSession}&semester=${selectedSemester}&format=csv`;
@@ -240,11 +297,18 @@ export default function DeanWorkloadReviewPage() {
               Faculty Teaching Workload &amp; Accreditation Cockpit
             </h1>
             <p className="text-slate-300 text-xs md:text-sm max-w-2xl font-medium">
-              Authoritative review of departmental course unit distributions, statutory overload caps, and maker-checker sign-off.
+              Faculty governance hierarchy, authoritative review of departmental course unit distributions, statutory overload caps, and maker-checker sign-off.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleOpenOfficersModal}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
+            >
+              <Settings className="w-4 h-4" />
+              Faculty Officers
+            </button>
             <button
               onClick={handleExportCSV}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white rounded-xl text-xs font-bold transition shadow-sm"
@@ -252,6 +316,75 @@ export default function DeanWorkloadReviewPage() {
               <Download className="w-4 h-4" />
               Download NUC Audit Matrix
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Faculty Governance Leadership Hierarchy */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+            <Building2 className="w-4 h-4 text-indigo-600" />
+            Faculty Governance &amp; Administration Structure
+          </div>
+          <span className="text-xs font-bold text-slate-500">
+            {currentFaculty?.name || 'Faculty'} ({currentFaculty?.facultyCode})
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          {/* Dean Card */}
+          <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-900 text-white flex items-center justify-center font-black shrink-0">
+              <Award className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-wider">
+                Dean of Faculty
+              </div>
+              <div className="font-black text-slate-900 text-sm">
+                {currentFaculty?.dean?.name || 'Assigned Dean of Faculty'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentFaculty?.dean?.email || 'Executive Academic Head & Approver'}
+              </div>
+            </div>
+          </div>
+
+          {/* Faculty Officer (Head of Admin) Card */}
+          <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200/80 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#006533] text-white flex items-center justify-center font-black shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-[#006533] uppercase tracking-wider">
+                Faculty Officer (Head of Admin)
+              </div>
+              <div className="font-black text-slate-900 text-sm">
+                {currentFaculty?.facultyOfficer?.name || 'Faculty Officer'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentFaculty?.facultyOfficer?.email || 'Principal Administrative Officer'}
+              </div>
+            </div>
+          </div>
+
+          {/* Faculty Secretary Card */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/80 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center font-black shrink-0">
+              <Briefcase className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                Faculty Secretary
+              </div>
+              <div className="font-black text-slate-900 text-sm">
+                {currentFaculty?.facultySecretary?.name || 'Faculty Secretary'}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                {currentFaculty?.facultySecretary?.email || 'Faculty Board Secretariat'}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -370,7 +503,7 @@ export default function DeanWorkloadReviewPage() {
             <BookOpen className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-black text-slate-900">{totalAllocations}</div>
-          <div className="text-[11px] text-slate-400 font-medium mt-1">Allocated Allocations</div>
+          <div className="text-[11px] text-slate-400 font-medium mt-1">Allocated Units</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
@@ -396,7 +529,7 @@ export default function DeanWorkloadReviewPage() {
       <div className="space-y-4">
         <h2 className="text-base md:text-lg font-black text-slate-900 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-indigo-600" />
-          Departmental Workload Dockets &amp; Authorization Queue
+          Departmental Leadership, Workload Dockets &amp; Authorization Queue
         </h2>
 
         {loading ? (
@@ -437,8 +570,8 @@ export default function DeanWorkloadReviewPage() {
                           {dm.overallDocketStatus.replace(/_/g, ' ')}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 font-semibold">
-                        HOD: {dm.department.hod?.name || 'Assigned Head of Department'} • {dm.statistics.totalStaff} Staff • {dm.statistics.totalAllocations} Course Allocations
+                      <p className="text-xs text-slate-600 font-semibold">
+                        HOD: <strong className="text-slate-900">{dm.department.hod?.name || 'Assigned HOD'}</strong> • Exam Officer: <strong className="text-slate-800">{dm.department.examOfficer?.name || 'N/A'}</strong> • {dm.statistics.totalStaff} Lecturers • {dm.statistics.totalAllocations} Course Allocations
                       </p>
                     </div>
 
@@ -730,6 +863,85 @@ export default function DeanWorkloadReviewPage() {
                 {authAction === 'APPROVE' ? 'Authorize Department Docket' : 'Confirm Return to HOD'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Faculty Officers Appointment Modal */}
+      {showOfficersModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-slate-900 font-black text-base">
+                <Settings className="w-5 h-5 text-indigo-600" />
+                Configure Faculty Administrative Officers
+              </div>
+              <button onClick={() => setShowOfficersModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFacultyOfficers} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-slate-800">
+                  Faculty Officer (Head of Administration)
+                </label>
+                <select
+                  value={facultyOfficerId}
+                  onChange={(e) => setFacultyOfficerId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">-- No Designated Faculty Officer --</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email}) - {u.role}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  Assigned as the principal administrative officer and head of the faculty secretariat.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-slate-800">
+                  Faculty Secretary
+                </label>
+                <select
+                  value={facultySecretaryId}
+                  onChange={(e) => setFacultySecretaryId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">-- No Designated Faculty Secretary --</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email}) - {u.role}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  Coordinates faculty board minutes, meeting agendas, and general administrative files.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowOfficersModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingOfficers}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {submittingOfficers && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  Save Appointments
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { AcademicWorkloadEngine } from '../services/AcademicWorkloadEngine';
 import { AuditService } from '../services/audit.service';
+import { notifyUser } from './notification.controller';
 import { Prisma } from '@prisma/client';
 
 interface AuthRequest extends Request {
@@ -935,3 +936,539 @@ export const exportWorkloadAuditReport = async (req: Request, res: Response) => 
     res.status(500).json({ message: 'Error exporting audit report', error: error.message });
   }
 };
+
+/**
+ * 15. Get Complete Faculty Hierarchy
+ * GET /api/v1/academic/faculties/hierarchy
+ * Returns full tree: Deans, Faculty Officers, Faculty Secretaries, Departments, HODs, Exam Officers, Department Admins, Lecturers
+ */
+export const getFacultyHierarchy = async (req: Request, res: Response) => {
+  try {
+    const { facultyId } = req.query;
+    const whereClause: any = {};
+    if (facultyId && typeof facultyId === 'string') {
+      whereClause.id = facultyId;
+    }
+
+    const faculties = await prisma.faculty.findMany({
+      where: whereClause,
+      include: {
+        dean: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            staffProfile: {
+              select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+            }
+          }
+        },
+        facultyOfficer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            staffProfile: {
+              select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+            }
+          }
+        },
+        facultySecretary: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            staffProfile: {
+              select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+            }
+          }
+        },
+        departments: {
+          include: {
+            hod: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                staffProfile: {
+                  select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+                }
+              }
+            },
+            examOfficer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                staffProfile: {
+                  select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+                }
+              }
+            },
+            departmentAdmin: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                staffProfile: {
+                  select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, phone: true }
+                }
+              }
+            },
+            _count: {
+              select: { programmes: true, courses: true, complaints: true }
+            }
+          },
+          orderBy: { name: 'asc' }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    // Also fetch lecturers for each department
+    const enriched = await Promise.all(
+      faculties.map(async (fac) => {
+        const departmentsWithLecturers = await Promise.all(
+          fac.departments.map(async (dept) => {
+            const deptCode = dept.code || dept.id;
+            const unit = await prisma.unit.findFirst({
+              where: {
+                OR: [
+                  { code: deptCode },
+                  { name: { contains: dept.name, mode: 'insensitive' } },
+                  { id: dept.id }
+                ]
+              }
+            });
+
+            let lecturers: any[] = [];
+            if (unit) {
+              const staffProfiles = await prisma.staffProfile.findMany({
+                where: {
+                  unitId: unit.id,
+                  cadre: 'ACADEMIC',
+                  isDeleted: false,
+                  user: { isActive: true }
+                },
+                select: {
+                  id: true,
+                  userId: true,
+                  staffId: true,
+                  surname: true,
+                  otherNames: true,
+                  title: true,
+                  rank: true,
+                  currentAcademicRank: true,
+                  user: { select: { id: true, name: true, email: true, role: true } }
+                },
+                orderBy: { surname: 'asc' }
+              });
+              lecturers = staffProfiles;
+            }
+
+            return {
+              ...dept,
+              lecturersCount: lecturers.length,
+              lecturers
+            };
+          })
+        );
+
+        return {
+          ...fac,
+          departments: departmentsWithLecturers
+        };
+      })
+    );
+
+    res.json(enriched);
+  } catch (error: any) {
+    console.error('Error fetching faculty hierarchy:', error);
+    res.status(500).json({ message: 'Failed to fetch faculty hierarchy', error: error.message });
+  }
+};
+
+/**
+ * 16. Update Faculty Officers (Dean, Faculty Officer, Secretary)
+ * PUT /api/v1/academic/faculties/:id/officers
+ */
+export const updateFacultyOfficers = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { deanId, facultyOfficerId, facultySecretaryId } = req.body;
+    const callerId = req.user?.id;
+    const callerRole = req.user?.role;
+
+    if (![Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.REGISTRAR, Role.HR_ADMIN, Role.ADMIN].includes(callerRole as any)) {
+      return res.status(403).json({ message: 'Only Principal Officers and HR Admins can appoint Faculty Officers.' });
+    }
+
+    const faculty = await prisma.faculty.findUnique({ where: { id } });
+    if (!faculty) {
+      return res.status(404).json({ message: 'Faculty not found' });
+    }
+
+    const updated = await prisma.faculty.update({
+      where: { id },
+      data: {
+        ...(deanId !== undefined ? { deanId: deanId || null } : {}),
+        ...(facultyOfficerId !== undefined ? { facultyOfficerId: facultyOfficerId || null } : {}),
+        ...(facultySecretaryId !== undefined ? { facultySecretaryId: facultySecretaryId || null } : {})
+      },
+      include: {
+        dean: { select: { id: true, name: true, email: true } },
+        facultyOfficer: { select: { id: true, name: true, email: true } },
+        facultySecretary: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    // Notify newly appointed officers
+    if (deanId) {
+      await notifyUser(deanId, '🏛️ Appointed as Faculty Dean', `You have been officially designated as Dean of ${faculty.name}.`, 'SUCCESS', '/dashboard/faculty/workload/review').catch(() => {});
+    }
+    if (facultyOfficerId) {
+      await notifyUser(facultyOfficerId, '📋 Appointed as Faculty Officer', `You have been designated as the Faculty Officer (Head of Administration) for ${faculty.name}.`, 'INFO', '/dashboard/academic/workload').catch(() => {});
+    }
+    if (facultySecretaryId) {
+      await notifyUser(facultySecretaryId, '📝 Appointed as Faculty Secretary', `You have been designated as the Faculty Secretary for ${faculty.name}.`, 'INFO', '/dashboard/academic/workload').catch(() => {});
+    }
+
+    await AuditService.log(
+      callerId || 'SYSTEM',
+      'UPDATE_FACULTY_OFFICERS',
+      `Faculty:${id}`,
+      JSON.stringify({ deanId, facultyOfficerId, facultySecretaryId, facultyName: faculty.name })
+    );
+
+    res.json({ message: 'Faculty officers updated successfully', faculty: updated });
+  } catch (error: any) {
+    console.error('Error updating faculty officers:', error);
+    res.status(500).json({ message: 'Failed to update faculty officers', error: error.message });
+  }
+};
+
+/**
+ * 17. Update Department Officers (HOD, Exam Officer, Department Admin)
+ * PUT /api/v1/academic/departments/:id/officers
+ */
+export const updateDepartmentOfficers = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { hodId, examOfficerId, departmentAdminId } = req.body;
+    const callerId = req.user?.id;
+    const callerRole = req.user?.role;
+
+    const department = await prisma.department.findUnique({
+      where: { id },
+      include: { faculty: true }
+    });
+    if (!department) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    const isDeanOfFaculty = department.faculty.deanId === callerId;
+    const isExecutive = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.REGISTRAR, Role.HR_ADMIN, Role.ADMIN].includes(callerRole as any);
+
+    if (!isDeanOfFaculty && !isExecutive) {
+      return res.status(403).json({ message: 'Unauthorized: Only the Dean of this Faculty or University Executives can configure Department Officers.' });
+    }
+
+    const updated = await prisma.department.update({
+      where: { id },
+      data: {
+        ...(hodId !== undefined ? { hodId: hodId || null } : {}),
+        ...(examOfficerId !== undefined ? { examOfficerId: examOfficerId || null } : {}),
+        ...(departmentAdminId !== undefined ? { departmentAdminId: departmentAdminId || null } : {})
+      },
+      include: {
+        hod: { select: { id: true, name: true, email: true } },
+        examOfficer: { select: { id: true, name: true, email: true } },
+        departmentAdmin: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    // Notify newly appointed officers
+    if (hodId) {
+      await notifyUser(hodId, '🎓 Appointed as Head of Department (HOD)', `You have been designated as HOD of ${department.name}. You lead course allocations and departmental academic administration.`, 'SUCCESS', '/dashboard/academic/workload/allocation').catch(() => {});
+    }
+    if (examOfficerId) {
+      await notifyUser(examOfficerId, '📑 Appointed as Examination Officer', `You have been designated as Departmental Examination Officer for ${department.name}.`, 'INFO', '/dashboard/academic/workload').catch(() => {});
+    }
+    if (departmentAdminId) {
+      await notifyUser(departmentAdminId, '📂 Appointed as Departmental Administrative Officer', `You have been designated as Departmental Administrative Officer/Secretary for ${department.name}.`, 'INFO', '/dashboard/academic/workload').catch(() => {});
+    }
+
+    await AuditService.log(
+      callerId || 'SYSTEM',
+      'UPDATE_DEPARTMENT_OFFICERS',
+      `Department:${id}`,
+      JSON.stringify({ hodId, examOfficerId, departmentAdminId, departmentName: department.name })
+    );
+
+    res.json({ message: 'Department officers updated successfully', department: updated });
+  } catch (error: any) {
+    console.error('Error updating department officers:', error);
+    res.status(500).json({ message: 'Failed to update department officers', error: error.message });
+  }
+};
+
+/**
+ * 18. Submit Course Allocation Complaint (Lecturer to HOD)
+ * POST /api/v1/academic/workload/complaints
+ */
+export const submitWorkloadComplaint = async (req: AuthRequest, res: Response) => {
+  try {
+    const callerId = req.user?.id;
+    if (!callerId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const {
+      departmentId,
+      allocationId,
+      courseId,
+      session,
+      semester = AcademicSemester.FIRST_SEMESTER,
+      complaintType = 'COURSE_MISMATCH',
+      subject,
+      details,
+      suggestedAdjustment
+    } = req.body;
+
+    if (!departmentId || !subject || !details) {
+      return res.status(400).json({ message: 'Department, subject, and complaint details are required.' });
+    }
+
+    const department = await prisma.department.findUnique({
+      where: { id: departmentId },
+      include: { hod: true, faculty: true }
+    });
+
+    if (!department) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    const complaint = await prisma.workloadComplaint.create({
+      data: {
+        staffId: callerId,
+        departmentId,
+        allocationId: allocationId || null,
+        courseId: courseId || null,
+        session: session || '2026/2027',
+        semester: (semester as AcademicSemester) || AcademicSemester.FIRST_SEMESTER,
+        complaintType: complaintType || 'COURSE_MISMATCH',
+        subject,
+        details,
+        suggestedAdjustment: suggestedAdjustment || null,
+        status: 'PENDING_HOD_REVIEW'
+      },
+      include: {
+        staff: { select: { id: true, name: true, email: true } },
+        course: { select: { id: true, courseCode: true, courseTitle: true } },
+        department: { select: { id: true, name: true } }
+      }
+    });
+
+    // Notify HOD of the department
+    if (department.hodId) {
+      await notifyUser(
+        department.hodId,
+        '⚠️ Lecturer Course Allocation Complaint Lodged',
+        `An academic staff member lodged a course allocation complaint: "${subject}". Please review the allocation at your HOD desk.`,
+        'WARNING',
+        '/dashboard/academic/workload/allocation'
+      ).catch(() => {});
+    }
+
+    await AuditService.log(
+      callerId,
+      'SUBMIT_WORKLOAD_COMPLAINT',
+      `WorkloadComplaint:${complaint.id}`,
+      JSON.stringify({ departmentId, subject, complaintType, session, semester })
+    );
+
+    res.status(201).json({
+      message: 'Course allocation complaint submitted successfully to HOD.',
+      complaint
+    });
+  } catch (error: any) {
+    console.error('Error submitting workload complaint:', error);
+    res.status(500).json({ message: 'Failed to submit workload complaint', error: error.message });
+  }
+};
+
+/**
+ * 19. Get Workload Complaints
+ * GET /api/v1/academic/workload/complaints
+ */
+export const getWorkloadComplaints = async (req: AuthRequest, res: Response) => {
+  try {
+    const callerId = req.user?.id;
+    const callerRole = req.user?.role;
+    const { departmentId, facultyId, status, session, semester } = req.query;
+
+    let whereClause: any = {};
+
+    if (status && typeof status === 'string') {
+      whereClause.status = status;
+    }
+    if (session && typeof session === 'string') {
+      whereClause.session = session;
+    }
+    if (semester && typeof semester === 'string') {
+      whereClause.semester = semester;
+    }
+
+    const isExecutive = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.REGISTRAR, Role.HR_ADMIN, Role.ADMIN].includes(callerRole as any);
+
+    if (!isExecutive) {
+      const headedDepts = await prisma.department.findMany({
+        where: { hodId: callerId },
+        select: { id: true }
+      });
+      const headedFaculties = await prisma.faculty.findMany({
+        where: { deanId: callerId },
+        include: { departments: { select: { id: true } } }
+      });
+
+      const hodDeptIds = headedDepts.map(d => d.id);
+      const deanDeptIds = headedFaculties.flatMap(f => f.departments.map(d => d.id));
+      const managedDeptIds = Array.from(new Set([...hodDeptIds, ...deanDeptIds]));
+
+      if (managedDeptIds.length > 0) {
+        whereClause.OR = [
+          { departmentId: { in: managedDeptIds } },
+          { staffId: callerId }
+        ];
+      } else {
+        whereClause.staffId = callerId;
+      }
+    } else {
+      if (departmentId && typeof departmentId === 'string') {
+        whereClause.departmentId = departmentId;
+      } else if (facultyId && typeof facultyId === 'string') {
+        const facDepts = await prisma.department.findMany({
+          where: { facultyId },
+          select: { id: true }
+        });
+        whereClause.departmentId = { in: facDepts.map(d => d.id) };
+      }
+    }
+
+    const complaints = await prisma.workloadComplaint.findMany({
+      where: whereClause,
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: {
+              select: { id: true, staffId: true, surname: true, otherNames: true, title: true, rank: true, currentAcademicRank: true }
+            }
+          }
+        },
+        department: { select: { id: true, name: true, code: true, faculty: { select: { id: true, name: true } } } },
+        course: { select: { id: true, courseCode: true, courseTitle: true, creditUnits: true } },
+        allocation: true,
+        resolvedBy: { select: { id: true, name: true, email: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(complaints);
+  } catch (error: any) {
+    console.error('Error fetching workload complaints:', error);
+    res.status(500).json({ message: 'Failed to fetch workload complaints', error: error.message });
+  }
+};
+
+/**
+ * 20. Review Course Allocation Complaint (HOD or Dean)
+ * PUT /api/v1/academic/workload/complaints/:id/review
+ */
+export const reviewWorkloadComplaint = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { decision, hodRemarks } = req.body;
+    const callerId = req.user?.id;
+    const callerRole = req.user?.role;
+
+    if (!callerId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const complaint = await prisma.workloadComplaint.findUnique({
+      where: { id },
+      include: {
+        department: { include: { faculty: true } },
+        staff: true,
+        course: true
+      }
+    });
+
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint record not found' });
+    }
+
+    const isDeptHod = complaint.department.hodId === callerId;
+    const isFacultyDean = complaint.department.faculty.deanId === callerId;
+    const isExecutive = [Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.REGISTRAR, Role.HR_ADMIN, Role.ADMIN].includes(callerRole as any);
+
+    if (!isDeptHod && !isFacultyDean && !isExecutive) {
+      return res.status(403).json({ message: 'Unauthorized: Only the Head of Department (HOD) or Dean can review course allocation complaints.' });
+    }
+
+    const validStatuses = ['RESOLVED_ADJUSTED', 'REJECTED_MAINTAINED', 'UNDER_REVIEW'];
+    const finalStatus = validStatuses.includes(decision) ? decision : 'RESOLVED_ADJUSTED';
+
+    const updated = await prisma.workloadComplaint.update({
+      where: { id },
+      data: {
+        status: finalStatus as any,
+        hodRemarks: hodRemarks || 'Reviewed by HOD',
+        resolvedById: callerId,
+        resolvedAt: new Date()
+      },
+      include: {
+        staff: { select: { id: true, name: true, email: true } },
+        department: { select: { id: true, name: true } },
+        course: { select: { id: true, courseCode: true, courseTitle: true } },
+        resolvedBy: { select: { id: true, name: true } }
+      }
+    });
+
+    // Notify lecturer of decision
+    const statusText = finalStatus === 'RESOLVED_ADJUSTED'
+      ? '✅ Course Allocation Adjusted & Resolved'
+      : finalStatus === 'REJECTED_MAINTAINED'
+      ? '📋 Course Allocation Maintained after Review'
+      : '⏳ Course Allocation Complaint Placed Under Review';
+
+    await notifyUser(
+      complaint.staffId,
+      statusText,
+      `Your course allocation complaint for "${complaint.subject}" has been reviewed. Remarks: ${hodRemarks || 'Please check your workload on your portal.'}`,
+      finalStatus === 'RESOLVED_ADJUSTED' ? 'SUCCESS' : 'INFO',
+      '/dashboard/portal/my-teaching-workload'
+    ).catch(() => {});
+
+    await AuditService.log(
+      callerId,
+      'REVIEW_WORKLOAD_COMPLAINT',
+      `WorkloadComplaint:${id}`,
+      JSON.stringify({ decision: finalStatus, hodRemarks, staffId: complaint.staffId })
+    );
+
+    res.json({
+      message: 'Workload complaint reviewed successfully',
+      complaint: updated
+    });
+  } catch (error: any) {
+    console.error('Error reviewing workload complaint:', error);
+    res.status(500).json({ message: 'Failed to review workload complaint', error: error.message });
+  }
+};
+
