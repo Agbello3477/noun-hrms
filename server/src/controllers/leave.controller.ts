@@ -4,6 +4,7 @@ import { LeaveStatus, LeaveType, Role } from '@prisma/client';
 import prisma from '../prisma';
 import { notifyUser } from './notification.controller';
 import { sendLeaveNotification } from '../services/email.service';
+import { resolveStaffDirector, checkIsPrincipalOfficer } from '../services/leaveEntitlement.service';
 
 // Apply for Leave
 export const applyForLeave = async (req: Request, res: Response) => {
@@ -43,45 +44,52 @@ export const applyForLeave = async (req: Request, res: Response) => {
             }
         });
 
-        // Notify Unit Head / Center Approvers in real-time
+        // Notify Unit Head / Center Approvers in real-time (Strict zero-leakage isolation)
         try {
-            const approvers = await prisma.user.findMany({
-                where: {
-                    OR: [
-                        ...(staffProfile.unitId ? [{
-                            staffProfile: { unitId: staffProfile.unitId },
-                            role: { in: [Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.CLINIC_HEAD, Role.SECURITY_HEAD] }
-                        }] : []),
-                        ...(staffProfile.centerId ? [{
-                            staffProfile: { centerId: staffProfile.centerId },
-                            role: { in: [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD] }
-                        }] : []),
-                        { role: { in: [Role.HR_ADMIN, Role.SUPER_USER] } }
-                    ],
-                    id: { not: userId }
-                },
-                select: { id: true, email: true, name: true }
-            });
-
+            const isPrincipalOfficer = checkIsPrincipalOfficer(staffProfile);
             const staffName = staffProfile.user?.name || 'Staff Member';
-            for (const approver of approvers) {
-                await notifyUser(
-                    approver.id,
-                    'New Leave Application',
-                    `${staffName} applied for ${String(type).replace(/_/g, ' ')} (${durationDays} days). Pending review.`,
-                    'INFO',
-                    '/dashboard/unit/leaves'
-                );
 
-                if (approver.email) {
-                    sendLeaveNotification(
-                        approver.email,
-                        approver.name || 'Approver',
-                        String(type).replace(/_/g, ' '),
-                        'PENDING REVIEW',
-                        durationDays,
-                        `Staff ${staffName} has submitted a leave application starting ${start.toDateString()} for ${durationDays} days.`
-                    ).catch(e => console.warn('Email dispatch warning:', e));
+            if (isPrincipalOfficer) {
+                const executiveApprovers = await prisma.user.findMany({
+                    where: {
+                        role: { in: [Role.REGISTRAR, Role.VICE_CHANCELLOR, Role.SUPER_USER] },
+                        isActive: true,
+                        id: { not: userId }
+                    },
+                    select: { id: true, email: true, name: true }
+                });
+
+                for (const approver of executiveApprovers) {
+                    await notifyUser(
+                        approver.id,
+                        'Principal Officer Leave Application',
+                        `Principal Officer ${staffName} applied for ${String(type).replace(/_/g, ' ')} (${durationDays} days). Pending Executive review.`,
+                        'INFO',
+                        '/dashboard/leaves'
+                    );
+                }
+            } else {
+                const approvers = await resolveStaffDirector(staffProfile.id);
+
+                for (const approver of approvers) {
+                    await notifyUser(
+                        approver.id,
+                        'New Leave Application',
+                        `${staffName} applied for ${String(type).replace(/_/g, ' ')} (${durationDays} days). Pending review.`,
+                        'INFO',
+                        '/dashboard/unit/leaves'
+                    );
+
+                    if (approver.email) {
+                        sendLeaveNotification(
+                            approver.email,
+                            approver.name || 'Director',
+                            String(type).replace(/_/g, ' '),
+                            'PENDING REVIEW',
+                            durationDays,
+                            `Staff ${staffName} has submitted a leave application starting ${start.toDateString()} for ${durationDays} days.`
+                        ).catch(e => console.warn('Email dispatch warning:', e));
+                    }
                 }
             }
         } catch (notifErr) {
@@ -169,21 +177,46 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
         const unit = headProfile.unit;
         const centerId = headProfile.centerId;
 
-        // Build list of target unit IDs if this is a Faculty Dean
+        // Build list of target unit IDs for Director / Dean / HOD
         let targetUnitIds: string[] = [];
         if (unit) {
             targetUnitIds.push(unit.id);
-            if (unit.type === 'FACULTY') {
-                const facultyCode = unit.code || '';
+        }
+
+        // Units where this user or profile is set as headId
+        const headedUnits = await prisma.unit.findMany({
+            where: {
+                OR: [
+                    { headId: userId },
+                    { headId: headProfile.id }
+                ]
+            },
+            select: { id: true, code: true, type: true }
+        });
+        for (const u of headedUnits) {
+            if (!targetUnitIds.includes(u.id)) {
+                targetUnitIds.push(u.id);
+            }
+        }
+
+        // Check if any headed or assigned unit is a Faculty
+        const allHeadedOrAssignedUnits = [
+            ...(unit ? [unit] : []),
+            ...headedUnits
+        ];
+
+        for (const u of allHeadedOrAssignedUnits) {
+            if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+                const facultyCode = u.code || '';
                 const mapping: Record<string, string[]> = {
                     'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
                     'FAC-LAW': ['DEP-LAW'],
-                    'FAC-SOCIA': ['DEP-POL'],
-                    'FAC-MANAG': ['DEP-ACC'],
-                    'FAC-EDUCA': ['DEP-EDT'],
-                    'FAC-HEALT': ['DEP-PBH'],
+                    'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+                    'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+                    'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+                    'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
                     'FAC-AGRIC': ['DEP-AGR'],
-                    'FAC-ARTS': ['DEP-ART'],
+                    'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
                     'FAC-COMPU': ['DEP-CMP']
                 };
                 const deptCodes = mapping[facultyCode] || [];
@@ -192,14 +225,28 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                         where: { code: { in: deptCodes } },
                         select: { id: true }
                     });
-                    targetUnitIds.push(...relatedUnits.map(u => u.id));
+                    for (const ru of relatedUnits) {
+                        if (!targetUnitIds.includes(ru.id)) {
+                            targetUnitIds.push(ru.id);
+                        }
+                    }
                 }
             }
         }
 
-        const staffFilter = targetUnitIds.length > 0
-            ? { unitId: { in: targetUnitIds } }
-            : (centerId ? { centerId } : null);
+        let staffFilter: any = null;
+        if (targetUnitIds.length > 0 && centerId) {
+            staffFilter = {
+                OR: [
+                    { unitId: { in: targetUnitIds } },
+                    { centerId }
+                ]
+            };
+        } else if (targetUnitIds.length > 0) {
+            staffFilter = { unitId: { in: targetUnitIds } };
+        } else if (centerId) {
+            staffFilter = { centerId };
+        }
 
         if (!staffFilter) {
             return res.json([]);

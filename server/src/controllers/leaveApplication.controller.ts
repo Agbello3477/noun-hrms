@@ -6,6 +6,7 @@ import {
   getOrInitializeLeaveBalances,
   checkIsPrincipalOfficer,
   parseSalaryScaleAndGrade,
+  resolveStaffDirector,
 } from '../services/leaveEntitlement.service';
 import { notifyUser } from './notification.controller';
 import { sendLeaveNotification } from '../services/email.service';
@@ -227,6 +228,7 @@ export const applyForStatutoryLeave = async (req: Request, res: Response) => {
         const executiveApprovers = await prisma.user.findMany({
           where: {
             role: { in: [Role.REGISTRAR, Role.VICE_CHANCELLOR, Role.SUPER_USER] },
+            isActive: true,
             id: { not: userId }
           },
           select: { id: true, email: true, name: true }
@@ -242,23 +244,8 @@ export const applyForStatutoryLeave = async (req: Request, res: Response) => {
           );
         }
       } else {
-        // Notify HOD / Unit Head
-        const unitApprovers = await prisma.user.findMany({
-          where: {
-            OR: [
-              ...(staffProfile.unitId ? [{
-                staffProfile: { unitId: staffProfile.unitId },
-                role: { in: [Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.CLINIC_HEAD, Role.SECURITY_HEAD] }
-              }] : []),
-              ...(staffProfile.centerId ? [{
-                staffProfile: { centerId: staffProfile.centerId },
-                role: { in: [Role.STUDY_CENTER_MANAGER, Role.UNIT_HEAD] }
-              }] : [])
-            ],
-            id: { not: userId }
-          },
-          select: { id: true, email: true, name: true }
-        });
+        // Strict isolated resolution: Notify ONLY this staff's designated Director / Dean / HOD / Center Manager
+        const unitApprovers = await resolveStaffDirector(staffProfile.id);
 
         for (const approver of unitApprovers) {
           await notifyUser(
@@ -268,6 +255,17 @@ export const applyForStatutoryLeave = async (req: Request, res: Response) => {
             'INFO',
             '/dashboard/unit/leaves'
           );
+
+          if (approver.email) {
+            sendLeaveNotification(
+              approver.email,
+              approver.name || 'Director',
+              String(resolvedType).replace(/_/g, ' '),
+              'PENDING LEVEL 1 REVIEW',
+              workingDays,
+              `Staff member ${staffName} has submitted a ${resolvedType} leave application (${workingDays} working days) for your Directorate review and endorsement.`
+            ).catch(e => console.warn('Email dispatch warning:', e));
+          }
         }
       }
     } catch (notifErr) {
@@ -415,7 +413,7 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
     }
 
     if (!isExecutiveOrRegistry) {
-      // Restrict to unit head's unit or study center
+      // Restrict to unit head's unit, faculty departments, or study center
       const headProfile = await prisma.staffProfile.findUnique({
         where: { userId },
         include: { unit: true, studyCenter: true }
@@ -425,10 +423,86 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
         return res.status(403).json({ message: 'Approver profile not found.' });
       }
 
+      const targetUnitIds: string[] = [];
+
+      // 1. Direct unit ID
       if (headProfile.unitId) {
-        whereClause.staff = { unitId: headProfile.unitId };
-      } else if (headProfile.centerId) {
-        whereClause.staff = { centerId: headProfile.centerId };
+        targetUnitIds.push(headProfile.unitId);
+      }
+
+      // 2. Units where this user or profile is set as headId
+      const headedUnits = await prisma.unit.findMany({
+        where: {
+          OR: [
+            { headId: userId },
+            { headId: headProfile.id }
+          ]
+        },
+        select: { id: true, code: true, type: true }
+      });
+      for (const u of headedUnits) {
+        if (!targetUnitIds.includes(u.id)) {
+          targetUnitIds.push(u.id);
+        }
+      }
+
+      // 3. If unit is a FACULTY, include mapped departmental units
+      const allHeadedOrAssignedUnits = [
+        ...(headProfile.unit ? [headProfile.unit] : []),
+        ...headedUnits
+      ];
+
+      for (const u of allHeadedOrAssignedUnits) {
+        if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+          const facultyDeptMapping: Record<string, string[]> = {
+            'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+            'FAC-LAW': ['DEP-LAW'],
+            'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+            'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+            'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+            'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+            'FAC-AGRIC': ['DEP-AGR'],
+            'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+            'FAC-COMPU': ['DEP-CMP']
+          };
+          const deptCodes = facultyDeptMapping[u.code || ''] || [];
+          if (deptCodes.length > 0) {
+            const relatedUnits = await prisma.unit.findMany({
+              where: { code: { in: deptCodes } },
+              select: { id: true }
+            });
+            for (const ru of relatedUnits) {
+              if (!targetUnitIds.includes(ru.id)) {
+                targetUnitIds.push(ru.id);
+              }
+            }
+          }
+        }
+      }
+
+      const centerId = headProfile.centerId;
+
+      if (targetUnitIds.length > 0 && centerId) {
+        whereClause.staff = {
+          id: { not: headProfile.id },
+          OR: [
+            { unitId: { in: targetUnitIds } },
+            { centerId }
+          ]
+        };
+      } else if (targetUnitIds.length > 0) {
+        whereClause.staff = {
+          id: { not: headProfile.id },
+          unitId: { in: targetUnitIds }
+        };
+      } else if (centerId) {
+        whereClause.staff = {
+          id: { not: headProfile.id },
+          centerId
+        };
+      } else {
+        // Approver has no assigned unit, faculty, or study center: zero-leakage return
+        return res.json([]);
       }
     } else if (unitId) {
       whereClause.staff = { unitId: String(unitId) };
