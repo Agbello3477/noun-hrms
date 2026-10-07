@@ -3,6 +3,7 @@ import { AccessLevel, DocumentType, LegacyDepartment, Role, RequestStatus } from
 import { StorageService } from '../services/storage.service';
 import { AuditService } from '../services/audit.service';
 import prisma from '../prisma';
+import { getDirectorPlacementScope } from '../services/leaveEntitlement.service';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string };
@@ -147,33 +148,27 @@ export const getStaffDossier = async (req: AuthRequest, res: Response) => {
                 isAuthorized = true;
             } else {
                 // Otherwise check their unit/center boundaries
-                const currentUnitId = viewerProfile?.unitId;
-                const currentCenterId = viewerProfile?.centerId;
+                const scope = await getDirectorPlacementScope(viewerId, viewerRole);
 
-                const isCurrentStaff = (targetProfile.centerId && targetProfile.centerId === currentCenterId) ||
-                                       (targetProfile.unitId && targetProfile.unitId === currentUnitId);
+                const isCurrentStaff = (targetProfile.centerId && scope.centerIds.includes(targetProfile.centerId)) ||
+                                       (targetProfile.unitId && scope.unitIds.includes(targetProfile.unitId));
 
                 if (isCurrentStaff) {
                     isAuthorized = true;
                 } else {
-                    const managerPlacements = [
-                        ...(currentUnitId ? [currentUnitId] : []),
-                        ...(currentCenterId ? [currentCenterId] : [])
-                    ];
-
-                    if (managerPlacements.length > 0) {
-                        const wasTransferredFromHere = await prisma.transferLog.findFirst({
-                            where: {
-                                staffId: targetProfile.userId,
-                                oldCenterId: {
-                                    in: managerPlacements
-                                }
-                            }
-                        });
-
-                        if (wasTransferredFromHere) {
-                            isAuthorized = true;
+                    const wasTransferredFromHere = await prisma.transferLog.findFirst({
+                        where: {
+                            staffId: targetProfile.userId,
+                            OR: [
+                                ...(scope.unitIds.length > 0 ? [{ oldUnitId: { in: scope.unitIds } }] : []),
+                                ...(scope.allPlacementIds.length > 0 ? [{ oldCenterId: { in: scope.allPlacementIds } }] : []),
+                                ...(scope.locationNames.length > 0 ? [{ oldCenterId: { in: scope.locationNames } }] : [])
+                            ]
                         }
+                    });
+
+                    if (wasTransferredFromHere) {
+                        isAuthorized = true;
                     }
                 }
             }

@@ -63,19 +63,29 @@ router.delete('/documents/:id', requireRole([Role.HR_ADMIN, Role.REGISTRAR, Role
 router.put('/documents/:id', requireRole([Role.HR_ADMIN, Role.REGISTRAR, Role.SUPER_USER]), updateDocument);
 
 // Staff Transfer (Maker-Checker Workflow)
-const transferImputerRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR];
+const transferImputerRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR, Role.REGISTRY_ADMIN];
 const registrarAuthorizerRoles = [Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR];
+const transferViewerRoles = [
+    ...transferImputerRoles,
+    Role.REGISTRAR,
+    Role.VICE_CHANCELLOR,
+    Role.UNIT_HEAD,
+    Role.STUDY_CENTER_MANAGER,
+    Role.UNIT_ADMIN,
+    Role.BURSARY,
+    Role.STAFF
+];
 
 router.get('/centers', requireRole([...transferImputerRoles, Role.STUDY_CENTER_MANAGER]), getCenters);
 router.post('/transfer', requireRole(transferImputerRoles), transferStaff);
 router.post('/transfers', requireRole(transferImputerRoles), transferStaff);
 router.post('/transfer/batch', requireRole(transferImputerRoles), upload.single('file'), batchTransfer);
-router.get('/transfers', requireRole(transferImputerRoles), getTransferHistory);
+router.get('/transfers', requireRole(transferViewerRoles), getTransferHistory);
 router.get('/transfers/pending-authorization', requireRole([...transferImputerRoles, Role.REGISTRAR]), getPendingTransfers);
 router.get('/transfers/pending', requireRole([...transferImputerRoles, Role.REGISTRAR]), getPendingTransfers);
 router.post('/transfers/:id/authorize', requireRole(registrarAuthorizerRoles), authorizeTransfer);
 router.post('/transfers/:id/reject', requireRole(registrarAuthorizerRoles), rejectTransfer);
-router.get('/transfers/:id/letter', requireRole([...transferImputerRoles, Role.REGISTRAR, Role.STAFF]), downloadPostingOrderLetter);
+router.get('/transfers/:id/letter', requireRole(transferViewerRoles), downloadPostingOrderLetter);
 
 // Staff File Management & Maker-Checker Clearance Gate
 const fileRoles = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.REGISTRAR];

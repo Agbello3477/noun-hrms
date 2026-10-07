@@ -7,6 +7,7 @@ import fs from 'fs';
 import prisma from '../prisma';
 import { redisService } from '../services/redis.service';
 import PDFDocument from 'pdfkit';
+import { getDirectorPlacementScope } from '../services/leaveEntitlement.service';
 
 /**
  * Helper to check if a user is an authorized registrar / principal officer
@@ -486,18 +487,58 @@ export const downloadPostingOrderLetter = async (req: Request, res: Response) =>
 
 /**
  * GET /api/registry/transfers
- * Returns transfer history
+ * Returns transfer history with optional staffId filter and role scoping
  */
 export const getTransferHistory = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const requesterId = req.user?.id;
+        // @ts-ignore
+        const requesterRole = req.user?.role;
+        const { staffId } = req.query;
+
+        let whereCondition: any = {};
+
+        if (staffId) {
+            const targetProfile = await prisma.staffProfile.findFirst({
+                where: {
+                    OR: [
+                        { userId: String(staffId) },
+                        { id: String(staffId) },
+                        { staffId: String(staffId) }
+                    ]
+                },
+                select: { userId: true }
+            });
+            const resolvedUserId = targetProfile?.userId || String(staffId);
+            whereCondition.staffId = resolvedUserId;
+        } else if (!isRegistrarOrSuper(requesterRole) && requesterRole !== Role.HR_ADMIN && requesterRole !== Role.REGISTRY_ADMIN && requesterRole !== Role.ADMIN) {
+            if (requesterRole === Role.STAFF) {
+                whereCondition.staffId = requesterId;
+            } else if ([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN, Role.BURSARY].includes(requesterRole as any)) {
+                if (requesterId) {
+                    const scope = await getDirectorPlacementScope(requesterId, requesterRole);
+                    whereCondition.OR = [
+                        ...(scope.unitIds.length > 0 ? [{ oldUnitId: { in: scope.unitIds } }, { newUnitId: { in: scope.unitIds } }] : []),
+                        ...(scope.allPlacementIds.length > 0 ? [{ oldCenterId: { in: scope.allPlacementIds } }, { newCenterId: { in: scope.allPlacementIds } }] : []),
+                        ...(scope.locationNames.length > 0 ? [{ oldCenterId: { in: scope.locationNames } }, { newCenterId: { in: scope.locationNames } }] : [])
+                    ];
+                    if (!whereCondition.OR || whereCondition.OR.length === 0) {
+                        return res.json([]);
+                    }
+                }
+            }
+        }
+
         const [history, centers, units] = await Promise.all([
             prisma.transferLog.findMany({
+                where: whereCondition,
                 include: {
-                    staff: { select: { name: true, email: true, staffProfile: { select: { staffId: true, rank: true } } } },
-                    initiatedBy: { select: { name: true } },
-                    authorizedBy: { select: { name: true } },
-                    oldUnit: { select: { name: true } },
-                    newUnit: { select: { name: true } }
+                    staff: { select: { id: true, name: true, email: true, staffProfile: { select: { id: true, staffId: true, rank: true, surname: true, otherNames: true } } } },
+                    initiatedBy: { select: { id: true, name: true } },
+                    authorizedBy: { select: { id: true, name: true } },
+                    oldUnit: { select: { id: true, name: true, code: true } },
+                    newUnit: { select: { id: true, name: true, code: true } }
                 },
                 orderBy: { createdAt: 'desc' }
             }),
@@ -511,8 +552,8 @@ export const getTransferHistory = async (req: Request, res: Response) => {
 
         const enrichedHistory = history.map(log => ({
             ...log,
-            oldLocation: log.oldUnit?.name || locationMap.get(log.oldCenterId || '') || log.oldCenterId || 'Unassigned',
-            newLocation: log.newUnit?.name || locationMap.get(log.newCenterId || '') || log.newCenterId || 'Unknown'
+            oldLocation: log.oldUnit?.name || locationMap.get(log.oldCenterId || '') || log.oldCenterId || 'Previous Duty Station',
+            newLocation: log.newUnit?.name || locationMap.get(log.newCenterId || '') || log.newCenterId || 'New Duty Station'
         }));
 
         res.json(enrichedHistory);

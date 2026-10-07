@@ -12,6 +12,7 @@ import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
 import { PromotionService } from '../services/promotion.service';
 import { getCachedQuery, buildDbCacheKey } from '../utils/dbCache';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
+import { getDirectorPlacementScope } from '../services/leaveEntitlement.service';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
@@ -314,30 +315,24 @@ export const getStaffById = async (req: Request, res: Response) => {
         if (!isSelf && !isAdmin) {
             // Check if they are a manager/unit admin
             if ([Role.UNIT_HEAD, Role.STUDY_CENTER_MANAGER, Role.UNIT_ADMIN].includes(requesterRole as any)) {
-                const headProfile = await prisma.staffProfile.findUnique({
-                    where: { userId: requesterId },
-                    select: { unitId: true, centerId: true }
-                });
-                if (!headProfile) {
-                    return res.status(403).json({ message: 'Unauthorized: You do not have a staff profile' });
-                }
-
+                const scope = await getDirectorPlacementScope(requesterId!, requesterRole);
                 const targetProfile = staff.staffProfile;
+
                 const matchesCurrentPlacement = targetProfile && (
-                    (headProfile.unitId && targetProfile.unitId === headProfile.unitId) ||
-                    (headProfile.centerId && targetProfile.centerId === headProfile.centerId)
+                    (targetProfile.unitId && scope.unitIds.includes(targetProfile.unitId)) ||
+                    (targetProfile.centerId && scope.centerIds.includes(targetProfile.centerId))
                 );
 
                 if (!matchesCurrentPlacement) {
-                    // Check if there is a transfer log from the manager's unit/center
-                    const managerPlacements = [
-                        ...(headProfile.unitId ? [headProfile.unitId] : []),
-                        ...(headProfile.centerId ? [headProfile.centerId] : [])
-                    ];
+                    // Check if there is a transfer log from the manager's unit/center/faculty
                     const wasTransferred = await prisma.transferLog.findFirst({
                         where: {
                             staffId: staff.id,
-                            oldCenterId: { in: managerPlacements }
+                            OR: [
+                                ...(scope.unitIds.length > 0 ? [{ oldUnitId: { in: scope.unitIds } }] : []),
+                                ...(scope.allPlacementIds.length > 0 ? [{ oldCenterId: { in: scope.allPlacementIds } }] : []),
+                                ...(scope.locationNames.length > 0 ? [{ oldCenterId: { in: scope.locationNames } }] : [])
+                            ]
                         }
                     });
                     if (!wasTransferred) {
@@ -1185,57 +1180,118 @@ export const getAcademicStaff = async (req: Request, res: Response) => {
 export const getTransferredStaff = async (req: Request, res: Response) => {
     try {
         // @ts-ignore
-        const userId = req.user.id;
+        const userId = req.user?.id;
+        // @ts-ignore
+        const userRole = req.user?.role;
 
-        // 1. Get current user's profile to find their Unit/Center
-        const headProfile = await prisma.staffProfile.findUnique({
-            where: { userId },
-            select: { unitId: true, centerId: true }
-        });
-
-        if (!headProfile || (!headProfile.unitId && !headProfile.centerId)) {
-            return res.status(403).json({ message: 'You do not appear to belong to a Unit or Center.' });
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized' });
         }
 
-        const currentUnitId = headProfile.unitId;
-        const currentCenterId = headProfile.centerId;
-        const managerPlacements = [
-            ...(currentUnitId ? [currentUnitId] : []),
-            ...(currentCenterId ? [currentCenterId] : [])
-        ];
+        const isExecutive = [
+            Role.SUPER_USER,
+            Role.VICE_CHANCELLOR,
+            Role.REGISTRAR,
+            Role.HR_ADMIN,
+            Role.REGISTRY_ADMIN,
+            Role.ADMIN
+        ].includes(userRole as any);
 
-        // 2. Fetch staff belonging to that Unit or Center formerly (transferred out)
-        const staff = await prisma.user.findMany({
-            where: {
+        const [centers, units] = await Promise.all([
+            prisma.studyCenter.findMany(),
+            prisma.unit.findMany()
+        ]);
+
+        const locationMap = new Map<string, string>();
+        centers.forEach(c => locationMap.set(c.id, c.name));
+        units.forEach(u => locationMap.set(u.id, u.name));
+
+        let whereClause: any = {
+            isActive: true
+        };
+
+        if (!isExecutive) {
+            // 1. Resolve full director placement scope (Units, Headed Units, Faculty Departments, Centers)
+            const scope = await getDirectorPlacementScope(userId, userRole);
+
+            if (scope.unitIds.length === 0 && scope.centerIds.length === 0 && scope.locationNames.length === 0) {
+                return res.json([]);
+            }
+
+            whereClause = {
                 isActive: true,
                 staffProfile: {
                     NOT: {
                         OR: [
-                            ...(currentUnitId ? [{ unitId: currentUnitId }] : []),
-                            ...(currentCenterId ? [{ centerId: currentCenterId }] : [])
+                            ...(scope.unitIds.length > 0 ? [{ unitId: { in: scope.unitIds } }] : []),
+                            ...(scope.centerIds.length > 0 ? [{ centerId: { in: scope.centerIds } }] : [])
                         ]
                     }
                 },
                 transferredStaff: {
                     some: {
-                        oldCenterId: {
-                            in: managerPlacements
-                        }
+                        OR: [
+                            ...(scope.unitIds.length > 0 ? [{ oldUnitId: { in: scope.unitIds } }] : []),
+                            ...(scope.allPlacementIds.length > 0 ? [{ oldCenterId: { in: scope.allPlacementIds } }] : []),
+                            ...(scope.locationNames.length > 0 ? [{ oldCenterId: { in: scope.locationNames } }] : [])
+                        ]
                     }
                 }
-            },
+            };
+        } else {
+            whereClause = {
+                isActive: true,
+                transferredStaff: {
+                    some: {}
+                }
+            };
+        }
+
+        // 2. Fetch staff with profiles and complete transfer logs
+        const staffUsers = await prisma.user.findMany({
+            where: whereClause,
             include: {
                 staffProfile: {
                     include: {
                         unit: true,
                         studyCenter: true
                     }
+                },
+                transferredStaff: {
+                    include: {
+                        oldUnit: { select: { id: true, name: true, code: true } },
+                        newUnit: { select: { id: true, name: true, code: true } },
+                        authorizedBy: { select: { id: true, name: true, email: true } },
+                        initiatedBy: { select: { id: true, name: true } }
+                    },
+                    orderBy: { createdAt: 'desc' }
                 }
             },
             orderBy: { name: 'asc' }
         });
 
-        res.json(staff);
+        // 3. Enrich staff with formatted transfer history & latest transfer snapshot
+        const enrichedStaff = staffUsers.map(user => {
+            const transferLogs = (user.transferredStaff || []).map(t => ({
+                ...t,
+                oldLocation: t.oldUnit?.name || locationMap.get(t.oldCenterId || '') || t.oldCenterId || 'Previous Duty Station',
+                newLocation: t.newUnit?.name || locationMap.get(t.newCenterId || '') || t.newCenterId || 'New Duty Station'
+            }));
+
+            const latestTransfer = transferLogs[0] || null;
+
+            return {
+                id: user.id,
+                name: user.name || `${user.staffProfile?.surname || ''} ${user.staffProfile?.otherNames || ''}`.trim() || 'Staff',
+                email: user.email,
+                role: user.role,
+                staffProfile: user.staffProfile,
+                latestTransfer,
+                transfers: transferLogs
+            };
+        });
+
+        res.json(enrichedStaff);
 
     } catch (error) {
         console.error('Get transferred staff error:', error);

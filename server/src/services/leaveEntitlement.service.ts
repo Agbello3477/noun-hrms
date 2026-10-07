@@ -510,3 +510,114 @@ export async function resolveStaffDirector(
   console.warn(`[Leave Notification] No dedicated Director/Unit Head resolved for staff ${staff.id} (${staff.user?.name || 'Unknown'}). Zero-leakage policy applied.`);
   return [];
 }
+
+/**
+ * Resolves all Unit IDs, Center IDs, and location identifiers under a Director/Dean/Manager's authority.
+ * Includes direct Unit, headed Units, child departments under a Faculty, and Study Centers.
+ */
+export async function getDirectorPlacementScope(userId: string, userRole?: string): Promise<{
+  unitIds: string[];
+  centerIds: string[];
+  locationNames: string[];
+  allPlacementIds: string[];
+}> {
+  const profile = await prisma.staffProfile.findUnique({
+    where: { userId },
+    select: { id: true, unitId: true, centerId: true, unit: true, studyCenter: true }
+  });
+
+  const targetUnitIds = new Set<string>();
+  const targetCenterIds = new Set<string>();
+  const targetLocationNames = new Set<string>();
+
+  if (profile?.unitId) targetUnitIds.add(profile.unitId);
+  if (profile?.centerId) targetCenterIds.add(profile.centerId);
+  if (profile?.unit?.name) targetLocationNames.add(profile.unit.name);
+  if (profile?.studyCenter?.name) targetLocationNames.add(profile.studyCenter.name);
+
+  // Units where user is designated head (by user.id or staffProfile.id)
+  const headedUnits = await prisma.unit.findMany({
+    where: {
+      OR: [
+        { headId: userId },
+        ...(profile?.id ? [{ headId: profile.id }] : [])
+      ]
+    }
+  });
+
+  headedUnits.forEach(u => {
+    targetUnitIds.add(u.id);
+    if (u.name) targetLocationNames.add(u.name);
+  });
+
+  // Check child units / departments if headed/assigned units are faculties
+  const facultyDeptMapping: Record<string, string> = {
+    'DEP-CS': 'FAC-SCIEN',
+    'DEP-MTH': 'FAC-SCIEN',
+    'DEP-LAW': 'FAC-LAW',
+    'DEP-POL': 'FAC-SOCIA',
+    'DEP-ECO': 'FAC-SOCIA',
+    'DEP-SOC': 'FAC-SOCIA',
+    'DEP-ACC': 'FAC-MANAG',
+    'DEP-BUS': 'FAC-MANAG',
+    'DEP-PAD': 'FAC-MANAG',
+    'DEP-EDT': 'FAC-EDUCA',
+    'DEP-EDU': 'FAC-EDUCA',
+    'DEP-PBH': 'FAC-HEALT',
+    'DEP-NUR': 'FAC-HEALT',
+    'DEP-AGR': 'FAC-AGRIC',
+    'DEP-ART': 'FAC-ARTS',
+    'DEP-ENG': 'FAC-ARTS',
+    'DEP-HIS': 'FAC-ARTS',
+    'DEP-CMP': 'FAC-COMPU'
+  };
+
+  const allKnownUnitIds = Array.from(targetUnitIds);
+  if (allKnownUnitIds.length > 0) {
+    const knownUnits = await prisma.unit.findMany({
+      where: { id: { in: allKnownUnitIds } }
+    });
+    const facultyCodes = knownUnits
+      .map(u => u.code)
+      .filter(Boolean) as string[];
+
+    const deptCodesToAdd: string[] = [];
+    for (const [deptCode, facCode] of Object.entries(facultyDeptMapping)) {
+      if (facultyCodes.includes(facCode)) {
+        deptCodesToAdd.push(deptCode);
+      }
+    }
+
+    if (deptCodesToAdd.length > 0) {
+      const childUnits = await prisma.unit.findMany({
+        where: { code: { in: deptCodesToAdd } }
+      });
+      childUnits.forEach(cu => {
+        targetUnitIds.add(cu.id);
+        if (cu.name) targetLocationNames.add(cu.name);
+      });
+    }
+  }
+
+  // Study centers where manager is user or profile
+  const studyCenters = await prisma.studyCenter.findMany({
+    where: {
+      OR: [
+        ...(profile?.centerId ? [{ id: profile.centerId }] : []),
+        ...(profile?.id ? [{ id: profile.id }] : [])
+      ]
+    }
+  });
+  studyCenters.forEach(c => {
+    targetCenterIds.add(c.id);
+    targetLocationNames.add(c.name);
+  });
+
+  return {
+    unitIds: Array.from(targetUnitIds),
+    centerIds: Array.from(targetCenterIds),
+    locationNames: Array.from(targetLocationNames),
+    allPlacementIds: [...Array.from(targetUnitIds), ...Array.from(targetCenterIds)]
+  };
+}
+

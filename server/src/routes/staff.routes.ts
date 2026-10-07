@@ -57,8 +57,19 @@ const unitRoles = [
 
 router.get('/', requireRole(viewRoles), cacheMiddleware(15), getAllStaff);
 router.get('/academic', requireRole(viewRoles), cacheMiddleware(15), getAcademicStaff);
-router.get('/unit', requireRole(unitRoles), cacheMiddleware(15), getUnitStaff);
-router.get('/transferred', requireRole([Role.UNIT_HEAD, Role.UNIT_ADMIN, Role.STUDY_CENTER_MANAGER, Role.ADMIN]), cacheMiddleware(15), getTransferredStaff);
+router.get('/transferred', requireRole([
+    Role.UNIT_HEAD,
+    Role.UNIT_ADMIN,
+    Role.STUDY_CENTER_MANAGER,
+    Role.HR_ADMIN,
+    Role.REGISTRY_ADMIN,
+    Role.REGISTRAR,
+    Role.SUPER_USER,
+    Role.VICE_CHANCELLOR,
+    Role.SECURITY_HEAD,
+    Role.CLINIC_HEAD,
+    Role.ADMIN
+]), cacheMiddleware(15), getTransferredStaff);
 
 // ─── Promotion Monitoring Module ─────────────────────────────────────────────
 // IMPORTANT: These must be registered BEFORE /:id to prevent route shadowing
