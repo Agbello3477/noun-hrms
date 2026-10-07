@@ -175,6 +175,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/director/applications" icon={ClipboardCheck} label="Vetting Applications" badge="Director" />
                         <LinkItem href="/dashboard/unit/staff" icon={Briefcase} label="Unit Staff" />
                         <LinkItem href="/dashboard/unit/leaves" icon={FileText} label="Leave Approvals" />
+                        <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Actions" />
+                        <LinkItem href="/dashboard/registry/reports" icon={FileText} label="Staff Movement & Audit Reports" />
                         <LinkItem href="/dashboard/unit/aper" icon={ClipboardCheck} label="Appraisal Review" />
                         <LinkItem href="/dashboard/unit/memos" icon={Mail} label="Unit Memos" />
                         <LinkItem href="/dashboard/unit/transferred-staff" icon={ArrowLeftRight} label="Transferred Staff" />
@@ -194,7 +196,12 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         </div>
                         <LinkItem href="/dashboard/payroll" icon={DollarSign} label="Payroll Central" />
                         <LinkItem href="/dashboard/bursary" icon={Layers} label="Bursary Operations" />
-                        {isAudit && <LinkItem href="/dashboard/bursary/audit" icon={Layers} label="Audit Verification" />}
+                        {isAudit && (
+                            <>
+                                <LinkItem href="/dashboard/bursary/audit" icon={Layers} label="Audit Verification" />
+                                <LinkItem href="/dashboard/registry/reports" icon={FileText} label="Staff Movement & Audit Reports" />
+                            </>
+                        )}
                     </>
                 )}
 

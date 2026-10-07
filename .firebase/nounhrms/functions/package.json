@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@tiptap/extension-collaboration": "^3.28.0",
-    "@tiptap/extension-collaboration-cursor": "^2.26.2",
-    "@tiptap/react": "^3.28.0",
-    "@tiptap/starter-kit": "^3.28.0",
+    "@tiptap/extension-collaboration": "^3.0.0",
+    "@tiptap/extension-collaboration-cursor": "^3.0.0",
+    "@tiptap/react": "^3.0.0",
+    "@tiptap/starter-kit": "^3.0.0",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -24,8 +24,11 @@
     "firebase-admin": "^11.11.1"
   },
   "overrides": {
-    "@tiptap/core": "^3.28.0",
-    "postcss": "^8.5.10"
+    "@tiptap/core": "^3.0.0",
+    "postcss": "^8.5.29",
+    "prosemirror-view": "^1.42.6",
+    "source-map-js": "^1.2.2",
+    "postcss-selector-parser": "^7.1.6"
   },
   "main": "server.js",
   "engines": {

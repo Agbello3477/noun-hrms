@@ -793,6 +793,20 @@ export default function DashboardHome() {
                                 <p className="text-[11px] text-gray-500">Conduct APER reviews</p>
                             </div>
                         </Link>
+                        <Link href="/dashboard/registry/queries" className="flex items-center gap-3 p-4 rounded-xl border border-rose-100 hover:border-rose-300 hover:bg-rose-50/20 transition-all group">
+                            <span className="p-2.5 bg-rose-50 text-rose-700 rounded-lg group-hover:scale-110 transition-transform"><AlertTriangle size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-855">Disciplinary Actions</h4>
+                                <p className="text-[11px] text-gray-500">Queries &amp; Warnings</p>
+                            </div>
+                        </Link>
+                        <Link href="/dashboard/registry/reports" className="flex items-center gap-3 p-4 rounded-xl border border-blue-100 hover:border-blue-300 hover:bg-blue-50/20 transition-all group">
+                            <span className="p-2.5 bg-blue-50 text-blue-700 rounded-lg group-hover:scale-110 transition-transform"><FileText size={20} /></span>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-855">Movement Audit</h4>
+                                <p className="text-[11px] text-gray-500">File &amp; Postings Reports</p>
+                            </div>
+                        </Link>
                         <Link href="/dashboard/academic/workload/allocation" className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/20 transition-all group">
                             <span className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg group-hover:scale-110 transition-transform"><BookOpen size={20} /></span>
                             <div>
@@ -970,37 +984,45 @@ export default function DashboardHome() {
                 </div>
 
                 {/* Quick Actions Grid */}
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
-                        <div className="mb-4 rounded-full bg-blue-50 p-4 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <FileText size={28} />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <Link href="/dashboard/documents" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
+                        <div className="mb-3 rounded-full bg-blue-50 p-3.5 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <FileText size={24} />
                         </div>
-                        <h3 className="font-semibold text-gray-800">My Dossier</h3>
+                        <h3 className="font-semibold text-gray-800 text-sm">My Dossier</h3>
                         <p className="text-xs text-gray-500 mt-1">View personal file</p>
                     </Link>
 
-                    <Link href="/dashboard/payslips" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
-                        <div className="mb-4 rounded-full bg-emerald-50 p-4 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <DollarSign size={28} />
+                    <Link href="/dashboard/payslips" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
+                        <div className="mb-3 rounded-full bg-emerald-50 p-3.5 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <DollarSign size={24} />
                         </div>
-                        <h3 className="font-semibold text-gray-800">Payslips</h3>
+                        <h3 className="font-semibold text-gray-800 text-sm">Payslips</h3>
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
-                    <Link href="/dashboard/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
-                        <div className="mb-4 rounded-full bg-emerald-50 p-4 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
-                            <Users size={28} />
+                    <Link href="/dashboard/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
+                        <div className="mb-3 rounded-full bg-emerald-50 p-3.5 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
+                            <Users size={24} />
                         </div>
-                        <h3 className="font-bold text-gray-800">Teaching Workload</h3>
-                        <p className="text-xs text-slate-500 mt-1 font-medium">Courses, ETE &amp; Credits</p>
+                        <h3 className="font-bold text-gray-800 text-sm">Teaching Workload</h3>
+                        <p className="text-xs text-slate-500 mt-1 font-medium">Courses & Credits</p>
                     </Link>
 
-                    <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
-                        <div className="mb-4 rounded-full bg-purple-50 p-4 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                            <MapPin size={28} />
+                    <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
+                        <div className="mb-3 rounded-full bg-purple-50 p-3.5 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                            <MapPin size={24} />
                         </div>
-                        <h3 className="font-semibold text-gray-800">Leave Request</h3>
+                        <h3 className="font-semibold text-gray-800 text-sm">Leave Request</h3>
                         <p className="text-xs text-gray-500 mt-1">Apply for time off</p>
+                    </Link>
+
+                    <Link href="/dashboard/queries" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-rose-100 hover:border-rose-400">
+                        <div className="mb-3 rounded-full bg-rose-50 p-3.5 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                            <AlertTriangle size={24} />
+                        </div>
+                        <h3 className="font-semibold text-gray-800 text-sm">Queries &amp; Warnings</h3>
+                        <p className="text-xs text-gray-500 mt-1">Disciplinary &amp; folio</p>
                     </Link>
                 </div>
 
@@ -1278,6 +1300,65 @@ export default function DashboardHome() {
                     <span>Open Active Leaves Directory</span>
                     <ArrowRight size={15} />
                 </Link>
+            </div>
+
+            {/* ====== DISCIPLINARY ACTIONS & STAFF MOVEMENT AUDIT CARDS ====== */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                {/* Disciplinary Actions Card */}
+                <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/60 text-[10px] font-black uppercase tracking-wider">
+                                Registry Discipline &amp; Compliance
+                            </span>
+                            <span className="p-2 bg-rose-50 text-rose-700 rounded-xl">
+                                <AlertTriangle size={20} />
+                            </span>
+                        </div>
+                        <h3 className="text-lg font-black text-slate-900 mt-3">Disciplinary Actions: Queries &amp; Warnings</h3>
+                        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                            Issue formal queries with defense submission timelines or official warnings/admonitions logged to staff digital folios with automated acknowledgment receipts.
+                        </p>
+                    </div>
+                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-600">Queries &amp; Admonitions</span>
+                        <Link
+                            href="/dashboard/registry/queries"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                        >
+                            <span>Open Disciplinary Desk</span>
+                            <ArrowRight size={14} />
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Staff Movement Audit Card */}
+                <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 text-[10px] font-black uppercase tracking-wider">
+                                Administrative Audit Reports
+                            </span>
+                            <span className="p-2 bg-blue-50 text-blue-700 rounded-xl">
+                                <FileText size={20} />
+                            </span>
+                        </div>
+                        <h3 className="text-lg font-black text-slate-900 mt-3">Staff File Creation &amp; Transfer Movement Audit</h3>
+                        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                            Generate comprehensive administrative audit matrices of newly created files (imputer &amp; registrar authorizer), origin-to-destination posting logs, and duration at previous posts.
+                        </p>
+                    </div>
+                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-600">Maker-Checker &amp; Transfer Matrix</span>
+                        <Link
+                            href="/dashboard/registry/reports"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                        >
+                            <span>Generate Audit Reports</span>
+                            <ArrowRight size={14} />
+                        </Link>
+                    </div>
+                </div>
             </div>
 
             {/* ====== RECRUITMENT FILTER PANEL ====== */}
