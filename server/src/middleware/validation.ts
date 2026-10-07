@@ -117,12 +117,21 @@ export const leaveApplySchema = z.object({
     })
 });
 
-// 3. Disciplinary Query Schemas
+// 3. Disciplinary Query & Warning Schemas
 export const queryIssueSchema = z.object({
     body: z.object({
-        staffId: z.string().min(1, 'Staff ID is required'),
-        title: z.string().min(3, 'Query title must be at least 3 characters').max(100).transform(stripHtml),
-        content: z.string().min(5, 'Query content must be at least 5 characters').max(10000, 'Content must not exceed 10000 characters').transform(sanitizeHtml)
+        staffId: z.string().optional(),
+        staffProfileId: z.string().optional(),
+        title: z.string().min(3, 'Query/Warning title must be at least 3 characters').max(150).transform(stripHtml),
+        content: z.string().min(5, 'Content must be at least 5 characters').max(15000, 'Content must not exceed 15000 characters').transform(sanitizeHtml),
+        actionType: z.enum(['QUERY', 'OFFICIAL_WARNING']).optional().default('QUERY'),
+        stipulatedHours: z.union([z.number(), z.string().transform(Number)]).optional(),
+        severity: z.string().optional(),
+        copyHR: z.union([z.boolean(), z.string().transform(v => v === 'true')]).optional(),
+        source: z.string().optional()
+    }).refine(data => data.staffId || data.staffProfileId, {
+        message: 'Either staffId or staffProfileId is required',
+        path: ['staffId']
     })
 });
 

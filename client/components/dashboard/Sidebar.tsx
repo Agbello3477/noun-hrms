@@ -157,7 +157,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="Performance (APER)" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
-                        <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Queries" />
+                        <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Actions: Queries & Warnings" />
+                        <LinkItem href="/dashboard/registry/reports" icon={FileText} label="Staff Movement & Audit Reports" />
                         <LinkItem href="/dashboard/registry/memos" icon={Mail} label="Registry Memos" />
                         {['HR_ADMIN', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'].includes(role || '') && (
                             <LinkItem href="/dashboard/registry/due-for-promotion" icon={TrendingUp} label="Promotion Maturity & Scheduling" />
@@ -249,7 +250,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 {user?.staffProfile?.cadre !== 'ACADEMIC' && (
                     <LinkItem href="/dashboard/staff/aper" icon={ClipboardCheck} label="Staff Appraisal" />
                 )}
-                <LinkItem href="/dashboard/queries" icon={AlertCircle} label="My Queries" />
+                <LinkItem href="/dashboard/queries" icon={AlertCircle} label="Queries & Warnings" />
                 <LinkItem href="/dashboard/memos" icon={Mail} label="General Memos" />
                 <LinkItem href="/dashboard/leaves" icon={FileText} label="My Applications" badge="Registry & Leaves" />
 

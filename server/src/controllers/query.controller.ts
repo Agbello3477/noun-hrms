@@ -13,26 +13,29 @@ export const issueQuery = async (req: AuthRequest, res: Response) => {
     try {
         const {
             staffId,
+            staffProfileId,
             title,
             content,
             copyHR,
             actionType = 'QUERY',
             stipulatedHours = 48,
-            source: customSource
+            source: customSource,
+            severity
         } = req.body;
 
+        const targetId = staffProfileId || staffId;
         const issuerId = req.user?.id;
         const issuerRole = req.user?.role;
 
-        if (!staffId || !title) {
+        if (!targetId || !title) {
             return res.status(400).json({ message: 'Staff ID and Title are required' });
         }
 
         // 1. Validation & Multi-Format Staff Profile Resolution
-        let staff = await prisma.staffProfile.findUnique({ where: { id: staffId } });
+        let staff = await prisma.staffProfile.findUnique({ where: { id: targetId } });
         if (!staff) {
             staff = await prisma.staffProfile.findFirst({
-                where: { OR: [{ userId: staffId }, { staffId: staffId }] }
+                where: { OR: [{ userId: targetId }, { staffId: targetId }] }
             });
         }
         if (!staff) {
@@ -368,5 +371,69 @@ export const resolveQuery = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('[resolveQuery] Error resolving query:', error);
         res.status(500).json({ message: 'Error resolving query', error: String(error) });
+    }
+};
+
+// Acknowledge Official Warning (Staff -> Folio Logged)
+export const acknowledgeWarning = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const queryId = id || req.body?.queryId;
+        const userId = req.user?.id;
+
+        if (!queryId) return res.status(400).json({ message: 'Query ID is required' });
+
+        const query = await prisma.staffQuery.findUnique({
+            where: { id: queryId },
+            include: { staff: true, issuedBy: true }
+        });
+
+        if (!query) return res.status(404).json({ message: 'Disciplinary record not found' });
+
+        const isTargetUser = query.staff.userId === userId || query.staff.id === userId;
+        const isHQAdmin = [Role.HR_ADMIN, Role.SUPER_USER, Role.ADMIN, Role.VICE_CHANCELLOR, Role.REGISTRAR].includes(req.user?.role as any);
+
+        if (!isTargetUser && !isHQAdmin) {
+            return res.status(403).json({ message: 'Unauthorized: You can only acknowledge warnings issued to your staff account.' });
+        }
+
+        const updatedQuery = await prisma.staffQuery.update({
+            where: { id: queryId },
+            data: {
+                warningAcknowledged: true,
+                warningAcknowledgedAt: new Date(),
+                breachLoggedToFolio: true,
+                status: QueryStatus.CLOSED,
+                resolutionStatus: 'ACKNOWLEDGED'
+            },
+            include: {
+                staff: {
+                    select: {
+                        id: true,
+                        surname: true,
+                        otherNames: true,
+                        staffId: true,
+                        user: { select: { name: true, email: true } }
+                    }
+                }
+            }
+        });
+
+        // Notify Issuer
+        await notifyUser(
+            query.issuedById,
+            'Official Warning Acknowledged',
+            `Staff ${query.staff.surname || ''} ${query.staff.otherNames || ''} has formally acknowledged receipt of Official Warning "${query.title}". Folio record updated.`,
+            'INFO',
+            `/dashboard/registry/queries`
+        );
+
+        res.json({
+            message: 'Official Warning formally acknowledged and entered into staff digital folio.',
+            query: updatedQuery
+        });
+    } catch (error: any) {
+        console.error('Error acknowledging warning:', error);
+        res.status(500).json({ message: 'Error acknowledging warning', error: error.message });
     }
 };

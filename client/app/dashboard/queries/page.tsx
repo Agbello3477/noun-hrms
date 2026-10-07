@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import api, { getImageUrl } from '../../../lib/api';
+import api from '../../../lib/api';
 import { useSwrData } from '../../../hooks/useSwrData';
 import { 
     AlertTriangle, 
@@ -16,7 +16,11 @@ import {
     AlertCircle, 
     XCircle,
     UserCheck,
-    Lock
+    Lock,
+    FolderLock,
+    CheckCircle2,
+    Building2,
+    Calendar
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import Button from '../../../components/ui/Button';
@@ -28,10 +32,16 @@ interface Query {
     title?: string;
     severity: string;
     actionType?: 'QUERY' | 'OFFICIAL_WARNING';
+    isQuery?: boolean;
+    isWarning?: boolean;
     stipulatedHours?: number;
     slaBreached?: boolean;
     deadline?: string;
     responseDeadline?: string;
+    warningAcknowledged?: boolean;
+    warningAcknowledgedAt?: string | null;
+    breachLoggedToFolio?: boolean;
+    resolutionStatus?: string;
     status: 'OPEN' | 'PENDING' | 'DEFAULTED_UNANSWERED' | 'RESPONDED' | 'RESOLVED' | 'ESCALATED' | 'CLOSED';
     createdAt: string;
     updatedAt?: string;
@@ -47,6 +57,7 @@ interface Query {
     staff?: {
         id: string;
         staffId: string;
+        rank?: string;
         user?: { name: string; email: string };
     };
     response?: string;
@@ -60,7 +71,7 @@ export default function MyQueriesPage() {
 
     const isIssuerRole = user && ['HR_ADMIN', 'REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR', 'UNIT_HEAD', 'UNIT_ADMIN', 'STUDY_CENTER_MANAGER', 'ADMIN'].includes(user.role);
 
-    // Reply State
+    // Reply State for Formal Queries
     const [replyContent, setReplyContent] = useState('');
     const [replyFile, setReplyFile] = useState<File | null>(null);
     const [activeQuery, setActiveQuery] = useState<string | null>(null);
@@ -93,7 +104,7 @@ export default function MyQueriesPage() {
         if (!issuedBy) return 'Central Registry';
         const role = issuedBy.role;
         if (['HR_ADMIN', 'REGISTRAR', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR'].includes(role)) {
-            return 'Central Registry';
+            return 'Central Registry Directorate';
         }
         if (['UNIT_HEAD', 'UNIT_ADMIN', 'DIRECTOR', 'DEAN'].includes(role)) {
             return 'Director / Dean / HOD';
@@ -126,11 +137,25 @@ export default function MyQueriesPage() {
             setReplyFile(null);
             setActiveQuery(null);
             await fetchQueries();
-            alert('Formal response submitted successfully.');
+            alert('Formal defense submitted successfully.');
         } catch (error: any) {
             console.error('Reply submission error:', error);
             const msg = error.response?.data?.message || error.message || 'Failed to send reply';
             alert(`Failed to send reply: ${msg}`);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleAcknowledgeWarning = async (queryId: string) => {
+        setSubmitting(true);
+        try {
+            await api.post(`/api/queries/${queryId}/acknowledge`, {});
+            await fetchQueries();
+            alert('Official Warning acknowledged successfully. Compliance receipt logged in your personnel folio.');
+        } catch (error: any) {
+            console.error('Acknowledge error:', error);
+            alert('Failed to acknowledge warning: ' + (error.response?.data?.message || error.message));
         } finally {
             setSubmitting(false);
         }
@@ -142,7 +167,7 @@ export default function MyQueriesPage() {
         setIssueError('');
 
         try {
-            await api.post('/api/queries', {
+            await api.post('/api/queries/issue', {
                 ...issueFormData,
                 stipulatedHours: Number(issueFormData.stipulatedHours)
             });
@@ -170,7 +195,9 @@ export default function MyQueriesPage() {
         }
     };
 
-    if (loading && queries.length === 0) return <div className="p-8 text-center text-gray-500">Loading queries...</div>;
+    if (loading && queries.length === 0) {
+        return <div className="p-8 text-center text-gray-500">Loading disciplinary records...</div>;
+    }
 
     return (
         <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -182,9 +209,9 @@ export default function MyQueriesPage() {
                             <ShieldAlert className="w-7 h-7 text-red-400" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight">Disciplinary Folio &amp; Official Queries</h1>
+                            <h1 className="text-2xl font-bold tracking-tight">Disciplinary Actions: Queries &amp; Warnings</h1>
                             <p className="text-slate-300 text-xs mt-0.5">
-                                Institutional queries, mandatory defense SLA monitors, and permanent official warnings.
+                                Institutional queries, mandatory defense SLA monitors, and personnel folio warning receipts.
                             </p>
                         </div>
                     </div>
@@ -194,14 +221,14 @@ export default function MyQueriesPage() {
                     <Button
                         variant="primary"
                         onClick={() => setShowIssueModal(true)}
-                        className="bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30"
+                        className="bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 text-xs font-semibold"
                     >
-                        <Plus className="w-4 h-4 mr-1.5" /> Issue Disciplinary Action
+                        <Plus className="w-4 h-4 mr-1.5" /> Dispatch Disciplinary Action
                     </Button>
                 )}
             </div>
 
-            {/* Queries List */}
+            {/* Queries & Warnings List */}
             <div className="space-y-6">
                 {queries.map(query => {
                     const isWarning = query.actionType === 'OFFICIAL_WARNING';
@@ -210,89 +237,145 @@ export default function MyQueriesPage() {
                     const targetDeadline = query.responseDeadline || query.deadline;
 
                     return (
-                        <div key={query.id} className={`bg-white rounded-xl shadow-sm border overflow-hidden transition-all ${
-                            isDefaulted ? 'border-rose-300 ring-2 ring-rose-500/20' : 'border-gray-200'
+                        <div key={query.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all ${
+                            isDefaulted ? 'border-rose-300 ring-2 ring-rose-500/20' : isWarning ? 'border-amber-200' : 'border-slate-200'
                         }`}>
-                            {/* Card Header */}
-                            <div className={`px-6 py-4 border-b flex justify-between items-start ${
-                                isDefaulted ? 'bg-rose-50/80 border-rose-100' : isWarning ? 'bg-amber-50/70 border-amber-100' : 'bg-red-50/60 border-red-100'
+                            {/* Card Header with NOUN Official Header styling */}
+                            <div className={`px-6 py-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
+                                isDefaulted ? 'bg-rose-50/80 border-rose-100' : isWarning ? 'bg-amber-50/60 border-amber-100' : 'bg-red-50/50 border-red-100'
                             }`}>
-                                <div className="flex gap-4">
-                                    <AlertTriangle className={`mt-1 flex-shrink-0 ${isDefaulted ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-red-600'}`} size={24} />
+                                <div className="flex items-start gap-3.5">
+                                    <div className={`p-2 rounded-xl mt-0.5 ${
+                                        isWarning ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                                    }`}>
+                                        {isWarning ? <ShieldAlert size={22} /> : <AlertTriangle size={22} />}
+                                    </div>
                                     <div>
                                         <div className="flex items-center gap-2 flex-wrap pb-1">
                                             <h3 className="font-bold text-gray-900 text-base">
-                                                {query.title || (isWarning ? 'Official Warning / Caution' : 'Disciplinary Query')}
+                                                {query.title || (isWarning ? 'Official Warning / Caution' : 'Formal Disciplinary Query')}
                                             </h3>
-                                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                                            <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${
                                                 isWarning 
                                                     ? 'bg-amber-100 text-amber-900 border-amber-300' 
-                                                    : 'bg-red-100 text-red-900 border-red-300'
+                                                    : 'bg-rose-100 text-rose-900 border-rose-300'
                                             }`}>
-                                                {isWarning ? 'OFFICIAL WARNING (NO DEFENSE REQUIRED)' : 'FORMAL QUERY (MANDATORY DEFENSE)'}
+                                                {isWarning ? 'OFFICIAL WARNING / ADMONITION' : 'FORMAL QUERY (DEFENSE REQUIRED)'}
                                             </span>
                                             {isDefaulted && (
                                                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-600 text-white flex items-center gap-1 shadow-sm">
-                                                    <Lock size={10} /> DEFAULTED — DISCIPLINARY HOLD ACTIVE
+                                                    <Lock size={10} /> SLA DEFAULTED — DISCIPLINARY HOLD
                                                 </span>
                                             )}
-                                            {!query.copyHR && (
-                                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
-                                                    Internal
+                                            {query.breachLoggedToFolio && (
+                                                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-900 text-white flex items-center gap-1">
+                                                    <FolderLock size={10} /> Personnel Folio Logged
                                                 </span>
                                             )}
                                         </div>
 
-                                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                                            Issued by <strong className="text-gray-900">{getIssuerDisplayName(query.issuedBy)}</strong>
+                                        <p className="text-xs text-gray-600 font-medium">
+                                            Issued by: <strong className="text-gray-900">{getIssuerDisplayName(query.issuedBy)}</strong> • Ref: NOUN/REG/DISC/{query.id.substring(0, 8).toUpperCase()}
                                         </p>
-
-                                        <div className="text-gray-900 text-sm bg-white p-3 rounded-lg border border-gray-150 shadow-inner">
-                                            <div dangerouslySetInnerHTML={{ __html: query.content || query.description }} className="prose max-w-none text-gray-900" />
-                                        </div>
-
-                                        <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-600 font-medium items-center">
-                                            <span className="uppercase bg-gray-100 px-2 py-0.5 rounded font-bold text-gray-700">
-                                                Severity: {query.severity || 'NORMAL'}
-                                            </span>
-                                            {targetDeadline && !isWarning && (
-                                                <span className={`flex items-center gap-1 px-2 py-0.5 rounded font-semibold ${
-                                                    isDefaulted ? 'bg-rose-100 text-rose-800' : 'bg-blue-50 text-blue-800'
-                                                }`}>
-                                                    <Clock size={12} /> Deadline: {new Date(targetDeadline).toLocaleString('en-NG')}
-                                                </span>
-                                            )}
-                                            <span className="flex items-center gap-1 font-bold">
-                                                Status: <span className={isDefaulted ? 'text-rose-600' : 'text-gray-900'}>{query.status}</span>
-                                            </span>
-                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="text-xs text-gray-400 font-medium">
-                                    {new Date(query.createdAt).toLocaleDateString()}
+                                <div className="text-right text-xs text-gray-400 font-medium">
+                                    {new Date(query.createdAt).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
                                 </div>
                             </div>
 
-                            {/* Response Section */}
+                            {/* Content Body */}
+                            <div className="p-6 space-y-4">
+                                <div className="text-gray-900 text-sm bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                                        {isWarning ? 'Official Reprimand & Notice:' : 'Query Particulars & Allegations:'}
+                                    </div>
+                                    <div 
+                                        dangerouslySetInnerHTML={{ __html: query.content || query.description }} 
+                                        className="prose max-w-none text-gray-900 leading-relaxed text-xs" 
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap gap-3 text-xs text-gray-600 font-medium items-center">
+                                    <span className="uppercase bg-slate-100 px-2.5 py-1 rounded-lg font-bold text-slate-700 text-[11px]">
+                                        Severity: {query.severity || 'NORMAL'}
+                                    </span>
+                                    {targetDeadline && !isWarning && (
+                                        <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold text-[11px] ${
+                                            isDefaulted ? 'bg-rose-100 text-rose-800' : 'bg-blue-50 text-blue-800'
+                                        }`}>
+                                            <Clock size={13} /> Defense Deadline: {new Date(targetDeadline).toLocaleString('en-NG')}
+                                        </span>
+                                    )}
+                                    <span className="flex items-center gap-1 font-bold text-[11px]">
+                                        Status: <span className={isDefaulted ? 'text-rose-600' : 'text-gray-900'}>{query.status}</span>
+                                    </span>
+                                    {query.resolutionStatus && (
+                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                            Verdict: {query.resolutionStatus}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Warning Folio Notice & Acknowledgment Action */}
+                                {isWarning && (
+                                    <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                        <div className="space-y-0.5">
+                                            <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                                                <FolderLock size={15} /> Permanent Personnel Folio Caution
+                                            </div>
+                                            <p className="text-[11px] text-amber-800">
+                                                {query.warningAcknowledged 
+                                                    ? `Receipt formally acknowledged by staff on ${new Date(query.warningAcknowledgedAt || query.updatedAt || '').toLocaleDateString()}.`
+                                                    : `You are required to acknowledge receipt of this official admonition.`}
+                                            </p>
+                                        </div>
+
+                                        {!query.warningAcknowledged ? (
+                                            <button
+                                                onClick={() => handleAcknowledgeWarning(query.id)}
+                                                disabled={submitting}
+                                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/30 transition-all flex items-center gap-1.5 shrink-0"
+                                            >
+                                                <CheckCircle2 size={15} /> Acknowledge Receipt
+                                            </button>
+                                        ) : (
+                                            <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0">
+                                                <CheckCircle size={15} /> Acknowledgment Signed
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Response Section (For Formal Queries) */}
                             {!isWarning && (
-                                <div className="px-6 py-4 bg-gray-50/50 space-y-4">
+                                <div className="px-6 py-4 bg-gray-50/60 border-t border-slate-100 space-y-3">
                                     {!query.response ? (
                                         <p className="text-center text-gray-400 text-xs italic py-2">
-                                            {isDefaulted ? 'Deadline expired without an official defense. This matter has escalated to Central Registry.' : 'No defense explanation submitted yet.'}
+                                            {isDefaulted 
+                                                ? 'Defense deadline expired. Matter defaulted to Central Registry for disciplinary action.' 
+                                                : 'Formal written defense has not been submitted yet.'
+                                            }
                                         </p>
                                     ) : (
-                                        <div className="flex flex-col gap-1">
+                                        <div className="flex flex-col gap-1.5">
                                             <div className="flex justify-between items-center text-xs text-gray-500">
-                                                <span className="font-bold text-gray-700">Staff Formal Explanation / Defense</span>
-                                                <span>Submitted</span>
+                                                <span className="font-bold text-gray-800">Your Submitted Defense &amp; Exculpatory Representation</span>
+                                                <span className="text-emerald-600 font-semibold text-[11px]">✓ Received by Registry</span>
                                             </div>
-                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-sm text-gray-800 shadow-sm">
+                                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 text-xs text-gray-800 shadow-sm leading-relaxed">
                                                 {query.response}
                                                 {query.responseAttachmentUrl && (
-                                                    <div className="mt-2 pt-2 border-t border-gray-100">
-                                                        <a href={`${process.env.NEXT_PUBLIC_API_URL}${query.responseAttachmentUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 text-xs font-semibold">
-                                                            <Paperclip size={12} /> View Defense Attachment
+                                                    <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+                                                        <a 
+                                                            href={`${process.env.NEXT_PUBLIC_API_URL || 'https://noun-hrms.onrender.com'}${query.responseAttachmentUrl}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer" 
+                                                            className="text-indigo-600 hover:underline flex items-center gap-1 text-xs font-semibold"
+                                                        >
+                                                            <Paperclip size={13} /> View Attached Evidence Document
                                                         </a>
                                                     </div>
                                                 )}
@@ -302,31 +385,34 @@ export default function MyQueriesPage() {
                                 </div>
                             )}
 
-                            {/* Reply Form (For regular queries still open) */}
+                            {/* Reply Form (For regular queries still open & not answered) */}
                             {!isWarning && isOpen && !query.response && (
-                                <div className="p-4 border-t border-gray-200 bg-white">
-                                    <form onSubmit={(e) => handleReply(e, query.id, activeQuery === query.id ? replyContent : '', activeQuery === query.id ? replyFile : null)}>
-                                        <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                                            Submit Formal Defense &amp; Representation
+                                <div className="p-5 border-t border-gray-200 bg-white">
+                                    <form onSubmit={(e) => handleReply(e, query.id, activeQuery === query.id ? replyContent : '', activeQuery === query.id ? replyFile : null)} className="space-y-3">
+                                        <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                            Submit Formal Exculpatory Defense
                                         </label>
                                         <textarea
-                                            className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 outline-none text-black"
-                                            rows={3}
-                                            placeholder="State your formal defense and explanation..."
+                                            className="w-full border border-gray-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none text-slate-900 leading-relaxed"
+                                            rows={4}
+                                            placeholder="Type your formal written explanation and defense in detail..."
                                             value={activeQuery === query.id ? replyContent : ''}
                                             onChange={e => { setActiveQuery(query.id); setReplyContent(e.target.value); }}
                                             required
                                         />
-                                        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mt-2">
-                                            <input
-                                                type="file"
-                                                className="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
-                                                onChange={e => { setActiveQuery(query.id); setReplyFile(e.target.files?.[0] || null); }}
-                                            />
+                                        <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+                                            <div className="w-full sm:w-auto">
+                                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Upload Supporting Proof / Document (Optional):</label>
+                                                <input
+                                                    type="file"
+                                                    className="text-xs text-gray-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-rose-50 file:text-rose-700 hover:file:bg-rose-100"
+                                                    onChange={e => { setActiveQuery(query.id); setReplyFile(e.target.files?.[0] || null); }}
+                                                />
+                                            </div>
                                             <button
                                                 type="submit"
                                                 disabled={submitting && activeQuery === query.id}
-                                                className="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-700 flex items-center gap-2 disabled:opacity-50 transition"
+                                                className="bg-rose-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-rose-700 flex items-center gap-2 disabled:opacity-50 transition shadow-md shadow-rose-600/30 shrink-0"
                                             >
                                                 <Send size={14} /> {submitting && activeQuery === query.id ? 'Submitting...' : 'Submit Official Defense'}
                                             </button>
@@ -339,22 +425,22 @@ export default function MyQueriesPage() {
                 })}
 
                 {queries.length === 0 && (
-                    <div className="text-center py-12 bg-white rounded-xl border border-gray-200 shadow-sm">
-                        <CheckCircle className="mx-auto text-emerald-500 mb-2" size={36} />
-                        <h3 className="text-lg font-bold text-gray-900">Good Standing</h3>
-                        <p className="text-gray-500 text-sm mt-1">Your staff record is clean with no active queries or warnings.</p>
+                    <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                        <CheckCircle className="mx-auto text-emerald-500 mb-3" size={44} />
+                        <h3 className="text-lg font-bold text-gray-900">Personnel Record in Good Standing</h3>
+                        <p className="text-gray-500 text-xs mt-1">You have no pending disciplinary queries or warnings registered against your account.</p>
                     </div>
                 )}
             </div>
 
-            {/* Issue Disciplinary Action Modal */}
+            {/* Issue Disciplinary Action Modal (For Issuer Roles) */}
             {showIssueModal && (
-                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl my-8">
-                        <div className="flex items-center justify-between border-b pb-3">
-                            <div className="flex items-center gap-2 text-red-600">
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl my-8 border border-slate-100">
+                        <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+                            <div className="flex items-center gap-2 text-rose-600">
                                 <ShieldAlert size={22} />
-                                <h3 className="text-lg font-bold text-gray-900">Issue Disciplinary Action</h3>
+                                <h3 className="text-lg font-bold text-gray-900">Dispatch Disciplinary Instrument</h3>
                             </div>
                             <button onClick={() => setShowIssueModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <X size={20} />
@@ -370,19 +456,19 @@ export default function MyQueriesPage() {
                         <form onSubmit={handleIssueSubmit} className="space-y-4">
                             {/* Action Type Toggle */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Disciplinary Instrument Type *</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">Instrument Mode *</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setIssueFormData(prev => ({ ...prev, actionType: 'QUERY' }))}
                                         className={`p-3 rounded-xl border text-left transition ${
                                             issueFormData.actionType === 'QUERY'
-                                                ? 'border-red-600 bg-red-50/60 ring-2 ring-red-500/20'
+                                                ? 'border-rose-600 bg-rose-50/60 ring-2 ring-rose-500/20'
                                                 : 'border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        <div className="font-bold text-xs text-red-950">1. Formal Query</div>
-                                        <div className="text-[11px] text-red-700 mt-0.5">Requires mandatory defense within stipulated timeframe.</div>
+                                        <div className="font-bold text-xs text-rose-950">1. Formal Query</div>
+                                        <div className="text-[11px] text-rose-700 mt-0.5">Requires mandatory defense within stipulated deadline.</div>
                                     </button>
 
                                     <button
@@ -394,8 +480,8 @@ export default function MyQueriesPage() {
                                                 : 'border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        <div className="font-bold text-xs text-amber-950">2. Official Warning / Admonition</div>
-                                        <div className="text-[11px] text-amber-800 mt-0.5">Formal caution auto-logged into permanent staff folio.</div>
+                                        <div className="font-bold text-xs text-amber-950">2. Official Warning</div>
+                                        <div className="text-[11px] text-amber-800 mt-0.5">Caution logged to folio with acknowledgment.</div>
                                     </button>
                                 </div>
                             </div>
@@ -407,7 +493,7 @@ export default function MyQueriesPage() {
                                     required
                                     value={issueFormData.staffProfileId}
                                     onChange={e => setIssueFormData(prev => ({ ...prev, staffProfileId: e.target.value }))}
-                                    className="w-full p-2.5 border rounded-lg text-sm bg-white text-black focus:ring-2 focus:ring-red-500 outline-none"
+                                    className="w-full p-2.5 border rounded-xl text-xs bg-white text-black focus:ring-2 focus:ring-rose-500 outline-none"
                                 >
                                     <option value="">-- Select Staff Member --</option>
                                     {staffList.map(s => (
@@ -420,74 +506,62 @@ export default function MyQueriesPage() {
 
                             {/* Title / Subject */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Subject / Query Title *</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Subject / Caption *</label>
                                 <input
                                     type="text"
                                     required
-                                    placeholder="e.g. Query on Unauthorized Absence from Duty / Negligence"
+                                    placeholder="e.g. Query on Unauthorized Absence from Duty"
                                     value={issueFormData.title}
                                     onChange={e => setIssueFormData(prev => ({ ...prev, title: e.target.value }))}
-                                    className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-red-500 outline-none"
+                                    className="w-full p-2.5 border rounded-xl text-xs text-black focus:ring-2 focus:ring-rose-500 outline-none"
                                 />
                             </div>
 
                             {/* Stipulated Hours (if Query) */}
                             {issueFormData.actionType === 'QUERY' && (
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-1">Stipulated Defense Deadline *</label>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Defense Deadline (Hours) *</label>
                                     <select
                                         value={issueFormData.stipulatedHours}
                                         onChange={e => setIssueFormData(prev => ({ ...prev, stipulatedHours: e.target.value }))}
-                                        className="w-full p-2.5 border rounded-lg text-sm bg-white text-black focus:ring-2 focus:ring-red-500 outline-none"
+                                        className="w-full p-2.5 border rounded-xl text-xs bg-white text-black focus:ring-2 focus:ring-rose-500 outline-none"
                                     >
-                                        <option value="24">24 Hours (Urgent / Critical Matter)</option>
+                                        <option value="24">24 Hours (Urgent Examination / Audit Matter)</option>
                                         <option value="48">48 Hours (Standard Statutory Window)</option>
                                         <option value="72">72 Hours (Extended Representation Window)</option>
+                                        <option value="120">120 Hours (5 Days Formal Hearing)</option>
                                     </select>
                                 </div>
                             )}
 
                             {/* Content */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Detailed Particulars / Allegation *</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Details &amp; Directives *</label>
                                 <textarea
                                     required
                                     rows={4}
-                                    placeholder="Specify details, dates, and institutional regulations breached..."
+                                    placeholder="State the facts of the allegation or administrative caution..."
                                     value={issueFormData.content}
                                     onChange={e => setIssueFormData(prev => ({ ...prev, content: e.target.value }))}
-                                    className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-red-500 outline-none"
+                                    className="w-full p-2.5 border rounded-xl text-xs text-black focus:ring-2 focus:ring-rose-500 outline-none leading-relaxed"
                                 />
                             </div>
 
-                            {/* Copy HR Toggle */}
-                            <label className="flex items-center gap-2 cursor-pointer pt-1">
-                                <input
-                                    type="checkbox"
-                                    checked={issueFormData.copyHR}
-                                    onChange={e => setIssueFormData(prev => ({ ...prev, copyHR: e.target.checked }))}
-                                    className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                                />
-                                <span className="text-xs font-semibold text-gray-700">
-                                    Copy Central Registry HR &amp; Registrar Folio (Mandatory for Institutional Queries)
-                                </span>
-                            </label>
-
-                            <div className="flex justify-end gap-2 pt-3 border-t">
-                                <Button
-                                    variant="secondary"
+                            <div className="flex justify-end gap-3 pt-3 border-t">
+                                <button
                                     type="button"
                                     onClick={() => setShowIssueModal(false)}
+                                    className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50"
                                 >
                                     Cancel
-                                </Button>
-                                <Button
-                                    variant="danger"
+                                </button>
+                                <button
                                     type="submit"
                                     disabled={issueLoading}
+                                    className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/30"
                                 >
                                     {issueLoading ? 'Dispatching...' : 'Dispatch Action'}
-                                </Button>
+                                </button>
                             </div>
                         </form>
                     </div>
