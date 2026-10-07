@@ -235,7 +235,9 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     Academic &amp; Workload Engine
                 </div>
-                <LinkItem href="/dashboard/academic/hierarchy" icon={Building2} label="Faculty Hierarchy & Governance" badge="Structure" />
+                {(isRegistrar || isImputer || isVC || ['REGISTRY_ADMIN', 'HR_ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'].includes(role || '')) && (
+                    <LinkItem href="/dashboard/academic/hierarchy" icon={Building2} label="Faculty Hierarchy & Governance" badge="Executive" />
+                )}
                 <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="Engine" />
                 <LinkItem href="/dashboard/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" badge="Lecturer" />
                 <LinkItem href="/dashboard/academic/workload/allocation" icon={BookOpen} label="Course Allocation Matrix" badge="HOD Desk" />

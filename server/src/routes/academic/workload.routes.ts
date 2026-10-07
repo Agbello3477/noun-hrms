@@ -25,10 +25,20 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
-// Public / Read access to academic structure with authentication
+// Academic Structure with authentication & role segregation
 router.get('/faculties', verifyToken, getFaculties);
-router.get('/faculties/hierarchy', verifyToken, getFacultyHierarchy);
-router.get('/hierarchy', verifyToken, getFacultyHierarchy);
+router.get(
+  '/faculties/hierarchy',
+  verifyToken,
+  requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
+  getFacultyHierarchy
+);
+router.get(
+  '/hierarchy',
+  verifyToken,
+  requireRole([Role.SUPER_USER, Role.ADMIN, Role.HR_ADMIN, Role.REGISTRAR, Role.VICE_CHANCELLOR]),
+  getFacultyHierarchy
+);
 router.get('/departments', verifyToken, getDepartments);
 router.get('/programmes', verifyToken, getAcademicProgrammes);
 router.get('/courses', verifyToken, getAcademicCourses);

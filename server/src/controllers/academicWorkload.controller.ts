@@ -1021,6 +1021,31 @@ export const getFacultyHierarchy = async (req: Request, res: Response) => {
                 }
               }
             },
+            programmes: {
+              select: { id: true, name: true, code: true }
+            },
+            courses: {
+              include: {
+                programme: { select: { id: true, name: true, code: true } },
+                allocations: {
+                  include: {
+                    academicStaff: {
+                      select: {
+                        id: true,
+                        staffId: true,
+                        surname: true,
+                        otherNames: true,
+                        title: true,
+                        rank: true,
+                        currentAcademicRank: true,
+                        user: { select: { id: true, name: true, email: true } }
+                      }
+                    }
+                  }
+                }
+              },
+              orderBy: { courseCode: 'asc' }
+            },
             _count: {
               select: { programmes: true, courses: true, complaints: true }
             }
@@ -1031,11 +1056,11 @@ export const getFacultyHierarchy = async (req: Request, res: Response) => {
       orderBy: { name: 'asc' }
     });
 
-    // Also fetch lecturers for each department
+    // Also fetch lecturers for each department with course allocations summary
     const enriched = await Promise.all(
-      faculties.map(async (fac) => {
+      faculties.map(async (fac: any) => {
         const departmentsWithLecturers = await Promise.all(
-          fac.departments.map(async (dept) => {
+          fac.departments.map(async (dept: any) => {
             const deptCode = dept.code || dept.id;
             const unit = await prisma.unit.findFirst({
               where: {
@@ -1065,11 +1090,36 @@ export const getFacultyHierarchy = async (req: Request, res: Response) => {
                   title: true,
                   rank: true,
                   currentAcademicRank: true,
+                  courseAllocations: {
+                    select: {
+                      id: true,
+                      courseId: true,
+                      assignedCreditUnits: true,
+                      role: true,
+                      allocationStatus: true,
+                      enrolledStudentsCount: true,
+                      course: {
+                        select: {
+                          courseCode: true,
+                          courseTitle: true,
+                          creditUnits: true
+                        }
+                      }
+                    }
+                  },
                   user: { select: { id: true, name: true, email: true, role: true } }
                 },
                 orderBy: { surname: 'asc' }
               });
-              lecturers = staffProfiles;
+
+              lecturers = staffProfiles.map(s => {
+                const totalAllocatedCredits = s.courseAllocations.reduce((acc, a) => acc + (Number(a.assignedCreditUnits) || a.course?.creditUnits || 0), 0);
+                return {
+                  ...s,
+                  totalAllocatedCredits,
+                  allocationsCount: s.courseAllocations.length,
+                };
+              });
             }
 
             return {
