@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { OfficialLeaveBooklet } from '@/types/leaveBooklet';
+import { OfficialLeaveBooklet } from '../../types/leaveBooklet';
 import { Printer, Download, CheckCircle2, ShieldCheck, FileCheck, Building, Calendar, User, Phone, Mail, Award, Clock } from 'lucide-react';
 
 interface OfficialLeaveBookletViewerProps {

@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { OfficialLeaveBooklet } from '@/types/leaveBooklet';
-import SignaturePad from '@/components/ui/SignaturePad';
+import { OfficialLeaveBooklet } from '../../types/leaveBooklet';
+import SignaturePad from '../ui/SignaturePad';
 import {
   FileText,
   User,

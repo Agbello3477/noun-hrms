@@ -57,12 +57,14 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                 }`}
             >
                 <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon 
-                        size={17} 
-                        className={`flex-shrink-0 transition-colors ${
-                            active ? 'text-[#006533]' : 'text-slate-400 group-hover:text-slate-700'
-                        }`} 
-                    />
+                    {Icon && (
+                        <Icon 
+                            size={17} 
+                            className={`flex-shrink-0 transition-colors ${
+                                active ? 'text-[#006533]' : 'text-slate-400 group-hover:text-slate-700'
+                            }`} 
+                        />
+                    )}
                     <span className="truncate">{label}</span>
                 </div>
                 {badge && (

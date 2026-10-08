@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { OfficialLeaveBooklet } from '@/types/leaveBooklet';
+import { OfficialLeaveBooklet } from '../../types/leaveBooklet';
 import OfficialLeaveBookletViewer from './OfficialLeaveBookletViewer';
 import OfficialLeaveBookletForm from './OfficialLeaveBookletForm';
 import { X, BookOpen, Printer, Edit3, ShieldCheck } from 'lucide-react';
