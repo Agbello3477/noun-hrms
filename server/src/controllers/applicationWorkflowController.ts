@@ -585,6 +585,11 @@ export async function directorAction(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: 'Application not found.' });
     }
 
+    const callerProfile = await prisma.staffProfile.findFirst({
+      where: { OR: [{ userId: callerId }, { id: callerId }] },
+      include: { unit: true, studyCenter: true },
+    });
+
     // Strict Maker-Checker: Caller cannot vet their own application
     if (application.applicantId === callerId || (callerProfile && application.applicantId === callerProfile.userId)) {
       return res.status(403).json({
