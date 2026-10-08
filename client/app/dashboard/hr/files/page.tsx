@@ -13,11 +13,14 @@ import Button from '../../../../components/ui/Button';
 
 interface FileUser {
     id: string;
-    name: string;
-    role: string;
-    staffProfile: {
+    name?: string | null;
+    email?: string | null;
+    role?: string;
+    staffProfile?: {
         id?: string;
-        staffId: string;
+        staffId?: string | null;
+        surname?: string | null;
+        otherNames?: string | null;
         title?: string | null;
         rank?: string | null;
         level?: string | null;
@@ -25,9 +28,9 @@ interface FileUser {
         employmentCategory?: string;
         accountStatus?: string;
         isActivated?: boolean;
-        createdById: string | null;
+        createdById?: string | null;
         createdBy?: { name: string };
-        createdAt: string;
+        createdAt?: string;
         unit?: { name: string };
         studyCenter?: { name: string };
         queries?: any[];
@@ -127,11 +130,15 @@ export default function FileRegistryPage() {
         }
 
         if (search) {
-            const lower = search.toLowerCase();
-            res = res.filter(f =>
-                f.name.toLowerCase().includes(lower) ||
-                (f.staffProfile?.staffId || '').toLowerCase().includes(lower)
-            );
+            const lower = search.toLowerCase().trim();
+            res = res.filter(f => {
+                const name = (f.name || '').toLowerCase();
+                const staffId = (f.staffProfile?.staffId || '').toLowerCase();
+                const surname = (f.staffProfile?.surname || '').toLowerCase();
+                const otherNames = (f.staffProfile?.otherNames || '').toLowerCase();
+                const email = (f.email || '').toLowerCase();
+                return name.includes(lower) || staffId.includes(lower) || surname.includes(lower) || otherNames.includes(lower) || email.includes(lower);
+            });
         }
 
         if (filterCenter) {
@@ -342,12 +349,12 @@ export default function FileRegistryPage() {
                         return (
                             <div key={file.id} className="flex flex-col items-center group relative w-full">
                                 <FolderIcon
-                                    staffName={`${file.staffProfile?.title ? file.staffProfile.title + ' ' : ''}${file.name}`}
+                                    staffName={`${file.staffProfile?.title ? file.staffProfile.title + ' ' : ''}${file.name || 'Unnamed Staff'}`}
                                     staffId={(file.staffProfile?.staffId || 'N/A').replace('NOUN/', '')}
                                     createdAt={file.staffProfile?.createdAt}
                                     createdBy={file.staffProfile?.createdBy?.name || null}
                                     color={folderColor}
-                                    role={file.role}
+                                    role={file.role || 'STAFF'}
                                     designation={designation}
                                     onClick={() => setSelectedStaffFileId(file.id)}
                                 />
@@ -362,7 +369,7 @@ export default function FileRegistryPage() {
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleClearStaff(file.staffProfile.id!);
+                                                        if (file.staffProfile?.id) handleClearStaff(file.staffProfile.id);
                                                     }}
                                                     disabled={actionLoadingId === file.staffProfile.id}
                                                     className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold shadow"
@@ -372,7 +379,7 @@ export default function FileRegistryPage() {
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleRejectClearance(file.staffProfile.id!);
+                                                        if (file.staffProfile?.id) handleRejectClearance(file.staffProfile.id);
                                                     }}
                                                     disabled={actionLoadingId === file.staffProfile.id}
                                                     className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-bold"

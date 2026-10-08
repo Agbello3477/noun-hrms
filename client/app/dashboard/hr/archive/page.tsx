@@ -9,21 +9,21 @@ import { FolderIcon } from '../../../../components/hr/FolderIcon';
 
 interface ArchivedFile {
   id: string;
-  staffId: string;
-  surname: string;
-  otherNames: string;
-  title: string | null;
-  rank: string | null;
-  level: string | null;
-  deletedAt: string | null;
+  staffId?: string | null;
+  surname?: string | null;
+  otherNames?: string | null;
+  title?: string | null;
+  rank?: string | null;
+  level?: string | null;
+  deletedAt?: string | null;
   status?: string;
-  user: {
-    name: string;
-    email: string;
-    role: string;
-  };
-  unit: { name: string } | null;
-  studyCenter: { name: string } | null;
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+  unit?: { name: string } | null;
+  studyCenter?: { name: string } | null;
 }
 
 export default function RegistryArchivePage() {
@@ -71,9 +71,14 @@ export default function RegistryArchivePage() {
 
     if (term) {
       filtered = filtered.filter(
-        file =>
-          file.user.name.toLowerCase().includes(term) ||
-          (file.staffId && file.staffId.toLowerCase().includes(term))
+        file => {
+          const userName = (file.user?.name || '').toLowerCase();
+          const staffId = (file.staffId || '').toLowerCase();
+          const surname = (file.surname || '').toLowerCase();
+          const otherNames = (file.otherNames || '').toLowerCase();
+          const email = (file.user?.email || '').toLowerCase();
+          return userName.includes(term) || staffId.includes(term) || surname.includes(term) || otherNames.includes(term) || email.includes(term);
+        }
       );
     }
 
@@ -96,10 +101,10 @@ export default function RegistryArchivePage() {
     }
     fetchArchivedFiles(securityCode.trim());
   };
-
   const handleRestoreFile = async (file: ArchivedFile) => {
     const activeCode = securityCode;
-    if (!confirm(`Are you sure you want to restore the staff file for ${file.user.name}? This will restore their active portal status.`)) {
+    const staffName = file.user?.name || `${file.surname || ''} ${file.otherNames || ''}`.trim() || 'this staff';
+    if (!confirm(`Are you sure you want to restore the staff file for ${staffName}? This will restore their active portal status.`)) {
       return;
     }
 
@@ -269,7 +274,7 @@ export default function RegistryArchivePage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-gray-900 truncate">
-                      {file.title ? `${file.title} ` : ''}{file.user.name}
+                      {file.title ? `${file.title} ` : ''}{file.user?.name || `${file.surname || ''} ${file.otherNames || ''}`.trim() || 'Archived Staff'}
                     </h3>
                     <p className="text-xs text-gray-500 font-mono truncate">{file.staffId || 'NO ID'}</p>
                     <p className="text-xs text-gray-600 truncate mt-1">{designation}</p>

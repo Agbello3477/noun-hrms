@@ -5,8 +5,8 @@ import { Folder, User, Calendar, FilePlus } from 'lucide-react';
 interface FolderIconProps {
     staffName: string;
     staffId: string;
-    createdAt: string;
-    createdBy: string | null;
+    createdAt?: string | null;
+    createdBy?: string | null;
     onClick?: () => void;
     color?: 'blue' | 'yellow' | 'red';
     role?: string;
@@ -65,7 +65,7 @@ export const FolderIcon = ({ staffName, staffId, createdAt, createdBy, onClick, 
             <div className="text-[10px] text-gray-400 space-y-0.5 w-full">
                 <div className="flex items-center justify-center gap-1">
                     <Calendar size={10} />
-                    <span>{new Date(createdAt).toLocaleDateString()}</span>
+                    <span>{createdAt ? new Date(createdAt).toLocaleDateString() : 'N/A'}</span>
                 </div>
                 {createdBy && (
                     <div className="flex items-center justify-center gap-1">
