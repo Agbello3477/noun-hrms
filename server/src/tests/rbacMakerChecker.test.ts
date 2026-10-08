@@ -13,7 +13,7 @@ import { Role } from '@prisma/client';
 import { ensureRegistrarAccount } from '../services/registrarSeed.service';
 
 async function runTests() {
-    await enableDbMock();
+    await enableDbMock(true);
     console.log('🧪 Starting RBAC Maker-Checker Dual Control Integration Tests...');
     let passed = 0;
     let failed = 0;

@@ -1,15 +1,19 @@
 import prisma from '../prisma';
 
-export const enableDbMock = async () => {
+export const enableDbMock = async (force: boolean = false) => {
     let isDbConnected = true;
-    try {
-        await prisma.$connect();
-    } catch {
+    if (!force) {
+        try {
+            await prisma.$connect();
+        } catch {
+            isDbConnected = false;
+            console.warn('⚠️ PostgreSQL database is offline. Running integration tests in MOCK mode.');
+        }
+    } else {
         isDbConnected = false;
-        console.warn('⚠️ PostgreSQL database is offline. Running integration tests in MOCK mode.');
     }
 
-    if (!isDbConnected) {
+    if (!isDbConnected || force) {
         const mockUserId = 'mock-user-uuid';
         const mockProfileId = 'mock-profile-uuid';
         const mockVoucherId = 'mock-voucher-uuid';
