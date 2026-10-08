@@ -38,7 +38,7 @@ function assert(condition: boolean, testName: string, detail?: string) {
 
 async function runRoleAuthorizationAndVcTests() {
   console.log('🧪 Starting Role Assignment, Registrar Authorization & VC Functionality Tests...\n');
-  await enableDbMock();
+  await enableDbMock(true);
 
   // Seed baseline users in mock DB
   const staffUserId = 'user-staff-001';

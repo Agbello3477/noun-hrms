@@ -1,6 +1,6 @@
 import prisma from '../prisma';
 
-export const enableDbMock = async (force: boolean = false) => {
+export const enableDbMock = async (force: boolean = true) => {
     let isDbConnected = true;
     if (!force) {
         try {

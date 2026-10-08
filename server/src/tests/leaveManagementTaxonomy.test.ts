@@ -10,7 +10,7 @@ import {
 import { LeaveType, LeaveApplicationStatus, Role, Cadre } from '@prisma/client';
 
 async function runTests() {
-  await enableDbMock();
+  await enableDbMock(true);
   console.log('🧪 Starting Statutory Leave Taxonomy & Entitlement Engine Integration Tests...');
   let passed = 0;
   let failed = 0;
