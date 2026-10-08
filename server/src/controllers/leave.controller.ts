@@ -304,11 +304,20 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         const approverRole = req.user.role;
         const isGlobalApprover = [Role.HR_ADMIN, Role.SUPER_USER, Role.VICE_CHANCELLOR].includes(approverRole as any);
 
-        if (!isGlobalApprover) {
-            const approverProfile = await prisma.staffProfile.findUnique({
-                where: { userId: approverId },
-                include: { unit: true }
+        const approverProfile = await prisma.staffProfile.findUnique({
+            where: { userId: approverId },
+            include: { unit: true }
+        });
+
+        // Maker-Checker: Caller cannot approve/recommend their own leave request
+        if (existingLeave.staff?.userId === approverId || (approverProfile && existingLeave.staffId === approverProfile.id)) {
+            return res.status(403).json({
+                error: 'ERR_MAKER_CHECKER_SELF_AUTHORIZATION',
+                message: 'Dual-control violation: You cannot approve or recommend your own leave request.'
             });
+        }
+
+        if (!isGlobalApprover) {
             if (!approverProfile) {
                 return res.status(403).json({ message: 'Unauthorized: Approver profile not found' });
             }
@@ -325,34 +334,54 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
                 isAuthorized = true;
             } else if (approverProfile.unitId && targetStaff.unitId === approverProfile.unitId) {
                 isAuthorized = true;
-            } else if (approverProfile.unit && approverProfile.unit.type === 'FACULTY') {
-                // Dean check
-                const facultyCode = approverProfile.unit.code || '';
-                const mapping: Record<string, string[]> = {
-                    'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
-                    'FAC-LAW': ['DEP-LAW'],
-                    'FAC-SOCIA': ['DEP-POL'],
-                    'FAC-MANAG': ['DEP-ACC'],
-                    'FAC-EDUCA': ['DEP-EDT'],
-                    'FAC-HEALT': ['DEP-PBH'],
-                    'FAC-AGRIC': ['DEP-AGR'],
-                    'FAC-ARTS': ['DEP-ART'],
-                    'FAC-COMPU': ['DEP-CMP']
-                };
-                const departmentCodes = mapping[facultyCode] || [];
-                
-                const deptUnits = await prisma.unit.findMany({
-                    where: { code: { in: departmentCodes } },
-                    select: { id: true }
+            } else {
+                const headedUnits = await prisma.unit.findMany({
+                    where: {
+                        OR: [{ headId: approverId }, { headId: approverProfile.id }]
+                    },
+                    select: { id: true, code: true, type: true }
                 });
-                const deptIds = deptUnits.map(d => d.id);
-                if (targetStaff.unitId && deptIds.includes(targetStaff.unitId)) {
+                const headedIds = headedUnits.map(u => u.id);
+                if (targetStaff.unitId && headedIds.includes(targetStaff.unitId)) {
                     isAuthorized = true;
+                } else {
+                    const allUnits = [...(approverProfile.unit ? [approverProfile.unit] : []), ...headedUnits];
+                    for (const u of allUnits) {
+                        if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+                            const facultyCode = u.code || '';
+                            const mapping: Record<string, string[]> = {
+                                'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                                'FAC-LAW': ['DEP-LAW'],
+                                'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+                                'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+                                'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+                                'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+                                'FAC-AGRIC': ['DEP-AGR'],
+                                'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+                                'FAC-COMPU': ['DEP-CMP']
+                            };
+                            const departmentCodes = mapping[facultyCode] || [];
+                            if (departmentCodes.length > 0) {
+                                const deptUnits = await prisma.unit.findMany({
+                                    where: { code: { in: departmentCodes } },
+                                    select: { id: true }
+                                });
+                                const deptIds = deptUnits.map(d => d.id);
+                                if (targetStaff.unitId && deptIds.includes(targetStaff.unitId)) {
+                                    isAuthorized = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             if (!isAuthorized) {
-                return res.status(403).json({ message: 'Unauthorized: Staff is not under your supervision boundary' });
+                return res.status(403).json({
+                    error: 'FORBIDDEN_ORGANIZATIONAL_SCOPE',
+                    message: "Unauthorized: Staff is not under your supervision boundary"
+                });
             }
         }
 

@@ -585,34 +585,86 @@ export async function directorAction(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: 'Application not found.' });
     }
 
-    // Guard: Caller must be the assigned director OR hold UNIT_HEAD/leadership role OR SUPER_USER
-    let callerProfile = await prisma.staffProfile.findFirst({
-      where: { OR: [{ userId: callerId }, { id: callerId }] },
-      select: { id: true, userId: true, unitId: true, centerId: true },
-    });
-
-    const isDesignatedDirector =
-      application.directorId === callerId ||
-      (callerProfile && application.directorId === callerProfile.userId) ||
-      (callerProfile && application.directorId === callerProfile.id) ||
-      (callerProfile?.unitId && application.applicant?.staffProfile?.unitId === callerProfile.unitId) ||
-      (callerProfile?.centerId && application.applicant?.staffProfile?.centerId === callerProfile.centerId);
-
-    const hasDirectorPrivileges =
-      callerRole === 'UNIT_HEAD' ||
-      callerRole === 'STUDY_CENTER_MANAGER' ||
-      callerRole === 'SUPER_USER' ||
-      callerRole === 'ADMIN' ||
-      callerRole === 'REGISTRAR' ||
-      callerRole === 'DEPUTY_REGISTRAR' ||
-      callerRole === 'CLINIC_HEAD' ||
-      callerRole === 'SECURITY_HEAD' ||
-      callerRole === 'VICE_CHANCELLOR';
-
-    if (!isDesignatedDirector && !hasDirectorPrivileges) {
+    // Strict Maker-Checker: Caller cannot vet their own application
+    if (application.applicantId === callerId || (callerProfile && application.applicantId === callerProfile.userId)) {
       return res.status(403).json({
         success: false,
-        error: 'Only the designated Directorate Head or authorized Director may vet this application.',
+        code: 'ERR_MAKER_CHECKER_SELF_AUTHORIZATION',
+        error: 'Dual-control violation: You cannot vet or endorse an application you created.',
+      });
+    }
+
+    // Guard: Caller must be the assigned director, the Head of the applicant's Unit/Faculty/Center, or Central Executive
+    const isCentralExecutive = ['SUPER_USER', 'VICE_CHANCELLOR', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'ADMIN'].includes(callerRole);
+
+    let isAuthorizedJurisdiction =
+      application.directorId === callerId ||
+      (callerProfile && application.directorId === callerProfile.userId) ||
+      (callerProfile && application.directorId === callerProfile.id);
+
+    if (!isAuthorizedJurisdiction && callerProfile && application.applicant?.staffProfile) {
+      const applicantProfile = application.applicant.staffProfile;
+      if (callerProfile.centerId && applicantProfile.centerId && callerProfile.centerId === applicantProfile.centerId) {
+        isAuthorizedJurisdiction = true;
+      } else if (callerProfile.unitId && applicantProfile.unitId && callerProfile.unitId === applicantProfile.unitId) {
+        isAuthorizedJurisdiction = true;
+      } else {
+        const callerHeadedUnits = await prisma.unit.findMany({
+          where: {
+            OR: [
+              { headId: callerId },
+              ...(callerProfile.id ? [{ headId: callerProfile.id }] : []),
+            ],
+          },
+          select: { id: true, code: true, type: true },
+        });
+
+        const headedUnitIds = callerHeadedUnits.map((u) => u.id);
+        if (applicantProfile.unitId && headedUnitIds.includes(applicantProfile.unitId)) {
+          isAuthorizedJurisdiction = true;
+        } else {
+          // Check faculty departmental mappings
+          const allHeadedOrAssigned = [
+            ...(callerProfile.unitId ? [{ id: callerProfile.unitId, code: (callerProfile as any).unit?.code, type: (callerProfile as any).unit?.type }] : []),
+            ...callerHeadedUnits,
+          ];
+
+          for (const u of allHeadedOrAssigned) {
+            if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+              const facultyDeptMapping: Record<string, string[]> = {
+                'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                'FAC-LAW': ['DEP-LAW'],
+                'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+                'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+                'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+                'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+                'FAC-AGRIC': ['DEP-AGR'],
+                'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+                'FAC-COMPU': ['DEP-CMP'],
+              };
+              const deptCodes = facultyDeptMapping[u.code || ''] || [];
+              if (deptCodes.length > 0) {
+                const childUnits = await prisma.unit.findMany({
+                  where: { code: { in: deptCodes } },
+                  select: { id: true },
+                });
+                const childUnitIds = childUnits.map((cu) => cu.id);
+                if (applicantProfile.unitId && childUnitIds.includes(applicantProfile.unitId)) {
+                  isAuthorizedJurisdiction = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!isAuthorizedJurisdiction && !isCentralExecutive) {
+      return res.status(403).json({
+        success: false,
+        error: 'FORBIDDEN_ORGANIZATIONAL_SCOPE',
+        message: "You do not have jurisdiction over this staff member's administrative unit.",
       });
     }
 

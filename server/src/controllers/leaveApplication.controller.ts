@@ -576,6 +576,97 @@ export const endorseLeaveByHod = async (req: Request, res: Response) => {
       });
     }
 
+    const isExecutiveOrRegistry = (
+      [
+        Role.HR_ADMIN,
+        Role.REGISTRY_ADMIN,
+        Role.REGISTRAR,
+        Role.DEPUTY_REGISTRAR,
+        Role.SUPER_USER,
+        Role.VICE_CHANCELLOR,
+      ] as Role[]
+    ).includes(userRole);
+
+    const headProfile = await prisma.staffProfile.findUnique({
+      where: { userId: approverId },
+      include: { unit: true, studyCenter: true },
+    });
+
+    // Maker-Checker validation: Caller cannot endorse their own leave application
+    if (application.staff?.userId === approverId || (headProfile && application.staffId === headProfile.id)) {
+      return res.status(403).json({
+        error: 'ERR_MAKER_CHECKER_SELF_AUTHORIZATION',
+        message: 'Dual-control violation: You cannot endorse your own leave application.',
+      });
+    }
+
+    // Jurisdiction validation for non-executive supervisors
+    if (!isExecutiveOrRegistry) {
+      if (!headProfile) {
+        return res.status(403).json({
+          error: 'FORBIDDEN_ORGANIZATIONAL_SCOPE',
+          message: 'Supervisor profile not found or insufficient privileges.',
+        });
+      }
+
+      let isAuthorized = false;
+      const targetStaff = application.staff;
+
+      if (headProfile.centerId && targetStaff.centerId && headProfile.centerId === targetStaff.centerId) {
+        isAuthorized = true;
+      } else if (headProfile.unitId && targetStaff.unitId && headProfile.unitId === targetStaff.unitId) {
+        isAuthorized = true;
+      } else {
+        const headedUnits = await prisma.unit.findMany({
+          where: {
+            OR: [{ headId: approverId }, { headId: headProfile.id }],
+          },
+          select: { id: true, code: true, type: true },
+        });
+
+        const headedUnitIds = headedUnits.map((u) => u.id);
+        if (targetStaff.unitId && headedUnitIds.includes(targetStaff.unitId)) {
+          isAuthorized = true;
+        } else {
+          const allUnits = [...(headProfile.unit ? [headProfile.unit] : []), ...headedUnits];
+          for (const u of allUnits) {
+            if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
+              const facultyDeptMapping: Record<string, string[]> = {
+                'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+                'FAC-LAW': ['DEP-LAW'],
+                'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+                'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+                'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+                'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+                'FAC-AGRIC': ['DEP-AGR'],
+                'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+                'FAC-COMPU': ['DEP-CMP'],
+              };
+              const deptCodes = facultyDeptMapping[u.code || ''] || [];
+              if (deptCodes.length > 0) {
+                const childUnits = await prisma.unit.findMany({
+                  where: { code: { in: deptCodes } },
+                  select: { id: true },
+                });
+                const childIds = childUnits.map((cu) => cu.id);
+                if (targetStaff.unitId && childIds.includes(targetStaff.unitId)) {
+                  isAuthorized = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({
+          error: 'FORBIDDEN_ORGANIZATIONAL_SCOPE',
+          message: "You do not have jurisdiction over this staff member's administrative unit.",
+        });
+      }
+    }
+
     // Update to PENDING_REGISTRY
     const updated = await prisma.leaveApplication.update({
       where: { id },
