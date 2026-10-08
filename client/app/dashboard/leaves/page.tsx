@@ -8,7 +8,7 @@ import {
     Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus,
     FileText, ShieldCheck, Send, Eye, Printer, RefreshCw,
     Building, User, CheckCircle2, ChevronRight, Layers, ArrowUpRight,
-    FolderOpen, PackageCheck, ExternalLink, BookOpen
+    FolderOpen, PackageCheck, ExternalLink, BookOpen, BellRing
 } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
@@ -23,6 +23,7 @@ import { DigitalTranscriptViewerModal } from '../../../components/fileRequisitio
 import { RequisitionStatusStepper, FileRequisitionStatus } from '../../../components/fileRequisition/RequisitionStatusStepper';
 import OfficialLeaveBookletModal from '../../../components/leaves/OfficialLeaveBookletModal';
 import { OfficialLeaveBooklet } from '../../../types/leaveBooklet';
+import { LeaveSession } from '../../../types/leaveSession';
 import Pagination from '../../../components/ui/Pagination';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -156,6 +157,7 @@ function LeavesContent() {
     const { data: balanceData, refresh: fetchBalances } = useSwrData<any>('/api/v1/leave/balances', { ttl: 60000 });
     const { data: v1Leaves = [], isLoading: loadingV1Leaves, refresh: fetchV1Leaves } = useSwrData<any[]>('/api/v1/leave/applications/my', { ttl: 60000 });
     const { data: legacyLeaves = [], isLoading: loadingLegacyLeaves, refresh: fetchLegacyLeaves } = useSwrData<any[]>('/api/leaves/me', { ttl: 60000 });
+    const { data: activeLeaveSession, refresh: refreshActiveLeaveSession } = useSwrData<LeaveSession | null>('/api/v1/leave/sessions/active', { ttl: 60000 });
 
     const leaves = useMemo(() => {
         if (v1Leaves && v1Leaves.length > 0) return v1Leaves;
@@ -177,7 +179,8 @@ function LeavesContent() {
         fetchV1Leaves();
         fetchLegacyLeaves();
         fetchBalances();
-    }, [fetchV1Leaves, fetchLegacyLeaves, fetchBalances]);
+        refreshActiveLeaveSession();
+    }, [fetchV1Leaves, fetchLegacyLeaves, fetchBalances, refreshActiveLeaveSession]);
 
     // Unified Write Application Modal
     const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
@@ -351,6 +354,47 @@ function LeavesContent() {
                     </button>
                 </div>
             </div>
+
+            {/* Active Registry Leave Session Announcement Banner */}
+            {activeLeaveSession && (
+                <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-300 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+                    <div className="flex items-start sm:items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-[#006533] text-white flex items-center justify-center shadow-xs flex-shrink-0 mt-0.5 sm:mt-0">
+                            <BellRing size={20} className="animate-bounce" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-2xs">
+                                    Registry Leave Application Exercise Open
+                                </span>
+                                <span className="text-xs font-bold text-slate-500">Year: {activeLeaveSession.year}</span>
+                            </div>
+                            <h3 className="text-sm sm:text-base font-black text-slate-900 mt-0.5">
+                                {activeLeaveSession.title}
+                            </h3>
+                            <p className="text-xs text-slate-600 font-medium">
+                                Registry leave application is open for <strong>{activeLeaveSession.year}</strong> from <strong className="text-slate-900">{new Date(activeLeaveSession.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> to <strong className="text-slate-900">{new Date(activeLeaveSession.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setMainTab('leaves');
+                                setSelectedBooklet(null);
+                                setBookletMode('STAFF_APPLY');
+                                setIsBookletModalOpen(true);
+                            }}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#006533] text-white hover:bg-emerald-800 transition shadow-xs flex items-center gap-1.5"
+                        >
+                            <BookOpen size={14} />
+                            <span>Fill Leave Booklet</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Primary Navigation Tabs */}
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 pb-2">

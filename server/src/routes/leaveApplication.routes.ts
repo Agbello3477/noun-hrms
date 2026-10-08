@@ -9,12 +9,36 @@ import {
   rejectLeaveApplication,
   previewWorkingDays
 } from '../controllers/leaveApplication.controller';
+import {
+  createLeaveSession,
+  updateLeaveSession,
+  getLeaveSessions,
+  getActiveLeaveSession,
+  deleteLeaveSession
+} from '../controllers/leaveSession.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
 
 router.use(verifyToken);
+
+// Leave Sessions (Registry Annual Exercise Windows)
+const registryRoles = [
+  Role.HR_ADMIN,
+  Role.REGISTRY_ADMIN,
+  Role.REGISTRAR,
+  Role.DEPUTY_REGISTRAR,
+  Role.SUPER_USER,
+  Role.ADMIN,
+  Role.VICE_CHANCELLOR
+];
+
+router.get('/sessions', getLeaveSessions);
+router.get('/sessions/active', getActiveLeaveSession);
+router.post('/sessions', requireRole(registryRoles), createLeaveSession);
+router.put('/sessions/:id', requireRole(registryRoles), updateLeaveSession);
+router.delete('/sessions/:id', requireRole(registryRoles), deleteLeaveSession);
 
 // Staff self-service endpoints
 router.post('/apply', applyForStatutoryLeave);
@@ -41,16 +65,10 @@ router.get('/applications/pending', requireRole(approverRoles), getPendingLeaveA
 router.put('/:id/endorse-hod', requireRole(approverRoles), endorseLeaveByHod);
 router.put(
   '/:id/authorize-registry',
-  requireRole([
-    Role.HR_ADMIN,
-    Role.REGISTRY_ADMIN,
-    Role.REGISTRAR,
-    Role.DEPUTY_REGISTRAR,
-    Role.SUPER_USER,
-    Role.VICE_CHANCELLOR
-  ]),
+  requireRole(registryRoles),
   authorizeLeaveByRegistry
 );
 router.put('/:id/reject', requireRole(approverRoles), rejectLeaveApplication);
 
 export default router;
+

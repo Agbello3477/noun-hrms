@@ -1000,6 +1000,25 @@ model LeaveApplication {
   @@index([startDate, endDate])
 }
 
+model LeaveSession {
+  id        String   @id @default(uuid())
+  title     String   // e.g. "2026 Annual Statutory Leave Exercise"
+  year      Int      @unique
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  
+  // Automated Deadline Reminder Tracking
+  reminder7DaysSentAt      DateTime?
+  reminderClosingDaySentAt DateTime?
+  reminder2HoursSentAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("leave_sessions")
+}
+
 model UniversityHoliday {
   id         String   @id @default(uuid())
   date       DateTime @unique

@@ -1,5 +1,5 @@
 import { redisService } from './redis.service';
-import { sendEmail, sendAperSessionNotification } from './email.service';
+import { sendEmail, sendAperSessionNotification, sendLeaveSessionNotification } from './email.service';
 import { logger } from './observability.service';
 
 export interface JobPayload {
@@ -88,6 +88,16 @@ class JobQueueService {
                         payload.name,
                         payload.sessionTitle,
                         payload.year,
+                        new Date(payload.endDate)
+                    );
+                    break;
+                case 'SEND_LEAVE_SESSION_EMAIL':
+                    await sendLeaveSessionNotification(
+                        payload.email,
+                        payload.name,
+                        payload.sessionTitle,
+                        payload.year,
+                        new Date(payload.startDate),
                         new Date(payload.endDate)
                     );
                     break;

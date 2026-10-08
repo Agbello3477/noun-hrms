@@ -386,3 +386,49 @@ export const sendAperSessionNotification = async (
     return sendEmail(email, subject, html);
 };
 
+export const sendLeaveSessionNotification = async (
+    email: string,
+    name: string,
+    sessionTitle: string,
+    year: number,
+    startDate: Date,
+    endDate: Date
+) => {
+    const subject = `Registry Annual Leave Application Exercise Opened: ${sessionTitle} (${year})`;
+    const formattedStartDate = startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formattedEndDate = endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="background-color: #006533; color: white; padding: 15px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h2 style="margin: 0; font-size: 20px;">NOUN Registry &mdash; Statutory Leave Exercise</h2>
+            </div>
+            <div style="padding: 20px; color: #334155; line-height: 1.6;">
+                <p>Dear <strong>${name}</strong>,</p>
+                <p>This is to formally notify you that the Registry Leave Application Exercise for the year <strong>${year}</strong> has been officially opened.</p>
+                <p style="background-color: #f8fafc; border-left: 4px solid #006533; padding: 12px; font-weight: 500; font-style: italic;">
+                    "Staff members are invited to submit their statutory leave applications and official leave booklets for the ${year} leave cycle between ${formattedStartDate} and ${formattedEndDate}."
+                </p>
+                <div style="margin: 20px 0; padding: 15px; background-color: #f1f5f9; border-radius: 6px; font-size: 14px;">
+                    <p style="margin: 0 0 8px 0;"><strong>Exercise Details:</strong></p>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Exercise Session:</strong> ${sessionTitle}</li>
+                        <li><strong>Leave Year:</strong> ${year}</li>
+                        <li><strong>Application Window:</strong> ${formattedStartDate} &ndash; ${formattedEndDate}</li>
+                    </ul>
+                </div>
+                <div style="text-align: center; margin-top: 25px;">
+                    <a href="${process.env.CLIENT_URL || 'https://nounhrms.web.app'}/dashboard/leaves" style="background-color: #006533; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                        Submit Leave Application
+                    </a>
+                </div>
+            </div>
+            <div style="text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 20px;">
+                This is an automatically generated system notification. Do not reply to this email.<br>
+                <strong>National Open University of Nigeria &mdash; Directorate of Human Resources / Registry</strong>
+            </div>
+        </div>
+    `;
+    return sendEmail(email, subject, html);
+};
+
+
