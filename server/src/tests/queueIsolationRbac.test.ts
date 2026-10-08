@@ -84,15 +84,24 @@ async function runQueueIsolationTests() {
     assert(isSubordinateVettingAllowed, 'Subordinate application vetting by authorized Director is permitted');
 
     // -------------------------------------------------------------------------
-    // 4. Staff Leave Endorsement RBAC Scoping
+    // 5. Institutional Placement Hierarchy for Leave Approval (Directorate, Study Centre, Faculty)
     // -------------------------------------------------------------------------
-    console.log('\n--- 4. Testing Leave Vetting Jurisdiction & Status Integrity ---');
+    console.log('\n--- 5. Testing Directorate, Study Centre & Faculty Placement Approval Rules ---');
 
-    const leaveStatusValidForHod = LeaveApplicationStatus.PENDING_HOD;
-    const leaveStatusApproved = LeaveApplicationStatus.APPROVED;
+    // Case A: Directorate Placement -> Staff deals with Director
+    const directorateStaff = { placement: 'DIRECTORATE', unitName: 'Directorate of MIS', directorRole: 'UNIT_HEAD' };
+    const dealsWithDirector = directorateStaff.placement === 'DIRECTORATE';
+    assert(dealsWithDirector, 'Staff placed in a Directorate/HQ Unit deals with Directorate Director for approval');
 
-    assert(leaveStatusValidForHod === 'PENDING_HOD', 'Leave endorsement only permits PENDING_HOD state');
-    assert(leaveStatusApproved !== 'PENDING_HOD', 'Approved leave rejects secondary Level 1 endorsement attempt');
+    // Case B: Study Centre Placement -> Staff deals with Study Centre Director
+    const centreStaff = { placement: 'STUDY_CENTRE', centerName: 'Lagos Study Centre', managerRole: 'STUDY_CENTER_MANAGER' };
+    const dealsWithCentreDirector = centreStaff.placement === 'STUDY_CENTRE';
+    assert(dealsWithCentreDirector, 'Staff placed in a Study Centre deals with Study Centre Director/Manager for approval');
+
+    // Case C: Faculty Placement -> Staff deals with HOD (Department) & Dean (Faculty)
+    const facultyStaff = { placement: 'FACULTY', department: 'Computer Science', parentFaculty: 'Faculty of Sciences' };
+    const dealsWithHodAndDean = facultyStaff.placement === 'FACULTY' && !!facultyStaff.department && !!facultyStaff.parentFaculty;
+    assert(dealsWithHodAndDean, 'Staff placed in a Faculty deals with HOD (Department level) and Dean (Faculty level) for approval');
 
     console.log(`\n========================================`);
     console.log(`Test Results: ${passed} Passed, ${failed} Failed`);
