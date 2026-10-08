@@ -174,16 +174,13 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
 
         if (!headProfile) return res.status(403).json({ message: 'Profile not found' });
 
-        const unit = headProfile.unit;
-        const centerId = headProfile.centerId;
+        const isStudyCenterManager = (userRole as any) === Role.STUDY_CENTER_MANAGER;
+        const isUnitLeaderRole = [Role.UNIT_HEAD, Role.CLINIC_HEAD, Role.SECURITY_HEAD].includes(userRole as any);
+        const isRankLeader = Boolean(headProfile.rank && ['DIRECTOR', 'DEAN', 'HOD', 'HEAD', 'COORDINATOR'].some(k => headProfile.rank!.toUpperCase().includes(k)));
 
-        // Build list of target unit IDs for Director / Dean / HOD
         let targetUnitIds: string[] = [];
-        if (unit) {
-            targetUnitIds.push(unit.id);
-        }
 
-        // Units where this user or profile is set as headId
+        // Units where this user or profile is set as explicit headId
         const headedUnits = await prisma.unit.findMany({
             where: {
                 OR: [
@@ -199,13 +196,18 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
             }
         }
 
+        // Direct unit ID ONLY if the user holds an administrative leadership role/rank in that unit
+        if ((isUnitLeaderRole || isRankLeader) && headProfile.unitId && !targetUnitIds.includes(headProfile.unitId)) {
+            targetUnitIds.push(headProfile.unitId);
+        }
+
         // Check if any headed or assigned unit is a Faculty
-        const allHeadedOrAssignedUnits = [
-            ...(unit ? [unit] : []),
-            ...headedUnits
+        const facultyUnits = [
+            ...(headProfile.unit?.type === 'FACULTY' || (headProfile.unit?.code && headProfile.unit.code.startsWith('FAC-')) ? [headProfile.unit] : []),
+            ...headedUnits.filter(u => u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-')))
         ];
 
-        for (const u of allHeadedOrAssignedUnits) {
+        for (const u of facultyUnits) {
             if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
                 const facultyCode = u.code || '';
                 const mapping: Record<string, string[]> = {
@@ -233,6 +235,8 @@ export const getUnitPendingLeaves = async (req: Request, res: Response) => {
                 }
             }
         }
+
+        const centerId = isStudyCenterManager ? headProfile.centerId : null;
 
         let staffFilter: any = null;
         if (targetUnitIds.length > 0 && centerId) {

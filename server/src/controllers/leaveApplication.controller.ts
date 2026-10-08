@@ -423,14 +423,13 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
         return res.status(403).json({ message: 'Approver profile not found.' });
       }
 
+      const isStudyCenterManager = userRole === Role.STUDY_CENTER_MANAGER;
+      const isUnitLeaderRole = userRole === Role.UNIT_HEAD || userRole === Role.CLINIC_HEAD || userRole === Role.SECURITY_HEAD;
+      const isRankLeader = Boolean(headProfile.rank && ['DIRECTOR', 'DEAN', 'HOD', 'HEAD', 'COORDINATOR'].some(k => headProfile.rank!.toUpperCase().includes(k)));
+
       const targetUnitIds: string[] = [];
 
-      // 1. Direct unit ID
-      if (headProfile.unitId) {
-        targetUnitIds.push(headProfile.unitId);
-      }
-
-      // 2. Units where this user or profile is set as headId
+      // 1. Units where this user or profile is set as explicit headId
       const headedUnits = await prisma.unit.findMany({
         where: {
           OR: [
@@ -446,45 +445,49 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
         }
       }
 
-      // 3. If unit is a FACULTY, include mapped departmental units
-      const allHeadedOrAssignedUnits = [
-        ...(headProfile.unit ? [headProfile.unit] : []),
-        ...headedUnits
+      // 2. Direct unit ID ONLY if the user holds an administrative leadership role/rank in that unit
+      if ((isUnitLeaderRole || isRankLeader) && headProfile.unitId && !targetUnitIds.includes(headProfile.unitId)) {
+        targetUnitIds.push(headProfile.unitId);
+      }
+
+      // 3. Faculty child departments if caller heads/leads a Faculty
+      const facultyUnits = [
+        ...(headProfile.unit?.type === 'FACULTY' || (headProfile.unit?.code && headProfile.unit.code.startsWith('FAC-')) ? [headProfile.unit] : []),
+        ...headedUnits.filter(u => u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-')))
       ];
 
-      for (const u of allHeadedOrAssignedUnits) {
-        if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
-          const facultyDeptMapping: Record<string, string[]> = {
-            'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
-            'FAC-LAW': ['DEP-LAW'],
-            'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
-            'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
-            'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
-            'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
-            'FAC-AGRIC': ['DEP-AGR'],
-            'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
-            'FAC-COMPU': ['DEP-CMP']
-          };
-          const deptCodes = facultyDeptMapping[u.code || ''] || [];
-          if (deptCodes.length > 0) {
-            const relatedUnits = await prisma.unit.findMany({
-              where: { code: { in: deptCodes } },
-              select: { id: true }
-            });
-            for (const ru of relatedUnits) {
-              if (!targetUnitIds.includes(ru.id)) {
-                targetUnitIds.push(ru.id);
-              }
+      for (const f of facultyUnits) {
+        const facultyDeptMapping: Record<string, string[]> = {
+          'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
+          'FAC-LAW': ['DEP-LAW'],
+          'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
+          'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
+          'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
+          'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
+          'FAC-AGRIC': ['DEP-AGR'],
+          'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
+          'FAC-COMPU': ['DEP-CMP']
+        };
+        const deptCodes = facultyDeptMapping[f.code || ''] || [];
+        if (deptCodes.length > 0) {
+          const relatedUnits = await prisma.unit.findMany({
+            where: { code: { in: deptCodes } },
+            select: { id: true }
+          });
+          for (const ru of relatedUnits) {
+            if (!targetUnitIds.includes(ru.id)) {
+              targetUnitIds.push(ru.id);
             }
           }
         }
       }
 
-      const centerId = headProfile.centerId;
+      const centerId = isStudyCenterManager ? headProfile.centerId : null;
 
       if (targetUnitIds.length > 0 && centerId) {
         whereClause.staff = {
           id: { not: headProfile.id },
+          userId: { not: userId },
           OR: [
             { unitId: { in: targetUnitIds } },
             { centerId }
@@ -493,15 +496,17 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
       } else if (targetUnitIds.length > 0) {
         whereClause.staff = {
           id: { not: headProfile.id },
+          userId: { not: userId },
           unitId: { in: targetUnitIds }
         };
       } else if (centerId) {
         whereClause.staff = {
           id: { not: headProfile.id },
+          userId: { not: userId },
           centerId
         };
       } else {
-        // Approver has no assigned unit, faculty, or study center: zero-leakage return
+        // Approver is not a Unit Head, Dean, or Center Manager: return empty list immediately
         return res.json([]);
       }
     } else if (unitId) {

@@ -1348,72 +1348,12 @@ export async function getDirectorQueue(req: Request, res: Response) {
     if (isCentralExecutive) {
       baseScope = { directorId: { not: '' } };
     } else {
-      const orConditions: any[] = [
-        { directorId: { in: directorUserIds } }
-      ];
-
-      const targetUnitIds: string[] = [];
-      if (directorProfile?.unitId) {
-        targetUnitIds.push(directorProfile.unitId);
-      }
-
-      const headedUnits = await prisma.unit.findMany({
-        where: {
-          OR: [
-            { headId: callerId },
-            ...(directorProfile?.id ? [{ headId: directorProfile.id }] : [])
-          ]
-        },
-        select: { id: true, code: true, type: true }
-      });
-      for (const u of headedUnits) {
-        if (!targetUnitIds.includes(u.id)) {
-          targetUnitIds.push(u.id);
-        }
-      }
-
-      const allHeadedOrAssignedUnits = [
-        ...(directorProfile?.unit ? [directorProfile.unit] : []),
-        ...headedUnits
-      ];
-
-      for (const u of allHeadedOrAssignedUnits) {
-        if (u.type === 'FACULTY' || (u.code && u.code.startsWith('FAC-'))) {
-          const facultyDeptMapping: Record<string, string[]> = {
-            'FAC-SCIEN': ['DEP-CS', 'DEP-MTH'],
-            'FAC-LAW': ['DEP-LAW'],
-            'FAC-SOCIA': ['DEP-POL', 'DEP-ECO', 'DEP-SOC'],
-            'FAC-MANAG': ['DEP-ACC', 'DEP-BUS', 'DEP-PAD'],
-            'FAC-EDUCA': ['DEP-EDT', 'DEP-EDU'],
-            'FAC-HEALT': ['DEP-PBH', 'DEP-NUR'],
-            'FAC-AGRIC': ['DEP-AGR'],
-            'FAC-ARTS': ['DEP-ART', 'DEP-ENG', 'DEP-HIS'],
-            'FAC-COMPU': ['DEP-CMP']
-          };
-          const deptCodes = facultyDeptMapping[u.code || ''] || [];
-          if (deptCodes.length > 0) {
-            const relatedUnits = await prisma.unit.findMany({
-              where: { code: { in: deptCodes } },
-              select: { id: true }
-            });
-            for (const ru of relatedUnits) {
-              if (!targetUnitIds.includes(ru.id)) {
-                targetUnitIds.push(ru.id);
-              }
-            }
-          }
-        }
-      }
-
-      if (targetUnitIds.length > 0) {
-        orConditions.push({ applicant: { staffProfile: { unitId: { in: targetUnitIds } } } });
-      }
-
-      if (directorProfile?.centerId) {
-        orConditions.push({ applicant: { staffProfile: { centerId: directorProfile.centerId } } });
-      }
-
-      baseScope = { OR: orConditions };
+      // An application submitted "Through Director" is strictly addressed to this specific Director/Head.
+      // Enforce absolute isolation with zero cross-talk leakage and prohibit self-vetting.
+      baseScope = {
+        directorId: { in: directorUserIds },
+        applicantId: { notIn: directorUserIds },
+      };
     }
 
     let statusCondition: any = undefined;
