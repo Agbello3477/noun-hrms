@@ -66,6 +66,7 @@ const runTests = async () => {
         }
 
         console.log('\n🎉 Payroll Precision Math Tests complete: All checks passed.\n');
+        process.exit(0);
     } catch (error: any) {
         console.error('❌ Payroll Test Failed:', error.message);
         process.exit(1);

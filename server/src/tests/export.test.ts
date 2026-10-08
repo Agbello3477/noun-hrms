@@ -76,6 +76,7 @@ const runTests = async () => {
     }
 
     console.log('\n🎉 Exporter Performance Tests complete: all checks passed.');
+    process.exit(0);
 };
 
 runTests();

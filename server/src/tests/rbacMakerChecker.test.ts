@@ -269,6 +269,7 @@ async function runTests() {
         if (failed > 0) {
             process.exit(1);
         }
+        process.exit(0);
     } catch (e: any) {
         console.error('Test execution failed with error:', e);
         process.exit(1);

@@ -156,6 +156,7 @@ const runTests = async () => {
     }
 
     console.log('\n🎉 Bursary Tests complete: all checks passed.');
+    process.exit(0);
 };
 
 runTests();

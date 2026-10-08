@@ -121,6 +121,7 @@ const runTests = async () => {
     }
 
     console.log('\n🎉 Operations Inventory Tests complete: all checks passed.');
+    process.exit(0);
 };
 
 runTests();

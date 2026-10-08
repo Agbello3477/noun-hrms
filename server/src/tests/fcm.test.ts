@@ -80,6 +80,7 @@ const runTests = async () => {
     }
 
     console.log('\n🎉 FCM Tests complete: all checks passed.');
+    process.exit(0);
 };
 
 runTests();

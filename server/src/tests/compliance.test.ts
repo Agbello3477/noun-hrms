@@ -76,6 +76,7 @@ const runTests = async () => {
     }
 
     console.log('\n🎉 Compliance & Audit Tests complete: all checks passed.');
+    process.exit(0);
 };
 
 runTests();
