@@ -39,6 +39,10 @@ interface StaffProfileData {
     evaluatedForYear?: number | null;
     isDueForPromotion?: boolean;
     promotionFlaggedAt?: string | null;
+    nextGrade?: string | null;
+    nextSalaryScale?: string | null;
+    qualifications?: string | null;
+    statutoryMinWaitingYears?: number | null;
     department: string | null;
     unit: { id: string; name: string } | null;
     studyCenter: { id: string; name: string } | null;
@@ -924,6 +928,11 @@ export default function DueForPromotionPage() {
                                                             <p className="text-xs text-slate-500">
                                                                 {cand.currentGradeLevel || cand.level || '—'} &bull; <span className="font-medium text-emerald-700">{cand.cadreType || cand.cadre || 'ACADEMIC'}</span>
                                                             </p>
+                                                            {cand.nextGrade && (
+                                                                <p className="text-[11px] text-emerald-800 font-semibold mt-0.5 flex items-center gap-1">
+                                                                    <span>&rarr; Next:</span> <span className="underline decoration-emerald-400">{cand.nextGrade}</span> {cand.nextSalaryScale ? `(${cand.nextSalaryScale})` : ''}
+                                                                </p>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3.5">
                                                             <div className="flex items-center gap-1.5 text-slate-700">

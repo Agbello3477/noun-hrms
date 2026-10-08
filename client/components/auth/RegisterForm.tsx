@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { ArrowLeft } from 'lucide-react';
 import PasswordStrengthMeter from '../ui/PasswordStrengthMeter';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../lib/schemeOfService';
 
 interface OrganizationData {
     centers: { id: string; name: string; code: string }[];
@@ -18,7 +19,7 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
     const [formData, setFormData] = useState({
         staffId: '', title: '', surname: '', otherNames: '', email: '', phone: '', gender: 'Male',
         password: '', confirmPassword: '', address: '', stateOfOrigin: '', lga: '',
-        role: '', cadre: '', level: '', step: '', centerId: '', unitId: '',
+        role: '', cadre: '', rank: '', level: '', step: '', centerId: '', unitId: '',
         programmeId: '', assignedFacilitatorId: '', courseCode: '', courseTitle: '', creditUnit: '1'
     });
 
@@ -47,7 +48,20 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const next = { ...prev, [name]: value };
+            if (name === 'cadre') {
+                const posts = getPostsByCadre(value);
+                const first = posts[0];
+                next.rank = first ? first.post : '';
+                if (first) next.level = String(first.gradeLevel);
+            }
+            if (name === 'rank') {
+                const def = getPostDefinition(prev.cadre, value);
+                if (def) next.level = String(def.gradeLevel);
+            }
+            return next;
+        });
 
         if (name === 'centerId') {
             const selectedCenter = orgData.centers.find(c => c.id === value);
@@ -226,14 +240,29 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                 <label className="block text-xs font-semibold text-gray-600 mb-1">Cadre *</label>
                                 <select name="cadre" required className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.cadre} onChange={handleChange}>
                                     <option value="">Select Cadre</option>
-                                    <option value="ACADEMIC">Academic Staff</option>
-                                    <option value="NON_ACADEMIC">Non-Academic</option>
-                                    <option value="ADMINISTRATIVE">Administrative</option>
-                                    <option value="TECHNICAL">Technical</option>
-                                    <option value="JUNIOR">Junior</option>
-                                    <option value="MEDICAL">Medical</option>
-                                    <option value="SECURITY">Security</option>
+                                    {CADRE_LIST.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
                                 </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Rank/Post *</label>
+                                <select name="rank" required className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.rank} onChange={handleChange}>
+                                    <option value="">Select Rank/Post</option>
+                                    {getPostsByCadre(formData.cadre).map(p => (
+                                        <option key={p.post} value={p.post}>{p.post} ({p.salaryScale})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Level (CONTISS/CONUASS)</label>
+                                <input type="text" name="level" placeholder="e.g. 7" className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.level} onChange={handleChange} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Step</label>
+                                <input type="text" name="step" placeholder="e.g. 2" className="w-full rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-nounGreen/20 outline-none" value={formData.step} onChange={handleChange} />
                             </div>
                         </div>
                     </div>

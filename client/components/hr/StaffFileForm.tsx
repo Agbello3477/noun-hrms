@@ -4,6 +4,7 @@ import api from '../../lib/api';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 import { STANDARD_QUALIFICATIONS } from '../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../lib/schemeOfService';
 import { TrendingUp, Info, GraduationCap, CreditCard, Building2, CheckCircle2, Camera, Upload, X, Shield } from 'lucide-react';
 
 interface OrganizationData {
@@ -64,6 +65,7 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
         // Career / Role
         role: 'STAFF',
         cadre: '',
+        rank: '',
         level: '',
         step: '',
         dateOfFirstAppointment: '',
@@ -232,12 +234,26 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
             }
 
             if (name === 'cadre') {
-                if (value === 'ACADEMIC') {
+                const posts = getPostsByCadre(String(value));
+                const first = posts[0];
+                next.rank = first ? first.post : '';
+                if (first) {
+                    next.level = String(first.gradeLevel);
+                }
+                const cadreStr = String(value).toLowerCase();
+                if (cadreStr.includes('academic')) {
                     next.cadreAppraisalRule = 'ACADEMIC_3';
-                } else if (value === 'JUNIOR') {
+                } else if (cadreStr.includes('junior') || cadreStr.includes('clerical') || cadreStr.includes('driver') || cadreStr.includes('porter') || cadreStr.includes('craftsman')) {
                     next.cadreAppraisalRule = 'JUNIOR_3';
                 } else {
                     next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                }
+            }
+
+            if (name === 'rank') {
+                const def = getPostDefinition(prev.cadre, String(value));
+                if (def) {
+                    next.level = String(def.gradeLevel);
                 }
             }
 
@@ -819,24 +835,52 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">Cadre</label>
-                        <select name="cadre" required className="w-full border p-1.5 rounded" value={formData.cadre} onChange={handleChange}>
-                            <option value="">Select Cadre</option>
-                            <option value="ACADEMIC">Academic</option>
-                            <option value="NON_ACADEMIC">Non-Academic</option>
-                            <option value="SENIOR">Senior</option>
-                            <option value="JUNIOR">Junior</option>
-                            <option value="MEDICAL">Medical</option>
-                            <option value="SECURITY">Security</option>
+                        <select name="cadre" required className="w-full border p-1.5 rounded text-xs bg-white" value={formData.cadre} onChange={handleChange}>
+                            <option value="">-- Select Cadre --</option>
+                            {CADRE_LIST.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-gray-500">Level (e.g. 8)</label>
-                        <input name="level" className="w-full border p-1.5 rounded" value={formData.level} onChange={handleChange} />
+                        <label className="block text-xs font-medium text-gray-500">Rank/Post</label>
+                        <select name="rank" required className="w-full border p-1.5 rounded text-xs bg-white" value={formData.rank} onChange={handleChange}>
+                            <option value="">-- Select Rank/Post --</option>
+                            {getPostsByCadre(formData.cadre).map(p => (
+                                <option key={p.post} value={p.post}>{p.post} ({p.salaryScale})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500">Level (CONTISS/CONUASS)</label>
+                        <input name="level" className="w-full border p-1.5 rounded text-xs" value={formData.level} onChange={handleChange} placeholder="e.g. 8" />
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">Step (e.g. 2)</label>
-                        <input name="step" className="w-full border p-1.5 rounded" value={formData.step} onChange={handleChange} />
+                        <input name="step" className="w-full border p-1.5 rounded text-xs" value={formData.step} onChange={handleChange} />
                     </div>
+
+                    {/* Statutory Scheme of Service Profile Info */}
+                    {(() => {
+                        const postDef = getPostDefinition(formData.cadre, formData.rank);
+                        if (!postDef) return null;
+                        return (
+                            <div className="col-span-2 p-3 bg-emerald-50/80 rounded-lg border border-emerald-200 text-xs space-y-1">
+                                <div className="font-bold text-emerald-950 flex items-center justify-between">
+                                    <span>Scheme of Service Statutory Profile:</span>
+                                    <span className="font-mono text-xs text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">{postDef.salaryScale}</span>
+                                </div>
+                                <div className="text-[11px] text-emerald-800">
+                                    <span className="font-semibold">Next Grade:</span> {postDef.nextGrade || 'Terminal Grade (Apex)'} {postDef.nextSalaryScale ? `(${postDef.nextSalaryScale})` : ''} • <span className="font-semibold">Min Waiting:</span> {postDef.minYearsWaiting > 0 ? `${postDef.minYearsWaiting} Years` : 'N/A'}
+                                </div>
+                                {postDef.qualifications && (
+                                    <div className="text-[10px] text-emerald-700 leading-relaxed">
+                                        <span className="font-semibold">Statutory Qualifications:</span> {postDef.qualifications}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                     <div className="col-span-2">
                         <label className="block text-xs font-medium text-gray-500">Date of First Appointment</label>
                         <input

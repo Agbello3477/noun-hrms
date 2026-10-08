@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { NIGERIAN_STATES_AND_LGAS } from '../../lib/nigeria-states-lgas';
 import { STANDARD_QUALIFICATIONS } from '../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../lib/banks';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../lib/schemeOfService';
 import Button from '../ui/Button';
 
 interface AddStaffModalProps {
@@ -61,7 +62,8 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
 
         // Career / Role
         role: 'STAFF',
-        cadre: 'ADMINISTRATIVE', // Default
+        cadre: 'Administrative Cadre', // Default
+        rank: '',
         cadreType: 'SENIOR_ADMIN',
         highestQualification: '',
         customQualification: '',
@@ -253,24 +255,38 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
             }
 
             if (name === 'cadre') {
-                if (value === 'ACADEMIC') {
+                const posts = getPostsByCadre(String(value));
+                const firstPost = posts.length ? posts[0] : null;
+                next.rank = firstPost ? firstPost.post : '';
+                if (firstPost) {
+                    next.level = String(firstPost.gradeLevel);
+                }
+                const cadreStr = String(value).toLowerCase();
+                if (cadreStr.includes('academic')) {
                     next.cadreType = 'ACADEMIC';
                     next.cadreAppraisalRule = 'ACADEMIC_3';
-                } else if (value === 'JUNIOR') {
+                } else if (cadreStr.includes('junior') || cadreStr.includes('clerical') || cadreStr.includes('driver') || cadreStr.includes('porter') || cadreStr.includes('craftsman')) {
                     next.cadreType = 'JUNIOR_STAFF';
                     next.cadreAppraisalRule = 'JUNIOR_3';
-                } else if (value === 'TECHNICAL') {
+                } else if (cadreStr.includes('techn') || cadreStr.includes('engineer') || cadreStr.includes('system') || cadreStr.includes('programmer')) {
                     next.cadreType = 'TECHNICAL';
                     next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
-                } else if (value === 'MEDICAL') {
+                } else if (cadreStr.includes('health') || cadreStr.includes('medic') || cadreStr.includes('nurs') || cadreStr.includes('pharmac')) {
                     next.cadreType = 'MEDICAL';
                     next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
-                } else if (value === 'SECURITY') {
+                } else if (cadreStr.includes('security')) {
                     next.cadreType = 'SECURITY';
                     next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
                 } else {
                     next.cadreType = 'SENIOR_ADMIN';
                     next.cadreAppraisalRule = 'SENIOR_ADMIN_3';
+                }
+            }
+
+            if (name === 'rank') {
+                const def = getPostDefinition(prev.cadre, String(value));
+                if (def) {
+                    next.level = String(def.gradeLevel);
                 }
             }
 
@@ -411,7 +427,7 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                 nin: formData.nin.trim() || undefined,
                 phone: submittedPhone,
                 role: dbRole,
-                rank: assignedRank,
+                rank: formData.rank || assignedRank,
                 unitId: formData.unitId || undefined,
 
                 // Promotion Fields
@@ -949,36 +965,73 @@ export default function AddStaffModal({ onClose, onSuccess }: AddStaffModalProps
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">Cadre</label>
                                 <select
                                     name="cadre"
                                     required
-                                    className="mt-1 w-full border rounded p-2"
+                                    className="mt-1 w-full border rounded p-2 text-xs font-medium bg-white"
                                     value={formData.cadre}
                                     onChange={handleChange}
                                 >
-                                    <option value="ACADEMIC">Academic Staff</option>
-                                    <option value="ADMINISTRATIVE">Administrative Staff</option>
-                                    <option value="SENIOR">Senior Staff</option>
-                                    <option value="JUNIOR">Junior Staff</option>
-                                    <option value="TECHNICAL">Technical</option>
-                                    <option value="MEDICAL">Medical</option>
-                                    <option value="SECURITY">Security</option>
+                                    <option value="">-- Select Cadre --</option>
+                                    {CADRE_LIST.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
+                                <label className="block text-xs font-medium text-gray-700">Rank/Post</label>
+                                <select
+                                    name="rank"
+                                    required
+                                    className="mt-1 w-full border rounded p-2 text-xs font-medium bg-white"
+                                    value={formData.rank}
+                                    onChange={handleChange}
+                                >
+                                    <option value="">-- Select Rank/Post --</option>
+                                    {getPostsByCadre(formData.cadre).map(p => (
+                                        <option key={p.post} value={p.post}>{p.post} ({p.salaryScale})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
                                 <label className="block text-xs font-medium text-gray-700">Level (CONTISS/CONUASS)</label>
-                                <input type="number" name="level" required placeholder="e.g. 7" className="mt-1 w-full border rounded p-2"
+                                <input type="number" name="level" required placeholder="e.g. 7" className="mt-1 w-full border rounded p-2 text-xs"
                                     value={formData.level} onChange={handleChange} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-700">Step</label>
-                                <input type="number" name="step" required placeholder="e.g. 2" className="mt-1 w-full border rounded p-2"
+                                <input type="number" name="step" required placeholder="e.g. 2" className="mt-1 w-full border rounded p-2 text-xs"
                                     value={formData.step} onChange={handleChange} />
                             </div>
                         </div>
+
+                        {/* Statutory Scheme of Service Profile Info */}
+                        {(() => {
+                            const postDef = getPostDefinition(formData.cadre, formData.rank);
+                            if (!postDef) return null;
+                            return (
+                                <div className="p-3 bg-emerald-50/80 rounded-lg border border-emerald-200 text-xs space-y-1">
+                                    <div className="font-bold text-emerald-950 flex items-center justify-between">
+                                        <span>Scheme of Service Statutory Profile:</span>
+                                        <span className="font-mono text-xs text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">{postDef.salaryScale}</span>
+                                    </div>
+                                    <div className="text-[11px] text-emerald-800">
+                                        <span className="font-semibold">Next Grade:</span> {postDef.nextGrade || 'Terminal Grade (Apex)'} {postDef.nextSalaryScale ? `(${postDef.nextSalaryScale})` : ''} • <span className="font-semibold">Min Waiting:</span> {postDef.minYearsWaiting > 0 ? `${postDef.minYearsWaiting} Years` : 'N/A'}
+                                    </div>
+                                    {postDef.qualifications && (
+                                        <div className="text-[10px] text-emerald-700/90 line-clamp-2">
+                                            <span className="font-semibold">Statutory Qualifications:</span> {postDef.qualifications}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         <div>
                             <label className="block text-xs font-medium text-gray-700">Date of First Appointment</label>

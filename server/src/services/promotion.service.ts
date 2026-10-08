@@ -1,6 +1,7 @@
 import prisma from '../prisma';
 import { Cadre, CadreType, PromotionEligibilityStatus, Role } from '@prisma/client';
 import { calculatePromotionMaturity } from '../utils/promotionCalculator';
+import { getNextGradeProgression } from '../constants/schemeOfService';
 import { sendPromotionNotificationEmail } from './email.service';
 import { sendPushNotification } from './fcm.service';
 
@@ -612,6 +613,8 @@ export class PromotionService {
             const hasDisciplinaryHold = Boolean(p.hasActiveDisciplinaryBlock || (p.queries && p.queries.length > 0));
             const openQueriesCount = p.queries?.length || 0;
 
+            const schemeProgression = getNextGradeProgression(p.cadre || p.cadreType || '', p.rank || '');
+
             return {
                 ...p,
                 fullName,
@@ -622,7 +625,11 @@ export class PromotionService {
                 promotionEligibilityStatus: effectiveStatus,
                 eligibilityStatus: effectiveStatus,
                 hasDisciplinaryHold,
-                openQueriesCount
+                openQueriesCount,
+                nextGrade: schemeProgression.nextGrade,
+                nextSalaryScale: schemeProgression.nextSalaryScale,
+                qualifications: schemeProgression.qualifications,
+                statutoryMinWaitingYears: schemeProgression.minYearsWaiting
             };
         });
 

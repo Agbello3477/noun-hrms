@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import api, { getImageUrl } from '../../../lib/api';
 import AddStaffModal from '../../../components/dashboard/AddStaffModal';
+import { CADRE_LIST } from '../../../lib/schemeOfService';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
@@ -174,7 +175,12 @@ export default function StaffPage() {
             }
         }
 
-        const matchesCadre = !cadreFilter || staff.staffProfile?.cadre === cadreFilter;
+        const matchesCadre = !cadreFilter || 
+            staff.staffProfile?.cadre === cadreFilter || 
+            (staff.staffProfile?.cadre && (
+                staff.staffProfile.cadre.toLowerCase().includes(cadreFilter.toLowerCase()) ||
+                cadreFilter.toLowerCase().includes(staff.staffProfile.cadre.toLowerCase())
+            ));
 
         const matchesLocation = !locationFilter || 
             staff.staffProfile?.unitId === locationFilter || 
@@ -402,15 +408,12 @@ export default function StaffPage() {
                         <select
                             value={cadreFilter}
                             onChange={e => setCadreFilter(e.target.value)}
-                            className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-[#006533] focus:border-[#006533] outline-none font-medium text-slate-700 bg-white"
+                            className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-[#006533] focus:border-[#006533] outline-none font-medium text-slate-700 bg-white max-w-[200px] truncate"
                         >
                             <option value="">All Cadres</option>
-                            <option value="ACADEMIC">Academic</option>
-                            <option value="ADMINISTRATIVE">Administrative</option>
-                            <option value="TECHNICAL">Technical</option>
-                            <option value="JUNIOR">Junior</option>
-                            <option value="MEDICAL">Medical</option>
-                            <option value="SECURITY">Security</option>
+                            {CADRE_LIST.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
                         </select>
                     </div>
 

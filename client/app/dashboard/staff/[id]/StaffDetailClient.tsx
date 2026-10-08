@@ -30,6 +30,7 @@ import { useAuth } from '../../../../hooks/useAuth';
 import api, { getImageUrl } from '../../../../lib/api';
 import { STANDARD_QUALIFICATIONS } from '../../../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../../../lib/banks';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../../../lib/schemeOfService';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
 import QueryHistoryTab from '../../../../components/hr/dossier/QueryHistoryTab';
 
@@ -391,9 +392,9 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
             }
 
             let dbRole = editRole;
-            let dbRank = isHrAdmin ? (staff?.staffProfile?.rank || 'Staff') : editRank;
+            let dbRank = editRank || staff?.staffProfile?.rank || 'Staff';
 
-            if (isHrAdmin) {
+            if (isHrAdmin && !editRank) {
                 if (editRole === 'REGISTRAR') {
                     dbRole = 'REGISTRAR';
                     dbRank = 'University Registrar';
@@ -908,27 +909,50 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Cadre</label>
                                     <select
                                         value={editCadre}
-                                        onChange={e => setEditCadre(e.target.value)}
+                                        onChange={e => {
+                                            const newCadre = e.target.value;
+                                            setEditCadre(newCadre);
+                                            const posts = getPostsByCadre(newCadre);
+                                            if (posts.length > 0) {
+                                                const firstPost = posts[0];
+                                                setEditRank(firstPost.post);
+                                                setEditLevel(String(firstPost.gradeLevel));
+                                            }
+                                        }}
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
                                     >
-                                        <option value="ADMINISTRATIVE">Administrative</option>
-                                        <option value="ACADEMIC">Academic</option>
-                                        <option value="TECHNICAL">Technical</option>
-                                        <option value="JUNIOR">Junior</option>
-                                        <option value="MEDICAL">Medical</option>
-                                        <option value="SECURITY">Security</option>
+                                        <option value="">-- Select Cadre --</option>
+                                        {editCadre && !CADRE_LIST.includes(editCadre) && (
+                                            <option value={editCadre}>{editCadre}</option>
+                                        )}
+                                        {CADRE_LIST.map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
                                     </select>
                                 </div>
-                                {/* Rank */}
+                                {/* Rank/Post */}
                                 <div className="space-y-1">
-                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Rank</label>
-                                    <input
-                                        type="text"
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Rank/Post</label>
+                                    <select
                                         value={editRank}
-                                        onChange={e => setEditRank(e.target.value)}
+                                        onChange={e => {
+                                            const newRank = e.target.value;
+                                            setEditRank(newRank);
+                                            const def = getPostDefinition(editCadre, newRank);
+                                            if (def) {
+                                                setEditLevel(String(def.gradeLevel));
+                                            }
+                                        }}
                                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white font-medium"
-                                        placeholder="e.g. Lecturer I, Senior Officer"
-                                    />
+                                    >
+                                        <option value="">-- Select Rank/Post --</option>
+                                        {editRank && !getPostsByCadre(editCadre).some(p => p.post === editRank) && (
+                                            <option value={editRank}>{editRank}</option>
+                                        )}
+                                        {getPostsByCadre(editCadre).map(p => (
+                                            <option key={p.post} value={p.post}>{p.post} ({p.salaryScale})</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 {/* Level */}
                                 <div className="space-y-1">
@@ -952,6 +976,29 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                                         placeholder="e.g. 2"
                                     />
                                 </div>
+
+                                {/* Scheme of Service Statutory Profile Info */}
+                                {(() => {
+                                    const postDef = getPostDefinition(editCadre, editRank);
+                                    if (!postDef) return null;
+                                    return (
+                                        <div className="md:col-span-2 p-3.5 bg-emerald-50/90 rounded-xl border border-emerald-200 text-xs space-y-1.5 shadow-sm">
+                                            <div className="font-bold text-emerald-950 flex items-center justify-between">
+                                                <span>Scheme of Service Statutory Profile:</span>
+                                                <span className="font-mono text-xs text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">{postDef.salaryScale}</span>
+                                            </div>
+                                            <div className="text-[11px] text-emerald-800 flex flex-wrap gap-x-4 gap-y-1">
+                                                <span><span className="font-semibold">Next Grade:</span> {postDef.nextGrade || 'Terminal Grade (Apex)'} {postDef.nextSalaryScale ? `(${postDef.nextSalaryScale})` : ''}</span>
+                                                <span><span className="font-semibold">Min Waiting Period:</span> {postDef.minYearsWaiting > 0 ? `${postDef.minYearsWaiting} Years` : 'N/A'}</span>
+                                            </div>
+                                            {postDef.qualifications && (
+                                                <div className="text-[10px] text-emerald-700 leading-relaxed">
+                                                    <span className="font-semibold">Statutory Qualifications:</span> {postDef.qualifications}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                                 {/* Highest Qualification */}
                                 <div className="space-y-1 md:col-span-2">
                                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">

@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 import { Button } from '../../components/ui/Button';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../lib/schemeOfService';
 import {
     FileText,
     Send,
@@ -54,9 +55,9 @@ export default function RegistryWorkspacePage() {
         title: 'Mr',
         gender: 'Male',
         phone: '',
-        cadre: 'ADMINISTRATIVE',
-        rank: 'Administrative Officer',
-        level: 'CONTISS 08',
+        cadre: 'Administrative Cadre',
+        rank: 'Administrative Officer II',
+        level: 'CONTISS 07',
         step: '1',
         employmentCategory: 'PERMANENT',
         dateOfBirth: '1990-01-01',
@@ -510,24 +511,45 @@ export default function RegistryWorkspacePage() {
                                 <label className="block text-xs font-semibold text-slate-700 mb-1">Cadre</label>
                                 <select
                                     value={fileForm.cadre}
-                                    onChange={(e) => setFileForm({ ...fileForm, cadre: e.target.value })}
-                                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    onChange={(e) => {
+                                        const newCadre = e.target.value;
+                                        const posts = getPostsByCadre(newCadre);
+                                        const first = posts[0];
+                                        setFileForm({
+                                            ...fileForm,
+                                            cadre: newCadre,
+                                            rank: first ? first.post : '',
+                                            level: first ? first.salaryScale : fileForm.level
+                                        });
+                                    }}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none bg-white"
                                 >
-                                    <option value="ADMINISTRATIVE">Administrative</option>
-                                    <option value="ACADEMIC">Academic</option>
-                                    <option value="TECHNICAL">Technical</option>
-                                    <option value="MEDICAL">Medical</option>
-                                    <option value="SECURITY">Security</option>
+                                    <option value="">-- Select Cadre --</option>
+                                    {CADRE_LIST.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">Rank / Designation</label>
-                                <input
-                                    type="text"
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Rank/Post</label>
+                                <select
                                     value={fileForm.rank}
-                                    onChange={(e) => setFileForm({ ...fileForm, rank: e.target.value })}
-                                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
-                                />
+                                    onChange={(e) => {
+                                        const newRank = e.target.value;
+                                        const def = getPostDefinition(fileForm.cadre, newRank);
+                                        setFileForm({
+                                            ...fileForm,
+                                            rank: newRank,
+                                            level: def ? def.salaryScale : fileForm.level
+                                        });
+                                    }}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none bg-white"
+                                >
+                                    <option value="">-- Select Rank/Post --</option>
+                                    {getPostsByCadre(fileForm.cadre).map(p => (
+                                        <option key={p.post} value={p.post}>{p.post} ({p.salaryScale})</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 mb-1">Grade Level</label>

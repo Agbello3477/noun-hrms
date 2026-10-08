@@ -1,9 +1,10 @@
 import prisma from '../prisma';
+import { getPostDefinition } from '../constants/schemeOfService';
 
 export class PayrollService {
 
     /**
-     * Calculate salary components for a staff member based on their Level/Step
+     * Calculate salary components for a staff member based on their Level/Step and Scheme of Service
      */
     static async calculateSalary(staffId: string) {
         const staff = await prisma.staffProfile.findUnique({
@@ -15,14 +16,21 @@ export class PayrollService {
             throw new Error(`Staff ${staffId} profile incomplete (Level/Step missing)`);
         }
 
-        // Parse Level/Step to extract numeric values and determine Scale (CONUASS vs CONTISS)
+        // 1. Resolve statutory Scale (CONUASS vs CONTISS) and Level from Scheme of Service
         let scaleName = 'CONTISS';
-        if (staff.level.toUpperCase().includes('CONUASS')) {
-            scaleName = 'CONUASS';
-        }
+        let levelCode = staff.level;
 
-        const levelMatch = staff.level.match(/\d+/);
-        const levelCode = levelMatch ? levelMatch[0].padStart(2, '0') : staff.level;
+        const postDef = getPostDefinition(staff.cadre || '', staff.rank || '');
+        if (postDef) {
+            scaleName = postDef.scaleType;
+            levelCode = String(postDef.gradeLevel).padStart(2, '0');
+        } else {
+            if (staff.level.toUpperCase().includes('CONUASS') || staff.cadre?.toUpperCase().includes('ACADEMIC')) {
+                scaleName = 'CONUASS';
+            }
+            const levelMatch = staff.level.match(/\d+/);
+            levelCode = levelMatch ? levelMatch[0].padStart(2, '0') : staff.level;
+        }
 
         const stepMatch = staff.step.match(/\d+/);
         const stepCode = stepMatch ? stepMatch[0].padStart(2, '0') : staff.step;
