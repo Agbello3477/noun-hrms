@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  getMyAcademicScope,
   getFaculties,
   getDepartments,
   getAcademicProgrammes,
@@ -24,6 +25,9 @@ import { verifyToken, requireRole } from '../../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
 const router = Router();
+
+// Academic Scope Resolution
+router.get('/my-scope', verifyToken, getMyAcademicScope);
 
 // Academic Structure with authentication & role segregation
 router.get('/faculties', verifyToken, getFaculties);

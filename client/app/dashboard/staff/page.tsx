@@ -25,6 +25,7 @@ import AddStaffModal from '../../../components/dashboard/AddStaffModal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
+import StaffDetailClient from './[id]/StaffDetailClient';
 
 interface Staff {
     id: string;
@@ -62,6 +63,24 @@ interface OrganizationData {
 export default function StaffPage() {
     const router = useRouter();
     const { user } = useAuth();
+
+    const [selectedStaffId, setSelectedStaffId] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('id');
+        }
+        return null;
+    });
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const id = new URLSearchParams(window.location.search).get('id');
+                setSelectedStaffId(id);
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });
@@ -234,6 +253,20 @@ export default function StaffPage() {
         }
         return r.replace(/_/g, ' ');
     };
+
+    if (selectedStaffId) {
+        return (
+            <StaffDetailClient
+                params={{ id: selectedStaffId }}
+                onBack={() => {
+                    setSelectedStaffId(null);
+                    if (typeof window !== 'undefined') {
+                        window.history.replaceState(null, '', '/dashboard/staff');
+                    }
+                }}
+            />
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -591,12 +624,17 @@ export default function StaffPage() {
                                 </div>
 
                                 {/* Card Footer Action */}
-                                <Link
-                                    href={`/dashboard/staff/${staff.id}`}
-                                    className="bg-slate-50/80 hover:bg-[#006533] hover:text-white border-t border-slate-150 p-3.5 text-center text-xs font-bold text-slate-700 transition flex items-center justify-center gap-1 group-hover:bg-[#006533]/10 group-hover:text-[#006533]"
+                                <button
+                                    onClick={() => {
+                                        setSelectedStaffId(staff.id);
+                                        if (typeof window !== 'undefined') {
+                                            window.history.pushState(null, '', `/dashboard/staff?id=${staff.id}`);
+                                        }
+                                    }}
+                                    className="w-full bg-slate-50/80 hover:bg-[#006533] hover:text-white border-t border-slate-150 p-3.5 text-center text-xs font-bold text-slate-700 transition flex items-center justify-center gap-1 group-hover:bg-[#006533]/10 group-hover:text-[#006533]"
                                 >
                                     View Service Record <ChevronRight size={14} />
-                                </Link>
+                                </button>
                             </div>
                         );
                     })}
@@ -701,12 +739,17 @@ export default function StaffPage() {
 
                                             {/* Action Cell */}
                                             <td className="px-6 py-3.5 text-right">
-                                                <Link
-                                                    href={`/dashboard/staff/${staff.id}`}
-                                                    className="inline-flex items-center gap-1 text-xs font-bold text-[#006533] hover:text-[#004d26] transition bg-[#006533]/10 hover:bg-[#006533]/20 px-3 py-1.5 rounded-lg"
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedStaffId(staff.id);
+                                                        if (typeof window !== 'undefined') {
+                                                            window.history.pushState(null, '', `/dashboard/staff?id=${staff.id}`);
+                                                        }
+                                                    }}
+                                                    className="inline-flex items-center gap-1 text-xs font-bold text-[#006533] hover:text-[#004d26] transition bg-[#006533]/10 hover:bg-[#006533]/20 px-3 py-1.5 rounded-lg cursor-pointer"
                                                 >
                                                     View Profile <ChevronRight size={13} />
-                                                </Link>
+                                                </button>
                                             </td>
                                         </tr>
                                     );

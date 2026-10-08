@@ -162,6 +162,7 @@ export default function CourseAllocationMatrixPage() {
   }, [pathname, router]);
 
   // State Filters
+  const [userScope, setUserScope] = useState<any>(null);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [programmes, setProgrammes] = useState<AcademicProgramme[]>([]);
@@ -215,23 +216,38 @@ export default function CourseAllocationMatrixPage() {
   // Success/Error Feedback
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // 1. Initial Load of Faculties & Structure
+  // 1. Initial Load of Faculties, Structure & User Scope
   useEffect(() => {
     async function loadStructure() {
       try {
-        const [facRes, deptRes, progRes, courseRes] = await Promise.all([
+        const [scopeRes, facRes, deptRes, progRes, courseRes] = await Promise.all([
+          api.get('/api/v1/academic/my-scope').catch(() => ({ data: null })),
           api.get('/api/v1/academic/faculties'),
           api.get('/api/v1/academic/departments'),
           api.get('/api/v1/academic/programmes'),
           api.get('/api/v1/academic/courses'),
         ]);
 
+        const scope = scopeRes.data;
+        setUserScope(scope);
+
         setFaculties(facRes.data || []);
         setDepartments(deptRes.data || []);
         setProgrammes(progRes.data || []);
         setCourses(courseRes.data || []);
 
-        if (deptRes.data?.length > 0) {
+        if (scope && !scope.isExecutive && scope.isHod && scope.hodDepartment) {
+          // Lock to HOD's specific department & faculty
+          setSelectedDepartment(scope.hodDepartment.id);
+          setSelectedFaculty(scope.hodDepartment.facultyId);
+        } else if (scope && !scope.isExecutive && scope.isDean && scope.deanFaculty) {
+          // Lock to Dean's faculty
+          setSelectedFaculty(scope.deanFaculty.id);
+          const deptsInFac = (deptRes.data || []).filter((d: any) => d.facultyId === scope.deanFaculty.id);
+          if (deptsInFac.length > 0) {
+            setSelectedDepartment(deptsInFac[0].id);
+          }
+        } else if (deptRes.data?.length > 0) {
           const firstDept = deptRes.data.find((d: any) => d.facultyId === 'cmp') || deptRes.data[0];
           setSelectedDepartment(firstDept.id);
           setSelectedFaculty(firstDept.facultyId);
@@ -595,6 +611,24 @@ export default function CourseAllocationMatrixPage() {
           </button>
         </div>
 
+        {/* Scoped Role Banner */}
+        {userScope && !userScope.isExecutive && userScope.isHod && userScope.hodDepartment && (
+          <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900">
+            <ShieldCheck className="w-4 h-4 text-[#006533] shrink-0" />
+            <span>
+              Restricted to your assigned Department: <span className="underline">{userScope.hodDepartment.name} ({userScope.hodDepartment.id})</span> • Faculty: {userScope.hodDepartment.facultyName} (HOD Access Only)
+            </span>
+          </div>
+        )}
+        {userScope && !userScope.isExecutive && userScope.isDean && userScope.deanFaculty && !userScope.isHod && (
+          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-900">
+            <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
+            <span>
+              Restricted to your assigned Faculty: <span className="underline">{userScope.deanFaculty.name} ({userScope.deanFaculty.facultyCode})</span> (Dean Overview Access)
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
           {/* Faculty Select */}
           <div>
@@ -604,7 +638,8 @@ export default function CourseAllocationMatrixPage() {
             <select
               value={selectedFaculty}
               onChange={(e) => handleFacultyChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none"
+              disabled={userScope && !userScope.isExecutive && ((userScope.isHod && userScope.hodDepartment) || (userScope.isDean && userScope.deanFaculty))}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none disabled:opacity-75 disabled:cursor-not-allowed"
             >
               {faculties.map((fac) => (
                 <option key={fac.id} value={fac.id}>
@@ -622,7 +657,8 @@ export default function CourseAllocationMatrixPage() {
             <select
               value={selectedDepartment}
               onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none"
+              disabled={userScope && !userScope.isExecutive && userScope.isHod && userScope.hodDepartment}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none disabled:opacity-75 disabled:cursor-not-allowed"
             >
               {departments
                 .filter((d) => d.facultyId === selectedFaculty)

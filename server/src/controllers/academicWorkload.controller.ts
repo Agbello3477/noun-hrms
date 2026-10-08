@@ -21,13 +21,206 @@ interface AuthRequest extends Request {
   };
 }
 
+export interface AcademicUserScope {
+  isExecutive: boolean;
+  isDean: boolean;
+  isHod: boolean;
+  isLecturer: boolean;
+  deanFaculty?: {
+    id: string;
+    name: string;
+    facultyCode: string;
+    departmentIds: string[];
+  } | null;
+  hodDepartment?: {
+    id: string;
+    name: string;
+    code: string | null;
+    facultyId: string;
+    facultyName: string;
+  } | null;
+}
+
+/**
+ * Helper to resolve the authenticated user's academic hierarchical scope:
+ * - Executive (VC, Registrar, Registry Admin, Super User, Admin, HR Admin) -> Full Access
+ * - Dean -> Restricted strictly to their assigned Faculty and its Departments
+ * - Head of Department (HOD) -> Restricted strictly to their assigned Department
+ */
+export const resolveAcademicUserScope = async (userId?: string, userRole?: Role): Promise<AcademicUserScope> => {
+  if (!userId) {
+    return {
+      isExecutive: false,
+      isDean: false,
+      isHod: false,
+      isLecturer: false,
+      deanFaculty: null,
+      hodDepartment: null,
+    };
+  }
+
+  const isExecutive = [
+    Role.SUPER_USER,
+    Role.ADMIN,
+    Role.HR_ADMIN,
+    Role.REGISTRAR,
+    Role.DEPUTY_REGISTRAR,
+    Role.REGISTRY_ADMIN,
+    Role.VICE_CHANCELLOR,
+  ].includes(userRole as any);
+
+  // 1. Direct faculty appointment check
+  const facultyAppointment = await prisma.faculty.findFirst({
+    where: {
+      OR: [
+        { deanId: userId },
+        { facultyOfficerId: userId },
+        { facultySecretaryId: userId },
+      ],
+    },
+    include: {
+      departments: { select: { id: true } },
+    },
+  });
+
+  // 2. Direct department appointment check
+  const deptAppointment = await prisma.department.findFirst({
+    where: {
+      OR: [
+        { hodId: userId },
+        { examOfficerId: userId },
+        { departmentAdminId: userId },
+      ],
+    },
+    include: {
+      faculty: { select: { id: true, name: true, facultyCode: true } },
+    },
+  });
+
+  let deanFaculty = facultyAppointment
+    ? {
+        id: facultyAppointment.id,
+        name: facultyAppointment.name,
+        facultyCode: facultyAppointment.facultyCode,
+        departmentIds: facultyAppointment.departments.map((d) => d.id),
+      }
+    : null;
+
+  let hodDepartment = deptAppointment
+    ? {
+        id: deptAppointment.id,
+        name: deptAppointment.name,
+        code: deptAppointment.code,
+        facultyId: deptAppointment.facultyId,
+        facultyName: deptAppointment.faculty.name,
+      }
+    : null;
+
+  const staffProfile = await prisma.staffProfile.findUnique({
+    where: { userId },
+    include: { unit: true },
+  });
+
+  const isLecturer = staffProfile?.cadre === Cadre.ACADEMIC || userRole === Role.STAFF;
+
+  // Fallback: match by staff rank / unit if not set in appointment columns
+  if (!deanFaculty && staffProfile) {
+    const rankUpper = (staffProfile.rank || '').toUpperCase();
+    const isDeanRank = rankUpper.includes('DEAN');
+    if (isDeanRank || (staffProfile.unit?.type === 'FACULTY' && userRole === Role.UNIT_HEAD)) {
+      const matchingFac = await prisma.faculty.findFirst({
+        where: {
+          OR: [
+            { id: { equals: staffProfile.unitId || '', mode: 'insensitive' } },
+            { name: { contains: staffProfile.unit?.name || '', mode: 'insensitive' } },
+            { facultyCode: { contains: staffProfile.unit?.code || '', mode: 'insensitive' } },
+          ],
+        },
+        include: { departments: { select: { id: true } } },
+      });
+      if (matchingFac) {
+        deanFaculty = {
+          id: matchingFac.id,
+          name: matchingFac.name,
+          facultyCode: matchingFac.facultyCode,
+          departmentIds: matchingFac.departments.map((d) => d.id),
+        };
+      }
+    }
+  }
+
+  if (!hodDepartment && staffProfile) {
+    const rankUpper = (staffProfile.rank || '').toUpperCase();
+    const isHodRank = rankUpper.includes('HOD') || rankUpper.includes('HEAD OF DEPARTMENT');
+    if (isHodRank || (staffProfile.unit?.type === 'DEPARTMENT' && userRole === Role.UNIT_HEAD)) {
+      const matchingDept = await prisma.department.findFirst({
+        where: {
+          OR: [
+            { id: { equals: staffProfile.unitId || '', mode: 'insensitive' } },
+            { code: { equals: staffProfile.unit?.code || '', mode: 'insensitive' } },
+            { name: { contains: staffProfile.unit?.name || '', mode: 'insensitive' } },
+          ],
+        },
+        include: { faculty: { select: { id: true, name: true, facultyCode: true } } },
+      });
+      if (matchingDept) {
+        hodDepartment = {
+          id: matchingDept.id,
+          name: matchingDept.name,
+          code: matchingDept.code,
+          facultyId: matchingDept.facultyId,
+          facultyName: matchingDept.faculty.name,
+        };
+      }
+    }
+  }
+
+  return {
+    isExecutive,
+    isDean: !!deanFaculty,
+    isHod: !!hodDepartment,
+    isLecturer,
+    deanFaculty,
+    hodDepartment,
+  };
+};
+
+/**
+ * 0. Get current user's academic scope
+ * GET /api/v1/academic/my-scope
+ */
+export const getMyAcademicScope = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    res.json(scope);
+  } catch (error: any) {
+    console.error('Error getting academic scope:', error);
+    res.status(500).json({ message: 'Error retrieving academic scope', error: error.message });
+  }
+};
+
 /**
  * 1. Get all Faculties
  * GET /api/v1/academic/faculties
  */
-export const getFaculties = async (req: Request, res: Response) => {
+export const getFaculties = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
+
+    const whereClause: any = {};
+    // If scoped Dean, restrict to their faculty
+    if (!scope.isExecutive && scope.isDean && scope.deanFaculty) {
+      whereClause.id = scope.deanFaculty.id;
+    } else if (!scope.isExecutive && scope.isHod && scope.hodDepartment) {
+      whereClause.id = scope.hodDepartment.facultyId;
+    }
+
     const faculties = await prisma.faculty.findMany({
+      where: whereClause,
       include: {
         dean: {
           select: {
@@ -50,6 +243,7 @@ export const getFaculties = async (req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
+            code: true,
             _count: { select: { programmes: true, courses: true } },
           },
           orderBy: { name: 'asc' },
@@ -70,12 +264,22 @@ export const getFaculties = async (req: Request, res: Response) => {
  * 2. Get all Departments
  * GET /api/v1/academic/departments?facultyId=...
  */
-export const getDepartments = async (req: Request, res: Response) => {
+export const getDepartments = async (req: AuthRequest, res: Response) => {
   try {
-    const { facultyId } = req.query;
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
 
+    const { facultyId } = req.query;
     const whereClause: any = {};
-    if (facultyId && typeof facultyId === 'string') {
+
+    if (!scope.isExecutive && scope.isHod && scope.hodDepartment) {
+      // HOD only sees their specific department
+      whereClause.id = scope.hodDepartment.id;
+    } else if (!scope.isExecutive && scope.isDean && scope.deanFaculty) {
+      // Dean only sees departments under their faculty
+      whereClause.facultyId = scope.deanFaculty.id;
+    } else if (facultyId && typeof facultyId === 'string') {
       whereClause.facultyId = facultyId;
     }
 
@@ -100,6 +304,22 @@ export const getDepartments = async (req: Request, res: Response) => {
             },
           },
         },
+        examOfficer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: { select: { staffId: true, surname: true, otherNames: true } },
+          },
+        },
+        departmentAdmin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            staffProfile: { select: { staffId: true, surname: true, otherNames: true } },
+          },
+        },
         _count: { select: { programmes: true, courses: true } },
       },
       orderBy: { name: 'asc' },
@@ -116,18 +336,32 @@ export const getDepartments = async (req: Request, res: Response) => {
  * 3. Get Academic Programmes
  * GET /api/v1/academic/programmes?facultyId=...&departmentId=...&level=...&search=...
  */
-export const getAcademicProgrammes = async (req: Request, res: Response) => {
+export const getAcademicProgrammes = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
+
     const { facultyId, departmentId, level, search } = req.query;
 
     const whereClause: any = { isActive: true };
 
-    if (facultyId && typeof facultyId === 'string') {
-      whereClause.facultyId = facultyId;
+    if (!scope.isExecutive && scope.isHod && scope.hodDepartment) {
+      whereClause.departmentId = scope.hodDepartment.id;
+    } else if (!scope.isExecutive && scope.isDean && scope.deanFaculty) {
+      whereClause.facultyId = scope.deanFaculty.id;
+      if (departmentId && typeof departmentId === 'string') {
+        whereClause.departmentId = departmentId;
+      }
+    } else {
+      if (facultyId && typeof facultyId === 'string') {
+        whereClause.facultyId = facultyId;
+      }
+      if (departmentId && typeof departmentId === 'string') {
+        whereClause.departmentId = departmentId;
+      }
     }
-    if (departmentId && typeof departmentId === 'string') {
-      whereClause.departmentId = departmentId;
-    }
+
     if (level && typeof level === 'string') {
       whereClause.level = level as ProgrammeLevel;
     }
@@ -160,18 +394,32 @@ export const getAcademicProgrammes = async (req: Request, res: Response) => {
  * 4. Get Academic Courses
  * GET /api/v1/academic/courses?programmeId=...&departmentId=...&semester=...&session=...&search=...
  */
-export const getAcademicCourses = async (req: Request, res: Response) => {
+export const getAcademicCourses = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
+
     const { programmeId, departmentId, semester, session, level, search } = req.query;
 
     const whereClause: any = {};
 
-    if (programmeId && typeof programmeId === 'string') {
-      whereClause.programmeId = programmeId;
+    if (!scope.isExecutive && scope.isHod && scope.hodDepartment) {
+      whereClause.departmentId = scope.hodDepartment.id;
+    } else if (!scope.isExecutive && scope.isDean && scope.deanFaculty) {
+      whereClause.department = { facultyId: scope.deanFaculty.id };
+      if (departmentId && typeof departmentId === 'string') {
+        whereClause.departmentId = departmentId;
+      }
+    } else {
+      if (programmeId && typeof programmeId === 'string') {
+        whereClause.programmeId = programmeId;
+      }
+      if (departmentId && typeof departmentId === 'string') {
+        whereClause.departmentId = departmentId;
+      }
     }
-    if (departmentId && typeof departmentId === 'string') {
-      whereClause.departmentId = departmentId;
-    }
+
     if (semester && typeof semester === 'string') {
       whereClause.semester = semester as AcademicSemester;
     }
@@ -224,6 +472,10 @@ export const getAcademicCourses = async (req: Request, res: Response) => {
  */
 export const createOrUpdateCourse = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const scope = await resolveAcademicUserScope(userId, userRole);
+
     const {
       courseCode,
       courseTitle,
@@ -242,6 +494,22 @@ export const createOrUpdateCourse = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({
         message: 'Missing required fields: courseCode, courseTitle, creditUnits, programmeId, departmentId',
       });
+    }
+
+    // Scope check: HOD and Dean can only manage courses in their department / faculty
+    if (!scope.isExecutive) {
+      if (scope.isHod && scope.hodDepartment?.id !== departmentId) {
+        return res.status(403).json({
+          message: `Unauthorized: As Head of Department (HOD), you can only manage courses for your specific department (${scope.hodDepartment?.name}).`,
+        });
+      } else if (scope.isDean) {
+        const dept = await prisma.department.findUnique({ where: { id: departmentId } });
+        if (dept?.facultyId !== scope.deanFaculty?.id) {
+          return res.status(403).json({
+            message: `Unauthorized: As Dean, you can only manage courses within your specific faculty (${scope.deanFaculty?.name}).`,
+          });
+        }
+      }
     }
 
     const course = await prisma.academicCourse.upsert({
@@ -287,6 +555,7 @@ export const createOrUpdateCourse = async (req: AuthRequest, res: Response) => {
 export const allocateWorkload = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
     const {
@@ -309,13 +578,35 @@ export const allocateWorkload = async (req: AuthRequest, res: Response) => {
     // 1. Verify Course exists
     const course = await prisma.academicCourse.findUnique({
       where: { id: courseId },
-      include: { department: true, programme: true },
+      include: { department: { include: { faculty: true } }, programme: true },
     });
     if (!course) {
       return res.status(404).json({ message: 'Academic course not found' });
     }
 
-    // 2. Verify Academic Staff exists
+    // 2. Strict Scope Verification for Dean & HOD
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    if (!scope.isExecutive) {
+      if (scope.isHod && !scope.isDean) {
+        if (course.departmentId !== scope.hodDepartment?.id) {
+          return res.status(403).json({
+            message: `Unauthorized: As Head of Department (HOD) of ${scope.hodDepartment?.name || 'your department'}, you can only allocate courses for your specific department.`,
+          });
+        }
+      } else if (scope.isDean) {
+        if (course.department.facultyId !== scope.deanFaculty?.id) {
+          return res.status(403).json({
+            message: `Unauthorized: As Dean of ${scope.deanFaculty?.name || 'your faculty'}, you can only manage course allocations within your specific faculty.`,
+          });
+        }
+      } else {
+        return res.status(403).json({
+          message: 'Unauthorized: Only designated Heads of Department (HOD), Deans, or University Executives can allocate courses.',
+        });
+      }
+    }
+
+    // 3. Verify Academic Staff exists
     const staff = await prisma.staffProfile.findUnique({
       where: { id: academicStaffId },
       include: { user: true, unit: true },
@@ -335,7 +626,7 @@ export const allocateWorkload = async (req: AuthRequest, res: Response) => {
         );
     const calculatedETE = AcademicWorkloadEngine.calculateCourseETE(effectiveAssignedCU, effectiveStudents);
 
-    // 3. Upsert allocation to guarantee idempotency
+    // 4. Upsert allocation to guarantee idempotency
     const allocation = await prisma.courseWorkloadAllocation.upsert({
       where: {
         courseId_academicStaffId_academicSession_semester: {
@@ -397,17 +688,40 @@ export const allocateWorkload = async (req: AuthRequest, res: Response) => {
 export const revokeWorkloadAllocation = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     const { id } = req.params;
 
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
     const allocation = await prisma.courseWorkloadAllocation.findUnique({
       where: { id },
-      include: { course: true, academicStaff: true },
+      include: {
+        course: { include: { department: { include: { faculty: true } } } },
+        academicStaff: true,
+      },
     });
 
     if (!allocation) {
       return res.status(404).json({ message: 'Workload allocation not found' });
+    }
+
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    if (!scope.isExecutive) {
+      if (scope.isHod && !scope.isDean) {
+        if (allocation.course.departmentId !== scope.hodDepartment?.id) {
+          return res.status(403).json({
+            message: `Unauthorized: You can only revoke allocations for your specific department (${scope.hodDepartment?.name}).`,
+          });
+        }
+      } else if (scope.isDean) {
+        if (allocation.course.department.facultyId !== scope.deanFaculty?.id) {
+          return res.status(403).json({
+            message: `Unauthorized: You can only revoke allocations within your specific faculty (${scope.deanFaculty?.name}).`,
+          });
+        }
+      } else {
+        return res.status(403).json({ message: 'Unauthorized' });
+      }
     }
 
     await prisma.courseWorkloadAllocation.delete({ where: { id } });
@@ -507,6 +821,8 @@ export const getStaffWorkloadDossier = async (req: AuthRequest, res: Response) =
  */
 export const getDepartmentalWorkloadMatrix = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
     const { departmentId } = req.params;
     const session = (req.query.session as string) || '2026/2027';
     const semester = (req.query.semester as string) || 'FIRST_SEMESTER';
@@ -533,7 +849,25 @@ export const getDepartmentalWorkloadMatrix = async (req: AuthRequest, res: Respo
       return res.status(404).json({ message: 'Department not found' });
     }
 
-    // 2. Fetch all academic staff in this department/faculty or with allocations
+    // 2. Strict Academic Access Control
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    if (!scope.isExecutive) {
+      if (scope.isHod && !scope.isDean) {
+        if (scope.hodDepartment?.id !== departmentId) {
+          return res.status(403).json({
+            message: `Access Denied: As Head of Department (HOD), you only have access to your specific assigned department (${scope.hodDepartment?.name || departmentId}).`,
+          });
+        }
+      } else if (scope.isDean) {
+        if (department.facultyId !== scope.deanFaculty?.id) {
+          return res.status(403).json({
+            message: `Access Denied: As Dean, you only have access to departments within your specific faculty (${scope.deanFaculty?.name || department.faculty.name}).`,
+          });
+        }
+      }
+    }
+
+    // 3. Fetch all academic staff in this department/faculty or with allocations
     const staffProfiles = await prisma.staffProfile.findMany({
       where: {
         cadre: Cadre.ACADEMIC,
@@ -558,7 +892,7 @@ export const getDepartmentalWorkloadMatrix = async (req: AuthRequest, res: Respo
       orderBy: [{ surname: 'asc' }, { otherNames: 'asc' }],
     });
 
-    // 3. Compute summaries for each staff
+    // 4. Compute summaries for each staff
     const staffSummaries = staffProfiles.map((staff) => {
       const summary = AcademicWorkloadEngine.evaluateStaffWorkload({
         staffProfileId: staff.id,
@@ -649,10 +983,26 @@ export const getDepartmentalWorkloadMatrix = async (req: AuthRequest, res: Respo
 export const submitDepartmentalDocket = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     const { departmentId } = req.params;
     const { session = '2026/2027', semester = 'FIRST_SEMESTER', remarks } = req.body;
 
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const department = await prisma.department.findUnique({
+      where: { id: departmentId },
+      include: { faculty: true },
+    });
+    if (!department) return res.status(404).json({ message: 'Department not found' });
+
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    if (!scope.isExecutive) {
+      if (scope.isHod && scope.hodDepartment?.id !== departmentId) {
+        return res.status(403).json({
+          message: `Unauthorized: As HOD of ${scope.hodDepartment?.name}, you can only submit workload dockets for your specific department.`,
+        });
+      }
+    }
 
     // Update all DRAFT allocations in this department to SUBMITTED_BY_HOD
     const updated = await prisma.courseWorkloadAllocation.updateMany({
@@ -693,10 +1043,26 @@ export const submitDepartmentalDocket = async (req: AuthRequest, res: Response) 
 export const authorizeDepartmentalDocket = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     const { departmentId } = req.params;
     const { session = '2026/2027', semester = 'FIRST_SEMESTER', remarks, action = 'APPROVE' } = req.body;
 
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const department = await prisma.department.findUnique({
+      where: { id: departmentId },
+      include: { faculty: true },
+    });
+    if (!department) return res.status(404).json({ message: 'Department not found' });
+
+    const scope = await resolveAcademicUserScope(userId, userRole);
+    if (!scope.isExecutive) {
+      if (!scope.isDean || department.facultyId !== scope.deanFaculty?.id) {
+        return res.status(403).json({
+          message: `Unauthorized: Only the Dean of ${department.faculty.name} or University Executives can authorize this departmental workload docket.`,
+        });
+      }
+    }
 
     const targetStatus =
       action === 'REJECT' || action === 'RETURN'

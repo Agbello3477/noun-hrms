@@ -77,6 +77,7 @@ export default function DeanWorkloadReviewPage() {
     }
   }, [pathname, router]);
 
+  const [userScope, setUserScope] = useState<any>(null);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('cmp');
   const [selectedSession, setSelectedSession] = useState<string>('2026/2027');
@@ -107,16 +108,27 @@ export default function DeanWorkloadReviewPage() {
   // Feedback Alerts
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // 1. Initial Load of Faculties & Hierarchy
+  // 1. Initial Load of Faculties & User Scope
   const loadFaculties = async () => {
     try {
-      const res = await api.get('/api/v1/academic/faculties/hierarchy');
-      setFaculties(res.data || []);
-      if (res.data?.length > 0 && !selectedFacultyId) {
-        setSelectedFacultyId(res.data[0].id);
+      const [scopeRes, facRes] = await Promise.all([
+        api.get('/api/v1/academic/my-scope').catch(() => ({ data: null })),
+        api.get('/api/v1/academic/faculties'),
+      ]);
+
+      const scope = scopeRes.data;
+      setUserScope(scope);
+
+      const facList = facRes.data || [];
+      setFaculties(facList);
+
+      if (scope && !scope.isExecutive && scope.isDean && scope.deanFaculty) {
+        setSelectedFacultyId(scope.deanFaculty.id);
+      } else if (facList.length > 0 && !selectedFacultyId) {
+        setSelectedFacultyId(facList[0].id);
       }
     } catch (err) {
-      console.error('Error fetching faculties hierarchy:', err);
+      console.error('Error fetching faculties:', err);
     }
   };
 
@@ -425,6 +437,16 @@ export default function DeanWorkloadReviewPage() {
           </button>
         </div>
 
+        {/* Scoped Role Banner */}
+        {userScope && !userScope.isExecutive && userScope.isDean && userScope.deanFaculty && (
+          <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900">
+            <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0" />
+            <span>
+              Restricted to your designated Faculty: <span className="underline">{userScope.deanFaculty.name} ({userScope.deanFaculty.facultyCode})</span> (Dean Ratification Cockpit)
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Faculty Select */}
           <div>
@@ -434,7 +456,8 @@ export default function DeanWorkloadReviewPage() {
             <select
               value={selectedFacultyId}
               onChange={(e) => setSelectedFacultyId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none"
+              disabled={userScope && !userScope.isExecutive && userScope.isDean && userScope.deanFaculty}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none disabled:opacity-75 disabled:cursor-not-allowed"
             >
               {faculties.map((fac) => (
                 <option key={fac.id} value={fac.id}>

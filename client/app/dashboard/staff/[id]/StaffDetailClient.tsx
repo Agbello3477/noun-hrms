@@ -92,7 +92,7 @@ interface OrganizationData {
     units: { id: string; name: string; type: string; code: string }[];
 }
 
-export default function StaffDetailPage({ params }: { params?: { id?: string } }) {
+export default function StaffDetailPage({ params, onBack }: { params?: { id?: string }; onBack?: () => void }) {
     const routeParams = useParams();
     const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
@@ -573,7 +573,7 @@ export default function StaffDetailPage({ params }: { params?: { id?: string } }
         <div className="space-y-6">
             {/* Back Button */}
             <button
-                onClick={() => router.back()}
+                onClick={() => onBack ? onBack() : router.push('/dashboard/staff')}
                 className="flex items-center gap-2 text-gray-500 hover:text-gray-800 transition font-semibold text-sm"
             >
                 <ArrowLeft size={18} /> Back to Directory

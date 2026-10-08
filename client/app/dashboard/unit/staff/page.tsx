@@ -295,7 +295,7 @@ export default function UnitStaffPage() {
                                                         Dossier &amp; History
                                                     </button>
                                                     <Link
-                                                        href={`/dashboard/staff/${staff.id}`}
+                                                        href={`/dashboard/staff?id=${staff.id}`}
                                                         className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition"
                                                     >
                                                         Profile <ChevronRight size={13} />
