@@ -189,36 +189,43 @@ export function isExemptFromRateLimiting(path: string, method: string = 'GET'): 
     lower === '/healthz' ||
     lower.startsWith('/uploads') ||
     lower.startsWith('/api/meta') ||
-    lower.startsWith('/api/v1/meta')
+    lower.startsWith('/api/v1/meta') ||
+    lower.startsWith('/api/notifications') ||
+    lower.startsWith('/api/v1/academic/faculties') ||
+    lower.startsWith('/api/v1/academic/departments') ||
+    lower.startsWith('/api/v1/academic/programmes') ||
+    lower.startsWith('/api/v1/academic/courses') ||
+    lower.startsWith('/api/cadres') ||
+    lower.startsWith('/api/ranks')
   );
 }
 
 /**
- * Global Route Limiter: 1200 requests/minute per client IP (supports high-traffic SPAs, websockets & NATs)
+ * Global Route Limiter: 3600 req/min for authenticated users, 2400 req/min per IP (supports high-traffic SPAs, websockets & NATs)
  */
-export async function checkGlobalRateLimit(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
-  const limit = parseInt(process.env.WAF_GLOBAL_RATE_LIMIT || '1200', 10);
-  const res = await checkBucket(`waf:ratelimit:global:${ip}`, limit, 60);
+export async function checkGlobalRateLimit(identifier: string, isAuthenticated: boolean = false): Promise<{ allowed: boolean; retryAfterSec: number }> {
+  const defaultLimit = isAuthenticated ? '3600' : '2400';
+  const limit = parseInt(process.env.WAF_GLOBAL_RATE_LIMIT || defaultLimit, 10);
+  const res = await checkBucket(`waf:ratelimit:global:${identifier}`, limit, 60);
   return { allowed: res.allowed, retryAfterSec: res.retryAfterSec };
 }
 
 /**
- * Sensitive Module Protection: 120 requests/minute for payroll & broadcast dispatch
+ * Sensitive Module Protection: 600 requests/minute for payroll execution & broadcast dispatch
  */
 export function isSensitiveEndpoint(path: string): boolean {
   const lower = path.toLowerCase();
   return (
-    lower.startsWith('/api/payroll') ||
-    lower.startsWith('/api/v1/payroll') ||
-    lower.includes('/payroll/run') ||
-    lower.includes('/broadcast') ||
-    lower.includes('/mass-dispatch')
+    lower.startsWith('/api/payroll/run') ||
+    lower.startsWith('/api/v1/payroll/run') ||
+    lower.includes('/payroll/execute') ||
+    lower.includes('/broadcast/mass-send')
   );
 }
 
-export async function checkSensitiveRateLimit(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
-  const limit = parseInt(process.env.WAF_SENSITIVE_RATE_LIMIT || '120', 10);
-  const res = await checkBucket(`waf:ratelimit:sensitive:${ip}`, limit, 60);
+export async function checkSensitiveRateLimit(identifier: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
+  const limit = parseInt(process.env.WAF_SENSITIVE_RATE_LIMIT || '600', 10);
+  const res = await checkBucket(`waf:ratelimit:sensitive:${identifier}`, limit, 60);
   return { allowed: res.allowed, retryAfterSec: res.retryAfterSec };
 }
 

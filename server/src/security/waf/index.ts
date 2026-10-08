@@ -207,8 +207,14 @@ export function createWafPreParserMiddleware(options: WafOptions = {}) {
 
     // 6. Adaptive Token-Bucket Rate Limiting (skipped for exempt routes like healthchecks, uploads, metadata, OPTIONS)
     if (!isExemptFromRateLimiting(req.path, req.method)) {
-      // A. Global route limiter: 1200 req/min
-      const globalRate = await checkGlobalRateLimit(clientIp);
+      const authHeader = (req.headers.authorization || '') as string;
+      const isAuthenticated = authHeader.startsWith('Bearer ') && authHeader.length > 20;
+      const rateIdentifier = isAuthenticated
+        ? `auth_${crypto.createHash('sha256').update(authHeader).digest('hex').substring(0, 16)}`
+        : `ip_${clientIp}`;
+
+      // A. Global route limiter: 3600 req/min (Auth) / 2400 req/min (IP)
+      const globalRate = await checkGlobalRateLimit(rateIdentifier, isAuthenticated);
       if (!globalRate.allowed) {
         res.setHeader('Retry-After', globalRate.retryAfterSec);
         return blockRequest(
@@ -220,9 +226,9 @@ export function createWafPreParserMiddleware(options: WafOptions = {}) {
         );
       }
 
-      // B. Sensitive module protection: 120 req/min
+      // B. Sensitive module protection: 600 req/min
       if (isSensitiveEndpoint(req.path)) {
-        const sensitiveRate = await checkSensitiveRateLimit(clientIp);
+        const sensitiveRate = await checkSensitiveRateLimit(rateIdentifier);
         if (!sensitiveRate.allowed) {
           res.setHeader('Retry-After', sensitiveRate.retryAfterSec);
           return blockRequest(

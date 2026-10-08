@@ -205,7 +205,9 @@ class RedisService {
         if (this.isEnabled && this.client) {
             try {
                 const count = await this.withTimeout(this.client.incr(key));
-                if (count === 1) {
+                // If this is the first hit or if key has no TTL (-1), ensure expiration is applied
+                const ttl = await this.withTimeout(this.client.ttl(key));
+                if (count === 1 || ttl <= 0) {
                     await this.withTimeout(this.client.expire(key, ttlSeconds));
                 }
                 return count;
@@ -216,13 +218,15 @@ class RedisService {
 
         const entry = this.memoryCache.get(key);
         let current = 0;
+        let expiresAt = Date.now() + (ttlSeconds * 1000);
         if (entry && Date.now() <= entry.expiresAt) {
             current = parseInt(entry.value, 10) || 0;
+            expiresAt = entry.expiresAt; // CRITICAL: Maintain original window expiration time
         }
         current += 1;
         this.memoryCache.set(key, {
             value: String(current),
-            expiresAt: Date.now() + (ttlSeconds * 1000)
+            expiresAt: expiresAt
         });
         return current;
     }
