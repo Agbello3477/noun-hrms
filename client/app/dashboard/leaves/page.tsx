@@ -8,7 +8,7 @@ import {
     Calendar, Clock, CheckCircle, XCircle, AlertCircle, Plus,
     FileText, ShieldCheck, Send, Eye, Printer, RefreshCw,
     Building, User, CheckCircle2, ChevronRight, Layers, ArrowUpRight,
-    FolderOpen, PackageCheck, ExternalLink
+    FolderOpen, PackageCheck, ExternalLink, BookOpen
 } from 'lucide-react';
 import ApplyLeaveModal from '../../../components/dashboard/ApplyLeaveModal';
 import ApplySabbaticalModal from '../../../components/dashboard/ApplySabbaticalModal';
@@ -21,6 +21,8 @@ import { LodgeRequisitionModal } from '../../../components/fileRequisition/Lodge
 import { CustodyReleaseReceiptModal } from '../../../components/fileRequisition/CustodyReleaseReceiptModal';
 import { DigitalTranscriptViewerModal } from '../../../components/fileRequisition/DigitalTranscriptViewerModal';
 import { RequisitionStatusStepper, FileRequisitionStatus } from '../../../components/fileRequisition/RequisitionStatusStepper';
+import OfficialLeaveBookletModal from '../../../components/leaves/OfficialLeaveBookletModal';
+import { OfficialLeaveBooklet } from '../../../types/leaveBooklet';
 import Pagination from '../../../components/ui/Pagination';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -98,6 +100,11 @@ function LeavesContent() {
     const [resubmitComments, setResubmitComments] = useState('');
     const [isResubmitting, setIsResubmitting] = useState(false);
     const [resubmitError, setResubmitError] = useState<string | null>(null);
+
+    // Official 26-Point Leave Booklet Modal State
+    const [isBookletModalOpen, setIsBookletModalOpen] = useState(false);
+    const [selectedBooklet, setSelectedBooklet] = useState<any | null>(null);
+    const [bookletMode, setBookletMode] = useState<'STAFF_APPLY' | 'VIEW_ONLY'>('STAFF_APPLY');
 
     const fetchInstitutionalApps = useCallback(async () => {
         setLoadingInstApps(true);
@@ -322,6 +329,18 @@ function LeavesContent() {
                             <span>Lodge File Requisition</span>
                         </button>
                     )}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setSelectedBooklet(null);
+                            setBookletMode('STAFF_APPLY');
+                            setIsBookletModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-emerald-400 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold transition-all shadow-xs active:scale-95"
+                    >
+                        <BookOpen size={14} className="stroke-[2.5]" />
+                        <span>Official Leave Booklet (Form LV-26)</span>
+                    </button>
                     <button
                         type="button"
                         onClick={() => setIsApplyModalOpen(true)}
@@ -938,8 +957,57 @@ function LeavesContent() {
                                                         {leave.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right text-slate-500 italic max-w-xs truncate" title={String(leave.comment || leave.rejectionReason || leave.reason || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()}>
-                                                    {String(leave.comment || leave.rejectionReason || leave.reason || '—').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || '—'}
+                                                <td className="px-6 py-4 text-right whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span className="text-slate-500 italic max-w-[160px] truncate" title={String(leave.comment || leave.rejectionReason || leave.reason || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()}>
+                                                            {String(leave.comment || leave.rejectionReason || leave.reason || '—').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || '—'}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const yr = leave.startDate ? new Date(leave.startDate).getFullYear() : new Date().getFullYear();
+                                                                let resumptionD = '';
+                                                                if (leave.endDate) {
+                                                                    const d = new Date(leave.endDate);
+                                                                    d.setDate(d.getDate() + 1);
+                                                                    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+                                                                    if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+                                                                    resumptionD = d.toISOString().split('T')[0];
+                                                                }
+                                                                const sp = (user?.staffProfile || {}) as any;
+                                                                setSelectedBooklet({
+                                                                    leaveYear: yr,
+                                                                    staffNo: sp.staffId || '00000',
+                                                                    fullName: user?.name || 'Staff Member',
+                                                                    surname: sp.surname || '',
+                                                                    otherNames: sp.otherNames || '',
+                                                                    designation: sp.rank || 'Staff',
+                                                                    salaryScale: sp.salaryScale || 'CONUASS 04',
+                                                                    dateOfAppointment: '2020-01-15',
+                                                                    facultyDeptStudyCenter: sp.department || sp.unit?.name || 'NOUN HQ',
+                                                                    location: 'Abuja Headquarters',
+                                                                    phoneNo: sp.phoneNumber || (user as any)?.phoneNumber || '',
+                                                                    officialEmail: user?.email || '',
+                                                                    dateResumedPreviousLeave: '',
+                                                                    dateProceedingOnLeave: leave.startDate ? new Date(leave.startDate).toISOString().split('T')[0] : '',
+                                                                    dateLeaveEnds: leave.endDate ? new Date(leave.endDate).toISOString().split('T')[0] : '',
+                                                                    dateOfResumption: resumptionD,
+                                                                    staffSignature: '',
+                                                                    staffSignatureDate: new Date().toISOString().split('T')[0],
+                                                                    status: leave.status || 'APPROVED',
+                                                                    supervisorComment: leave.hodApprovalRemarks || '',
+                                                                    supervisorName: leave.hodApprovedBy?.name || '',
+                                                                    directorHrComment: leave.registryApprovalRemarks || '',
+                                                                    directorHrName: leave.registryApprovedBy?.name || '',
+                                                                });
+                                                                setBookletMode('VIEW_ONLY');
+                                                                setIsBookletModalOpen(true);
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#006533] bg-emerald-50 hover:bg-[#006533] hover:text-white rounded-lg border border-emerald-200 transition"
+                                                        >
+                                                            <Printer size={12} /> Booklet
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1099,6 +1167,36 @@ function LeavesContent() {
                     requisitionId={selectedRequisition.id}
                 />
             )}
+
+            {/* Official 26-Point Statutory Leave Booklet Modal */}
+            <OfficialLeaveBookletModal
+                isOpen={isBookletModalOpen}
+                onClose={() => {
+                    setIsBookletModalOpen(false);
+                    setSelectedBooklet(null);
+                }}
+                booklet={selectedBooklet || undefined}
+                profile={user?.staffProfile}
+                userRole={user?.role}
+                reviewMode={bookletMode}
+                initialViewMode={bookletMode === 'STAFF_APPLY' ? 'FORM' : 'VIEW'}
+                onSave={async (data, isDraft) => {
+                    try {
+                        await api.post('/api/v1/leave/apply', {
+                            leaveType: 'ANNUAL',
+                            startDate: data.dateProceedingOnLeave,
+                            endDate: data.dateLeaveEnds,
+                            reason: 'Statutory Annual Leave (Form NOUN/HR/LV-26)',
+                            reliefStaffId: data.reliefOfficerStaffId,
+                        });
+                        alert(isDraft ? 'Leave Booklet draft saved.' : 'Official Leave Booklet submitted successfully!');
+                        setIsBookletModalOpen(false);
+                        fetchMyLeaves();
+                    } catch (err: any) {
+                        alert(err?.response?.data?.message || 'Failed to submit Leave Booklet.');
+                    }
+                }}
+            />
         </div>
     );
 }

@@ -21,9 +21,12 @@ import {
     UserCheck,
     FileText,
     AlertTriangle,
-    Check
+    Check,
+    BookOpen,
+    Printer
 } from 'lucide-react';
 import DocumentViewerModal from '../../../../components/dashboard/DocumentViewerModal';
+import OfficialLeaveBookletModal from '../../../../components/leaves/OfficialLeaveBookletModal';
 import Pagination from '../../../../components/ui/Pagination';
 import { Button } from '../../../../components/ui/Button';
 
@@ -114,6 +117,8 @@ export default function UnitLeavesPage() {
     const [reviewRemarks, setReviewRemarks] = useState<string>('');
     const [submittingAction, setSubmittingAction] = useState<string | null>(null);
     const [viewingAttachment, setViewingAttachment] = useState<any | null>(null);
+    const [isBookletModalOpen, setIsBookletModalOpen] = useState(false);
+    const [selectedBooklet, setSelectedBooklet] = useState<any | null>(null);
 
     // Check roles and permissions
     const userRole = currentUser?.role || '';
@@ -860,6 +865,54 @@ export default function UnitLeavesPage() {
                                 Cancel
                             </Button>
 
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const yr = selectedLeave.startDate ? new Date(selectedLeave.startDate).getFullYear() : new Date().getFullYear();
+                                    let resumptionD = '';
+                                    if (selectedLeave.endDate) {
+                                        const d = new Date(selectedLeave.endDate);
+                                        d.setDate(d.getDate() + 1);
+                                        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+                                        if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+                                        resumptionD = d.toISOString().split('T')[0];
+                                    }
+                                    const profile = selectedLeave.staff || {};
+                                    const userObj = profile.user || {};
+                                    setSelectedBooklet({
+                                        id: selectedLeave.id,
+                                        leaveApplicationId: selectedLeave.id,
+                                        referenceNo: `NOUN/LVB/${yr}/${profile.staffId || '00000'}`,
+                                        leaveYear: yr,
+                                        staffNo: profile.staffId || '00000',
+                                        fullName: profile.surname ? `${profile.surname}, ${profile.otherNames || ''}` : userObj.name || 'Staff Member',
+                                        surname: profile.surname || '',
+                                        otherNames: profile.otherNames || '',
+                                        designation: profile.rank || 'Staff',
+                                        salaryScale: profile.salaryScale || 'CONUASS 04',
+                                        dateOfAppointment: profile.dateOfFirstAppointment ? new Date(profile.dateOfFirstAppointment).toISOString().split('T')[0] : '2020-01-15',
+                                        facultyDeptStudyCenter: profile.department || profile.unit?.name || 'NOUN HQ',
+                                        location: profile.studyCenter?.name || 'Abuja Headquarters',
+                                        phoneNo: profile.phoneNumber || userObj.phoneNumber || '—',
+                                        officialEmail: profile.officialEmail || userObj.email || '—',
+                                        dateResumedPreviousLeave: '',
+                                        dateProceedingOnLeave: selectedLeave.startDate ? new Date(selectedLeave.startDate).toISOString().split('T')[0] : '',
+                                        dateLeaveEnds: selectedLeave.endDate ? new Date(selectedLeave.endDate).toISOString().split('T')[0] : '',
+                                        dateOfResumption: resumptionD,
+                                        staffSignature: selectedLeave.staffSignature || '',
+                                        staffSignatureDate: selectedLeave.startDate ? new Date(selectedLeave.startDate).toISOString().split('T')[0] : '',
+                                        reliefOfficerName: finalReliefOfficer || 'Not Assigned',
+                                        supervisorComment: selectedLeave.hodApprovalRemarks || reviewRemarks || '',
+                                        supervisorName: selectedLeave.hodApprovedBy?.name || currentUser?.name || 'Head of Department',
+                                        status: selectedLeave.status || 'PENDING_HOD',
+                                    });
+                                    setIsBookletModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-[#006533] hover:bg-emerald-100 text-xs font-bold transition"
+                            >
+                                <BookOpen size={14} /> Official Leave Booklet (26-Point)
+                            </button>
+
                             <Button
                                 variant="danger"
                                 size="sm"
@@ -903,6 +956,27 @@ export default function UnitLeavesPage() {
                 </div>
                 );
             })()}
+
+            {/* Official Leave Booklet Modal */}
+            {selectedBooklet && (
+                <OfficialLeaveBookletModal
+                    isOpen={isBookletModalOpen}
+                    onClose={() => {
+                        setIsBookletModalOpen(false);
+                        setSelectedBooklet(null);
+                    }}
+                    booklet={selectedBooklet}
+                    profile={currentUser?.staffProfile}
+                    userRole={currentUser?.role}
+                    reviewMode={isRegistryOrExecutive ? 'HR_REVIEW' : 'HOD_REVIEW'}
+                    initialViewMode="VIEW"
+                    onSave={async (data) => {
+                        setIsBookletModalOpen(false);
+                        if (canApprove) fetchPendingLeaves();
+                        fetchActiveLeaves();
+                    }}
+                />
+            )}
         </div>
     );
 }

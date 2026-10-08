@@ -159,7 +159,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
                             <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
                         )}
-                        <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="Performance (APER)" />
+                        <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="APER & Leave" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
                         <LinkItem href="/dashboard/analytics" icon={BarChart3} label="HR Analytics" />
                         <LinkItem href="/dashboard/registry/queries" icon={AlertTriangle} label="Disciplinary Actions: Queries & Warnings" />
