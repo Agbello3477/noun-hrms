@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "../hooks/useAuth";
 import NetworkStatus from "@/components/ui/NetworkStatus";
 import SessionTimeoutModal from "@/components/ui/SessionTimeoutModal";
+import ChatbotTrigger from "@/components/ai/ChatbotTrigger";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,8 +25,10 @@ export default function RootLayout({
                     {children}
                     <NetworkStatus />
                     <SessionTimeoutModal />
+                    <ChatbotTrigger />
                 </AuthProvider>
             </body>
         </html>
     );
 }
+

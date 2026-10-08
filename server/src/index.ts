@@ -287,6 +287,13 @@ app.use('/api/v1/academic/programmes', (req, res, next) => {
     metaRoutes(req, res, next);
 });
 
+// Enterprise Multi-Tenant AI Copilot & Knowledge Assistant ("NOUN-Sentinel AI")
+import aiCopilotRoutes from './routes/aiCopilot.routes';
+import { KnowledgeIngestionService } from './services/ai/knowledgeIngestion.service';
+app.use('/api/v1/ai', aiCopilotRoutes);
+app.use('/api/ai', aiCopilotRoutes);
+
+
 import prisma from './prisma';
 import { redisService } from './services/redis.service';
 
@@ -421,5 +428,12 @@ server.listen(PORT, () => {
     // Automatically ensure full NOUN Academic Structure (146 Programmes, 9 Faculties) exists
     ensureAcademicTaxonomy().catch((err: any) => {
         console.error('[Startup Academic Taxonomy Seeder] Failed to ensure academic programmes on startup:', err);
+    });
+
+    // Automatically index and initialize NOUN Statutory Knowledge Base for Sentinel AI
+    KnowledgeIngestionService.initializeKnowledgeBase().then((res) => {
+        console.log(`[Startup Sentinel AI] Statutory Knowledge Base initialized (${res.totalIndexed} chunks ready)`);
+    }).catch((err: any) => {
+        console.error('[Startup Sentinel AI] Failed to initialize knowledge base:', err);
     });
 });

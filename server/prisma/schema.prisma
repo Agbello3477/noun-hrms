@@ -2296,3 +2296,23 @@ model FileCustodyAuditTrail {
   @@map("file_custody_audit_trails")
 }
 
+model HrmsKnowledgeChunk {
+  id             String   @id @default(uuid())
+  cadre          String   // 'ACADEMIC', 'SENIOR_ADMIN', 'JUNIOR_STAFF', 'GENERAL'
+  section        String   // 'LEAVE', 'DISCIPLINE', 'PROMOTIONS', 'EXIT', 'SALARIES', 'WORKLOAD', 'MANUAL', 'GENERAL'
+  sourceDocument String   // e.g. "NOUN Rules and Regulations Senior Staff (June 2024)"
+  pageNumber     Int?     // e.g. 14
+  citationRef    String?  // e.g. "Section 5.1.1", "Scheme of Service Section 3.1"
+  content        String   @db.Text
+  tokenCount     Int?     @default(0)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([cadre])
+  @@index([section])
+  @@index([sourceDocument])
+  @@map("hrms_knowledge_chunks")
+}
+
+
