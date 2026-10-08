@@ -121,6 +121,10 @@ export default function DashboardHome() {
     const isHQGlobalAdmin = (user?.role === 'SUPER_USER' || user?.role === 'VICE_CHANCELLOR') || (
         (user?.role === 'HR_ADMIN' || user?.role === 'ADMIN') && bootstrapData?.isGlobalScope === true
     );
+    const userCadre = (user?.staffProfile?.cadre || '').toUpperCase();
+    const isAcademicCadre = userCadre === 'ACADEMIC' || userCadre === 'CONUASS' || userCadre.includes('ACADEMIC');
+    const isAcademicDeanOrHOD = user?.role === 'UNIT_HEAD' && (user?.staffProfile?.unit?.type === 'FACULTY' || user?.staffProfile?.unit?.type === 'DEPARTMENT');
+    const hasAcademicAccess = isAcademicCadre || isAcademicDeanOrHOD || isHQGlobalAdmin || isVC;
     const hasUnitPlacement = Boolean(bootstrapData?.unitName || user?.staffProfile?.unitId || user?.staffProfile?.centerId);
     const isUnitLeader = isUnitManager || (user?.role !== 'STAFF' && hasUnitPlacement && !isHQGlobalAdmin);
 
@@ -936,7 +940,7 @@ export default function DashboardHome() {
                             Welcome back, {user?.staffProfile?.title ? `${user.staffProfile.title}. ${user.name?.split(' ')[0]}` : user?.name?.split(' ')[0]}!
                         </h1>
                         <p className="text-slate-200 max-w-lg">
-                            Access your digital dossier, download payslips, apply for leave, and manage your academic profile all in one secure location.
+                            Access your digital dossier, download payslips, apply for leave, and manage your {isAcademicCadre ? 'academic profile' : 'staff profile'} all in one secure location.
                         </p>
                     </div>
                     {/* Decorative Background Elements */}
@@ -1001,13 +1005,23 @@ export default function DashboardHome() {
                         <p className="text-xs text-gray-500 mt-1">Download monthly</p>
                     </Link>
 
-                    <Link href="/dashboard/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
-                        <div className="mb-3 rounded-full bg-emerald-50 p-3.5 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
-                            <Users size={24} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 text-sm">Teaching Workload</h3>
-                        <p className="text-xs text-slate-500 mt-1 font-medium">Courses & Credits</p>
-                    </Link>
+                    {isAcademicCadre ? (
+                        <Link href="/dashboard/portal/my-teaching-workload" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-emerald-100 hover:border-emerald-500">
+                            <div className="mb-3 rounded-full bg-emerald-50 p-3.5 text-[#006533] group-hover:bg-[#006533] group-hover:text-white transition-colors">
+                                <Users size={24} />
+                            </div>
+                            <h3 className="font-bold text-gray-800 text-sm">Teaching Workload</h3>
+                            <p className="text-xs text-slate-500 mt-1 font-medium">Courses &amp; Credits</p>
+                        </Link>
+                    ) : (
+                        <Link href="/dashboard/portal/applications" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
+                            <div className="mb-3 rounded-full bg-blue-50 p-3.5 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <FileText size={24} />
+                            </div>
+                            <h3 className="font-semibold text-gray-800 text-sm">Official Requests</h3>
+                            <p className="text-xs text-gray-500 mt-1">Letters &amp; Applications</p>
+                        </Link>
+                    )}
 
                     <Link href="/dashboard/leaves?open=apply" className="group flex flex-col items-center justify-center rounded-xl bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 border border-gray-100 hover:border-primary/40">
                         <div className="mb-3 rounded-full bg-purple-50 p-3.5 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
@@ -1026,43 +1040,51 @@ export default function DashboardHome() {
                     </Link>
                 </div>
 
-                {/* Academic Affairs & Workload Subsystem Quick Banner */}
-                <div className="rounded-2xl bg-gradient-to-br from-emerald-900 via-[#006533] to-slate-950 p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="space-y-1.5 max-w-xl">
-                        <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase tracking-wider">
-                                Academic Affairs Subsystem
-                            </span>
-                            <span className="text-xs text-emerald-200/60 font-medium">NUC Workload Engine</span>
+                {/* Academic Affairs & Workload Subsystem Quick Banner - STRICT CADRE / GOVERNANCE ONLY */}
+                {hasAcademicAccess && (
+                    <div className="rounded-2xl bg-gradient-to-br from-emerald-900 via-[#006533] to-slate-950 p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="space-y-1.5 max-w-xl">
+                            <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase tracking-wider">
+                                    Academic Affairs Subsystem
+                                </span>
+                                <span className="text-xs text-emerald-200/60 font-medium">NUC Workload Engine</span>
+                            </div>
+                            <h3 className="text-lg font-black text-white">
+                                Teaching Workload Allocation &amp; Verification
+                            </h3>
+                            <p className="text-xs text-emerald-100/80 leading-relaxed font-medium">
+                                Explore institutional course allocations, ODL student cohort scaling, statutory cadre capacity meters, and dean ratification cockpits.
+                            </p>
                         </div>
-                        <h3 className="text-lg font-black text-white">
-                            Teaching Workload Allocation &amp; Verification
-                        </h3>
-                        <p className="text-xs text-emerald-100/80 leading-relaxed font-medium">
-                            Explore institutional course allocations, ODL student cohort scaling, statutory cadre capacity meters, and dean ratification cockpits.
-                        </p>
+                        <div className="flex flex-wrap items-center gap-3">
+                            {isAcademicCadre && (
+                                <Link
+                                    href="/dashboard/portal/my-teaching-workload"
+                                    className="px-4 py-2.5 bg-white text-[#006533] hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
+                                >
+                                    My Teaching Dossier
+                                </Link>
+                            )}
+                            {(isAcademicDeanOrHOD || isHQGlobalAdmin || isVC) && (
+                                <Link
+                                    href="/dashboard/academic/workload/allocation"
+                                    className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
+                                >
+                                    HOD Allocation Desk
+                                </Link>
+                            )}
+                            {(isAcademicDeanOrHOD || isHQGlobalAdmin || isVC) && (
+                                <Link
+                                    href="/dashboard/faculty/workload/review"
+                                    className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
+                                >
+                                    Dean Review Cockpit
+                                </Link>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Link
-                            href="/dashboard/portal/my-teaching-workload"
-                            className="px-4 py-2.5 bg-white text-[#006533] hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
-                        >
-                            My Teaching Dossier
-                        </Link>
-                        <Link
-                            href="/dashboard/academic/workload/allocation"
-                            className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
-                        >
-                            HOD Allocation Desk
-                        </Link>
-                        <Link
-                            href="/dashboard/faculty/workload/review"
-                            className="px-4 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white border border-emerald-600/50 rounded-xl text-xs font-bold transition shadow-sm"
-                        >
-                            Dean Review Cockpit
-                        </Link>
-                    </div>
-                </div>
+                )}
 
                 {/* Notifications & Status */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

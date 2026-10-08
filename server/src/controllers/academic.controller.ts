@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AcademicService } from '../services/academic.service';
 import { AcademicPromotionService } from '../services/academicPromotion.service';
 import { StorageService } from '../services/storage.service';
-import { Role, PublicationType, PublicationVerificationStatus } from '@prisma/client';
+import { Role, PublicationType, PublicationVerificationStatus, Cadre } from '@prisma/client';
 import prisma from '../prisma';
 import { PUBLICATION_DEFAULT_POINTS } from '../utils/academicPromotionRules';
 
@@ -86,6 +86,10 @@ export const createPublication = async (req: AuthRequest, res: Response) => {
 
         if (!user?.staffProfile) {
             return res.status(400).json({ message: 'Staff profile required to record publications' });
+        }
+
+        if (user.staffProfile.cadre !== Cadre.ACADEMIC) {
+            return res.status(403).json({ message: 'Only staff assigned to the Academic Cadre can record academic research publications.' });
         }
 
         let evidenceDocumentUrl: string | null = null;
@@ -353,6 +357,13 @@ export const getAcademicDossier = async (req: AuthRequest, res: Response) => {
 
 export const checkSabbatical = async (req: AuthRequest, res: Response) => {
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            include: { staffProfile: true }
+        });
+        if (user?.staffProfile?.cadre !== Cadre.ACADEMIC) {
+            return res.status(403).json({ eligible: false, message: 'Sabbatical leave is strictly reserved for Academic Cadre staff.' });
+        }
         const result = await AcademicService.checkSabbaticalEligibility(req.user!.id);
         res.json(result);
     } catch (error) {

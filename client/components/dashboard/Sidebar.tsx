@@ -95,8 +95,12 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
     const isUnitHead = role === 'UNIT_HEAD' || role === 'STUDY_CENTER_MANAGER' || role === 'UNIT_ADMIN' || isVC || isAdmin;
     const isManager = role === 'STUDY_CENTER_MANAGER' || isAdmin;
 
-    // Academic check (Academic cadre staff, HODs, Deans, Directors, Registrar, VC, and Admins)
-    const isAcademic = user?.staffProfile?.cadre === 'ACADEMIC' || ['UNIT_HEAD', 'SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR', 'REGISTRY_ADMIN', 'HR_ADMIN'].includes(role || '');
+    // Academic check: Strictly Academic Cadre staff, Deans/HODs of academic units, or University Executives
+    const userCadre = (user?.staffProfile?.cadre || '').toUpperCase();
+    const isAcademicCadre = userCadre === 'ACADEMIC' || userCadre === 'CONUASS' || userCadre.includes('ACADEMIC');
+    const isAcademicDeanOrHOD = role === 'UNIT_HEAD' && (user?.staffProfile?.unit?.type === 'FACULTY' || user?.staffProfile?.unit?.type === 'DEPARTMENT');
+    const isAcademicExecutive = ['SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'HR_ADMIN', 'REGISTRY_ADMIN'].includes(role || '');
+    const showAcademicSilo = isAcademicCadre || isAcademicDeanOrHOD || isAcademicExecutive;
 
     // Clinic & Security Access checks
     const isClinic = ['CLINIC_HEAD', 'CLINIC_NURSE', 'CLINIC_DOCTOR', 'CLINIC_LAB_SCIENTIST', 'CLINIC_PHARMACIST'].includes(role || '') || isAdmin;
@@ -231,19 +235,35 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                     )}
                 </>
 
-                {/* Academic Structure & Workload Management */}
-                <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Academic &amp; Workload Engine
-                </div>
-                {(isRegistrar || isImputer || isVC || ['REGISTRY_ADMIN', 'HR_ADMIN', 'REGISTRAR', 'DEPUTY_REGISTRAR', 'VICE_CHANCELLOR', 'SUPER_USER', 'ADMIN'].includes(role || '')) && (
-                    <LinkItem href="/dashboard/academic/hierarchy" icon={Building2} label="Faculty Hierarchy & Governance" badge="Executive" />
+                {/* Academic Structure & Workload Management - STRICT ACADEMIC CADRE & GOVERNANCE ONLY */}
+                {showAcademicSilo && (
+                    <>
+                        <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Academic &amp; Workload Engine
+                        </div>
+                        {isAcademicExecutive && (
+                            <LinkItem href="/dashboard/academic/hierarchy" icon={Building2} label="Faculty Hierarchy & Governance" badge="Executive" />
+                        )}
+                        {(isAcademicCadre || isAcademicDeanOrHOD || isAcademicExecutive) && (
+                            <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="Engine" />
+                        )}
+                        {isAcademicCadre && (
+                            <LinkItem href="/dashboard/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" badge="Lecturer" />
+                        )}
+                        {(isAcademicDeanOrHOD || isAcademicExecutive) && (
+                            <LinkItem href="/dashboard/academic/workload/allocation" icon={BookOpen} label="Course Allocation Matrix" badge="HOD Desk" />
+                        )}
+                        {(isAcademicDeanOrHOD || isAcademicExecutive) && (
+                            <LinkItem href="/dashboard/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
+                        )}
+                        {(isAcademicCadre || isAcademicDeanOrHOD || isAcademicExecutive) && (
+                            <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
+                        )}
+                        {(isAcademicCadre || isAcademicDeanOrHOD || isAcademicExecutive) && (
+                            <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
+                        )}
+                    </>
                 )}
-                <LinkItem href="/dashboard/academic/workload" icon={Layers} label="Academic Workload Hub" badge="Engine" />
-                <LinkItem href="/dashboard/portal/my-teaching-workload" icon={Users} label="My Teaching Workload" badge="Lecturer" />
-                <LinkItem href="/dashboard/academic/workload/allocation" icon={BookOpen} label="Course Allocation Matrix" badge="HOD Desk" />
-                <LinkItem href="/dashboard/faculty/workload/review" icon={ClipboardCheck} label="Dean Workload Cockpit" badge="Ratification" />
-                <LinkItem href="/dashboard/research" icon={FileText} label="Research Forum" />
-                <LinkItem href="/dashboard/academic/publications" icon={BookOpen} label="My Publications" />
 
                 {/* General Staff Self-Service */}
                 <div className="pt-4 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">

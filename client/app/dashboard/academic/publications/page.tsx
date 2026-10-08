@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import api from '../../../../lib/api';
 import { useAuth } from '../../../../hooks/useAuth';
 import Button from '@/components/ui/Button';
@@ -220,6 +221,34 @@ export default function PublicationsPage() {
         publications
             .filter(p => p.verificationStatus === 'VERIFIED' && p.peerReviewed)
             .reduce((sum, p) => sum + (Number(p.pointsAwarded) || Number(p.pointsClaimed) || 0), 0);
+
+    const userCadre = (user?.staffProfile?.cadre || '').toUpperCase();
+    const isAcademicCadre = userCadre === 'ACADEMIC' || userCadre === 'CONUASS' || userCadre.includes('ACADEMIC');
+    const isExecutive = ['SUPER_USER', 'ADMIN', 'VICE_CHANCELLOR', 'REGISTRAR', 'HR_ADMIN', 'REGISTRY_ADMIN'].includes(user?.role || '');
+
+    if (user && !isAcademicCadre && !isExecutive) {
+        return (
+            <div className="p-4 md:p-8 max-w-4xl mx-auto">
+                <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm text-center space-y-4">
+                    <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-200">
+                        <Award size={32} />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900">Academic Cadre Required</h2>
+                    <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+                        Academic Publications and Appraisal Scoring are strictly reserved for staff appointed under the <strong>Academic Staff Cadre</strong>.
+                    </p>
+                    <div className="inline-block px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700">
+                        Current Registered Cadre: <span className="text-slate-900 font-bold">{user.staffProfile?.cadre || 'Non-Academic'}</span>
+                    </div>
+                    <div className="pt-2">
+                        <Link href="/dashboard" className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">
+                            Return to Dashboard
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const requiredPoints = evaluation?.publicationBreakdown?.requiredPoints ?? 24.0;
     const progressPercent = Math.min(100, Math.round((totalVerifiedPoints / (requiredPoints || 1)) * 100));

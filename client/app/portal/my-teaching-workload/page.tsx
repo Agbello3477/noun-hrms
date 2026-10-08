@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -249,6 +250,33 @@ export default function LecturerTeachingWorkloadPage() {
   const handlePrint = () => {
     window.print();
   };
+
+  const userCadre = (user?.staffProfile?.cadre || '').toUpperCase();
+  const isAcademicCadre = userCadre === 'ACADEMIC' || userCadre === 'CONUASS' || userCadre.includes('ACADEMIC');
+
+  if (user && !isAcademicCadre) {
+    return (
+      <div className="p-4 md:p-8 max-w-4xl mx-auto">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm text-center space-y-4">
+          <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+            <AlertTriangle size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">Academic Cadre Required</h2>
+          <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+            The Teaching Workload Subsystem and NUC Course Dossier are strictly reserved for staff members appointed under the <strong>Academic Cadre</strong> (Lecturers, Professors, Readers).
+          </p>
+          <div className="inline-block px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700">
+            Current Registered Cadre: <span className="text-slate-900 font-bold">{user.staffProfile?.cadre || 'Non-Academic'}</span>
+          </div>
+          <div className="pt-2">
+            <Link href="/dashboard" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#006533] text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-800 transition">
+              Return to Dashboard
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const totalAssignedCU = (dossier?.totalAssignedCreditUnits || 0) + (dossier?.totalCourseMaterialCreditUnits || 0);
   const maxPermissibleCU = dossier?.effectivePermissibleMaxCU || 10;

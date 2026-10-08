@@ -121,7 +121,7 @@ export const resolveAcademicUserScope = async (userId?: string, userRole?: Role)
     include: { unit: true },
   });
 
-  const isLecturer = staffProfile?.cadre === Cadre.ACADEMIC || userRole === Role.STAFF;
+  const isLecturer = staffProfile?.cadre === Cadre.ACADEMIC;
 
   // Fallback: match by staff rank / unit if not set in appointment columns
   if (!deanFaculty && staffProfile) {
@@ -615,6 +615,12 @@ export const allocateWorkload = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Academic staff profile not found' });
     }
 
+    if (staff.cadre !== Cadre.ACADEMIC) {
+      return res.status(400).json({
+        message: `Cannot allocate academic workload: Staff member (${staff.staffId || staff.user.name}) belongs to the '${staff.cadre || 'NON_ACADEMIC'}' cadre, not ACADEMIC cadre.`,
+      });
+    }
+
     const effectiveAssignedCU = assignedCreditUnits ? Number(assignedCreditUnits) : course.creditUnits;
     const effectiveStudents = parseInt(String(enrolledStudentsCount || 0), 10);
     const effectiveContactHrs = contactHoursWeekly
@@ -761,6 +767,12 @@ export const getStaffWorkloadDossier = async (req: AuthRequest, res: Response) =
 
     if (!staff) {
       return res.status(404).json({ message: 'Staff profile not found' });
+    }
+
+    if (staff.cadre !== Cadre.ACADEMIC) {
+      return res.status(403).json({
+        message: `Access Denied: Staff member (${staff.staffId || staff.user?.name}) belongs to the '${staff.cadre || 'NON_ACADEMIC'}' cadre. Teaching workload dossiers are strictly restricted to Academic Cadre staff.`,
+      });
     }
 
     const allocations = await prisma.courseWorkloadAllocation.findMany({
