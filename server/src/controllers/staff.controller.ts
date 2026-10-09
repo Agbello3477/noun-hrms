@@ -385,7 +385,7 @@ export const createStaff = async (req: Request, res: Response) => {
             unitId (for HQ), centerId (for Study Center)
         */
         const {
-            surname, otherNames, email, role,
+            surname, otherNames, email, role, rank,
             staffId, level, step, cadre, cadreType, currentGradeLevel,
             highestQualification,
             bankName, accountNumber, accountName,
@@ -459,7 +459,23 @@ export const createStaff = async (req: Request, res: Response) => {
 
         const fullName = `${surname} ${otherNames}`;
 
-        const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
+        let resolvedRole: Role = Role.STAFF;
+        let resolvedRank: string | undefined = rank;
+        if (role === 'DIRECTOR') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Director';
+        } else if (role === 'DEAN') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Dean';
+        } else if (role === 'UNIT_HEAD') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Head of Unit';
+        } else if (role === 'HEAD_OF_ADMIN') {
+            resolvedRole = Role.UNIT_ADMIN;
+            if (!resolvedRank) resolvedRank = 'Head of Admin';
+        } else if (role && Object.values(Role).includes(role as any)) {
+            resolvedRole = role as Role;
+        }
         let resolvedCadre: Cadre | undefined = undefined;
         if (cadre) {
             if (cadre === 'NON_ACADEMIC' || cadre === 'SENIOR') {
@@ -552,6 +568,7 @@ export const createStaff = async (req: Request, res: Response) => {
                         surname,
                         otherNames,
                         staffId,
+                        rank: resolvedRank,
                         level,
                         step,
                         cadre: resolvedCadre,
@@ -826,8 +843,26 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
         let roleChangeRequested = false;
         let roleChangeDirectlyAuthorized = false;
 
+        let targetRole: Role | undefined = undefined;
+        let targetRank: string | undefined = rank;
+        if (role === 'DIRECTOR') {
+            targetRole = Role.UNIT_HEAD;
+            if (!targetRank && (!user.staffProfile?.rank || user.staffProfile.rank === 'Staff')) targetRank = 'Director';
+        } else if (role === 'DEAN') {
+            targetRole = Role.UNIT_HEAD;
+            if (!targetRank && (!user.staffProfile?.rank || user.staffProfile.rank === 'Staff')) targetRank = 'Dean';
+        } else if (role === 'UNIT_HEAD') {
+            targetRole = Role.UNIT_HEAD;
+            if (!targetRank && (!user.staffProfile?.rank || user.staffProfile.rank === 'Staff')) targetRank = 'Head of Unit';
+        } else if (role === 'HEAD_OF_ADMIN') {
+            targetRole = Role.UNIT_ADMIN;
+            if (!targetRank && (!user.staffProfile?.rank || user.staffProfile.rank === 'Staff')) targetRank = 'Head of Admin';
+        } else if (role && Object.values(Role).includes(role as any)) {
+            targetRole = role as Role;
+        }
+
         // Handle administrator-only fields: ROLE CHANGE WITH REGISTRAR APPROVAL WORKFLOW
-        if (role && role !== user.role) {
+        if (targetRole && (targetRole !== user.role || (targetRank && targetRank !== user.staffProfile?.rank && ['DIRECTOR', 'DEAN', 'UNIT_HEAD', 'HEAD_OF_ADMIN'].includes(role)))) {
             const isRegistrarAuthorizer = [
                 Role.REGISTRAR,
                 Role.SUPER_USER,
@@ -845,7 +880,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 await prisma.user.update({
                     where: { id: user.id },
                     data: {
-                        role: role as Role,
+                        role: targetRole,
                         pendingRole: null,
                         roleChangeStatus: 'APPROVED',
                         roleChangeRequestedById: null,
@@ -861,7 +896,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                             userId: updaterId!,
                             action: 'ROLE_CHANGE_AUTHORIZED',
                             resource: `User:${user.id}`,
-                            details: `Role for ${user.email} changed from ${user.role} to ${role} directly authorized by ${updaterRole} (${updaterId})`
+                            details: `Role for ${user.email} changed from ${user.role} to ${role || targetRole} directly authorized by ${updaterRole} (${updaterId})`
                         }
                     });
                 } catch (auditErr) {
@@ -869,11 +904,11 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 }
             } else if (isImputer) {
                 // HR / Registry Admin: changes role into pending approval state
-                const remarks = req.body.roleChangeRemarks || req.body.overrideReason || `Role change from ${user.role} to ${role} requested by ${updaterRole}`;
+                const remarks = req.body.roleChangeRemarks || req.body.overrideReason || `Role change from ${user.role} to ${role || targetRole} requested by ${updaterRole}`;
                 await prisma.user.update({
                     where: { id: user.id },
                     data: {
-                        pendingRole: role as Role,
+                        pendingRole: targetRole,
                         roleChangeStatus: 'PENDING_REGISTRAR_APPROVAL',
                         roleChangeRequestedById: updaterId,
                         roleChangeRequestedAt: new Date(),
@@ -888,7 +923,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                             userId: updaterId!,
                             action: 'ROLE_CHANGE_REQUESTED',
                             resource: `User:${user.id}`,
-                            details: `Role change for ${user.email} from ${user.role} to ${role} requested by ${updaterRole} (${updaterId}). Pending Registrar authorization.`
+                            details: `Role change for ${user.email} from ${user.role} to ${role || targetRole} requested by ${updaterRole} (${updaterId}). Pending Registrar authorization.`
                         }
                     });
 
@@ -905,7 +940,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                             data: {
                                 userId: authUser.id,
                                 title: 'Role Authorization Required',
-                                message: `${updaterRole} requested role change for ${user.name || user.email} to ${role}. Role will take effect immediately after registrar's authorization.`,
+                                message: `${updaterRole} requested role change for ${user.name || user.email} to ${role || targetRole}. Role will take effect immediately after registrar's authorization.`,
                                 type: 'ROLE_AUTHORIZATION_REQUIRED'
                             }
                         }).catch(() => {});
@@ -999,7 +1034,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 nin: nin ? String(nin).trim() : undefined,
                 gender,
                 passportUrl,
-                rank: rank || undefined,
+                rank: targetRank || rank || undefined,
                 dateOfBirth: dob,
                 dateOfFirstAppointment: apptDate,
                 lastPromotionDate: parsedLastPromo,
@@ -1032,7 +1067,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 accountName: accountName !== undefined ? (accountName ? String(accountName).trim() : null) : undefined,
                 nin: nin !== undefined ? (nin ? String(nin).trim() : null) : undefined,
                 gender,
-                rank: rank !== undefined ? rank : undefined,
+                rank: targetRank !== undefined ? targetRank : (rank !== undefined ? rank : undefined),
                 dateOfBirth: dob !== undefined ? dob : undefined,
                 dateOfFirstAppointment: apptDate !== undefined ? apptDate : undefined,
                 ...(parsedLastPromo !== undefined ? {

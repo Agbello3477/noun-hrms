@@ -84,7 +84,23 @@ export const createStaffFile = async (req: Request, res: Response) => {
         const staffId = await generateStaffId();
         const defaultPassword = password || '123456789';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-        const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
+        let resolvedRole: Role = Role.STAFF;
+        let resolvedRank: string | undefined = rank;
+        if (role === 'DIRECTOR') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Director';
+        } else if (role === 'DEAN') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Dean';
+        } else if (role === 'UNIT_HEAD') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Head of Unit';
+        } else if (role === 'HEAD_OF_ADMIN') {
+            resolvedRole = Role.UNIT_ADMIN;
+            if (!resolvedRank) resolvedRank = 'Head of Admin';
+        } else if (role && Object.values(Role).includes(role as any)) {
+            resolvedRole = role as Role;
+        }
         const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
 
         // @ts-ignore
@@ -104,7 +120,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
         let statutoryRetirementDate: Date | null = null;
         let statutoryRetirementReason: string | null = null;
         if (dob) {
-            const retResult = calculateStatutoryRetirementDate(dob, apptDate, rank, resolvedCadre);
+            const retResult = calculateStatutoryRetirementDate(dob, apptDate, resolvedRank, resolvedCadre);
             statutoryRetirementDate = retResult.retirementDate;
             statutoryRetirementReason = retResult.reason;
         }
@@ -144,7 +160,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
-                            staffId, rank,
+                            staffId, rank: resolvedRank,
                             highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
@@ -288,7 +304,23 @@ export const addExistingFile = async (req: Request, res: Response) => {
 
         const defaultPassword = password || '123456789';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-        const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
+        let resolvedRole: Role = Role.STAFF;
+        let resolvedRank: string | undefined = rank;
+        if (role === 'DIRECTOR') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Director';
+        } else if (role === 'DEAN') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Dean';
+        } else if (role === 'UNIT_HEAD') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Head of Unit';
+        } else if (role === 'HEAD_OF_ADMIN') {
+            resolvedRole = Role.UNIT_ADMIN;
+            if (!resolvedRank) resolvedRank = 'Head of Admin';
+        } else if (role && Object.values(Role).includes(role as any)) {
+            resolvedRole = role as Role;
+        }
         const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
         // @ts-ignore
         const currentUserId = req.user?.id;
@@ -306,7 +338,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
         let statutoryRetirementDate: Date | null = null;
         let statutoryRetirementReason: string | null = null;
         if (dob) {
-            const retResult = calculateStatutoryRetirementDate(dob, apptDate, rank, resolvedCadre);
+            const retResult = calculateStatutoryRetirementDate(dob, apptDate, resolvedRank, resolvedCadre);
             statutoryRetirementDate = retResult.retirementDate;
             statutoryRetirementReason = retResult.reason;
         }

@@ -817,11 +817,13 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                         <label className="block text-xs font-medium text-gray-500">System Role</label>
                         <select name="role" required className="w-full border p-1.5 rounded" value={formData.role} onChange={handleChange}>
                             <option value="STAFF">Regular Staff</option>
-                            <option value="REGISTRAR">The Registrar (Super admin)</option>
-                            <option value="VICE_CHANCELLOR">The VC</option>
-                            <option value="UNIT_HEAD">Dean / Unit Head / Director</option>
-                            <option value="STUDY_CENTER_MANAGER">Center Manager</option>
+                            <option value="DIRECTOR">Director (HQ Directorate Head)</option>
+                            <option value="DEAN">Dean (Faculty Head)</option>
+                            <option value="UNIT_HEAD">Head of Department / Unit Head (HOD)</option>
+                            <option value="HEAD_OF_ADMIN">Head of Administration (Unit Admin)</option>
+                            <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
                             <option value="HR_ADMIN">HR Admin</option>
+                            <option value="REGISTRY_ADMIN">Registry Admin (Operations)</option>
                             <option value="BURSARY">Bursary</option>
                             <option value="AUDIT">Audit</option>
                             <option value="CLINIC_HEAD">Head of Clinic</option>
@@ -829,8 +831,11 @@ export default function StaffFileForm({ mode, onSuccess, onCancel }: StaffFileFo
                             <option value="CLINIC_NURSE">Nurse</option>
                             <option value="CLINIC_LAB_SCIENTIST">Lab Scientist</option>
                             <option value="SECURITY_HEAD">Head of Security</option>
-                            <option value="SECURITY_OFFICER">Officer</option>
+                            <option value="SECURITY_OFFICER">Security Officer</option>
                             <option value="DRIVER">Driver</option>
+                            <option value="REGISTRAR">The Registrar (Super admin)</option>
+                            <option value="VICE_CHANCELLOR">The VC</option>
+                            <option value="SUPER_USER">Super User / System Admin</option>
                         </select>
                     </div>
                     <div>

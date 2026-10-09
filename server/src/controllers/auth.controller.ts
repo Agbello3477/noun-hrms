@@ -35,7 +35,7 @@ export const register = async (req: Request, res: Response) => {
         const {
             email, password, name, role,
             // Profile Fields
-            surname, otherNames, title,
+            surname, otherNames, title, rank,
             staffId, phone,
             stateOfOrigin, lga, address,
             level, step, cadre, gender,
@@ -61,7 +61,23 @@ export const register = async (req: Request, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const resolvedRole = (role && Object.values(Role).includes(role)) ? role : Role.STAFF;
+        let resolvedRole: Role = Role.STAFF;
+        let resolvedRank: string | undefined = rank;
+        if (role === 'DIRECTOR') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Director';
+        } else if (role === 'DEAN') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Dean';
+        } else if (role === 'UNIT_HEAD') {
+            resolvedRole = Role.UNIT_HEAD;
+            if (!resolvedRank) resolvedRank = 'Head of Unit';
+        } else if (role === 'HEAD_OF_ADMIN') {
+            resolvedRole = Role.UNIT_ADMIN;
+            if (!resolvedRank) resolvedRank = 'Head of Admin';
+        } else if (role && Object.values(Role).includes(role as any)) {
+            resolvedRole = role as Role;
+        }
         
         let resolvedCadre: Cadre | undefined = undefined;
         if (cadre) {
@@ -83,6 +99,7 @@ export const register = async (req: Request, res: Response) => {
                         surname,
                         otherNames,
                         title,
+                        rank: resolvedRank,
                         staffId,
                         phone,
                         gender,

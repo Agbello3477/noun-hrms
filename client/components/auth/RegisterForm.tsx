@@ -223,7 +223,10 @@ export default function RegisterForm({ onSwitchView }: RegisterFormProps) {
                                     <option value="">Select Role</option>
                                     <option value="STAFF">Regular Staff</option>
                                     <option value="STUDY_CENTER_MANAGER">Study Center Manager</option>
-                                    <option value="UNIT_HEAD">Dean / Director / Unit Head</option>
+                                    <option value="DIRECTOR">Director (HQ Directorate)</option>
+                                    <option value="DEAN">Dean (Faculty Head)</option>
+                                    <option value="UNIT_HEAD">Head of Department / Unit Head (HOD)</option>
+                                    <option value="HEAD_OF_ADMIN">Head of Administration (Unit Admin)</option>
                                     <option value="HR_ADMIN">HR Admin</option>
                                     <option value="BURSARY">Bursary</option>
                                     <option value="AUDIT">Audit</option>
