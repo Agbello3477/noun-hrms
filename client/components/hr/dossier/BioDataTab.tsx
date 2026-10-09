@@ -2,6 +2,7 @@
 
 import { User, Phone, Mail, MapPin, Building, Briefcase, GraduationCap, TrendingUp, Calendar, AlertCircle, CheckCircle2, CreditCard, Shield, Camera } from 'lucide-react';
 import { getImageUrl } from '../../../lib/api';
+import { formatCadreDisplay } from '../../../lib/schemeOfService';
 
 export default function BioDataTab({ staff }: { staff: any }) {
     if (!staff) return null;
@@ -44,15 +45,20 @@ export default function BioDataTab({ staff }: { staff: any }) {
                                     <Camera size={14} className="text-nounGreen" /> Passport Photo
                                 </span>
                                 <div className="col-span-2">
-                                    <div className="h-16 w-16 rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-slate-50">
+                                    <div className="h-16 w-16 rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-slate-50 flex items-center justify-center">
                                         <img
                                             src={getImageUrl(profile.passportUrl || staff.passportUrl || staff.staffProfile?.passportUrl)}
                                             alt={staff.name}
                                             className="h-full w-full object-cover"
                                             onError={(e) => {
-                                                e.currentTarget.parentElement?.classList.add('hidden');
+                                                e.currentTarget.style.display = 'none';
+                                                const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback') as HTMLElement;
+                                                if (fallback) fallback.style.display = 'flex';
                                             }}
                                         />
+                                        <div className="photo-fallback hidden h-full w-full bg-slate-100 items-center justify-center text-slate-400 font-bold text-lg">
+                                            {staff.name?.charAt(0) || 'U'}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -112,7 +118,7 @@ export default function BioDataTab({ staff }: { staff: any }) {
                         </div>
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Cadre</span>
-                            <span className="col-span-2 font-medium text-gray-900">{profile.cadre || staff.cadre || profile.cadreType || staff.cadreType || 'N/A'}</span>
+                            <span className="col-span-2 font-medium text-gray-900">{formatCadreDisplay(profile.cadre || staff.cadre, profile.cadreType || staff.cadreType, profile.rank || staff.rank)}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Level/Step</span>

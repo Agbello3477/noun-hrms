@@ -16,6 +16,9 @@ import {
   Printer,
   ShieldCheck,
   Plus,
+  RotateCcw,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import DigitalDossier from '../../../components/dashboard/DigitalDossier';
 import { DigitalTranscriptViewerModal } from '@/components/fileRequisition/DigitalTranscriptViewerModal';
@@ -58,6 +61,44 @@ export default function ReceivedFilesPage() {
   const [selectedRegistryReq, setSelectedRegistryReq] = useState<any | null>(null);
   const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+
+  // Return Modal State
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnReq, setReturnReq] = useState<any | null>(null);
+  const [returnNotes, setReturnNotes] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [returnError, setReturnError] = useState('');
+
+  const handleOpenReturn = (req: any) => {
+    setReturnReq(req);
+    setReturnNotes('');
+    setReturnError('');
+    setIsReturnModalOpen(true);
+  };
+
+  const handleConfirmReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnReq) return;
+    setIsSubmittingReturn(true);
+    setReturnError('');
+    try {
+      const res = await api.post(`/api/v1/registry/file-requests/${returnReq.id}/return`, {
+        returnNotes: returnNotes.trim() || undefined,
+      });
+      if (res.data?.success) {
+        setIsReturnModalOpen(false);
+        setReturnReq(null);
+        await fetchAllReceivedFiles();
+        alert('Personnel file successfully returned to Registry Vault.');
+      } else {
+        setReturnError(res.data?.message || res.data?.error || 'Failed to process file return.');
+      }
+    } catch (err: any) {
+      setReturnError(err.response?.data?.message || err.response?.data?.error || 'Failed to process file return.');
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
 
   const fetchAllReceivedFiles = async () => {
     try {
@@ -235,16 +276,25 @@ export default function ReceivedFilesPage() {
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedRegistryReq(req);
-                      setIsReceiptOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-slate-600" /> Custody Gatepass
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReturn(req)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 text-xs font-bold transition-colors shadow-xs"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> Return File to Registry
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRegistryReq(req);
+                        setIsReceiptOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-600" /> Custody Gatepass
+                    </button>
+                  </div>
 
                   {hasDigitalFormat && (
                     <button
@@ -410,6 +460,93 @@ export default function ReceivedFilesPage() {
           requisitionId={selectedRegistryReq.id}
           token={selectedRegistryReq.digitalAccessToken}
         />
+      )}
+
+      {/* Modern Return File Confirmation Modal */}
+      {isReturnModalOpen && returnReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <RotateCcw className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Return File to Registry</h3>
+                  <p className="text-[11px] text-slate-500">Close active custody docket</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReturnModalOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmReturn} className="p-5 space-y-4">
+              {returnError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{returnError}</span>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 space-y-1 text-xs text-slate-700">
+                <div className="font-bold text-slate-900">
+                  {returnReq.staffProfile?.user?.name || 'Staff Member'}
+                </div>
+                <div className="font-mono text-slate-500 text-[11px]">
+                  Docket: {returnReq.requisitionNumber} • Staff ID: {returnReq.staffProfile?.staffId || 'N/A'}
+                </div>
+                <div className="text-slate-600 pt-1 text-[11px]">
+                  Returning this file will immediately revoke digital transcript access tokens and notify the Registry Vault that the custody docket is closed.
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Return Notes &amp; Handover Remarks (Optional)
+                </label>
+                <textarea
+                  value={returnNotes}
+                  onChange={(e) => setReturnNotes(e.target.value)}
+                  placeholder="e.g. Completed accreditation review. Physical hardcopy handed back intact."
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#006533] focus:outline-none focus:ring-1 focus:ring-[#006533]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReturnModalOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Confirm Return</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

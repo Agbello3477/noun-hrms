@@ -30,7 +30,7 @@ import { useAuth } from '../../../../hooks/useAuth';
 import api, { getImageUrl } from '../../../../lib/api';
 import { STANDARD_QUALIFICATIONS } from '../../../../lib/qualifications';
 import { NIGERIAN_BANKS, sanitizeAccountNumber } from '../../../../lib/banks';
-import { CADRE_LIST, getPostsByCadre, getPostDefinition } from '../../../../lib/schemeOfService';
+import { CADRE_LIST, getPostsByCadre, getPostDefinition, resolveCadreToSchemeName, formatCadreDisplay } from '../../../../lib/schemeOfService';
 import DigitalDossier from '../../../../components/dashboard/DigitalDossier';
 import QueryHistoryTab from '../../../../components/hr/dossier/QueryHistoryTab';
 
@@ -350,7 +350,7 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                 setEditAccountName(staffData.staffProfile?.accountName || '');
                 setEditPhone(staffData.staffProfile?.phone || '');
                 setEditAddress(staffData.staffProfile?.address || '');
-                setEditCadre(staffData.staffProfile?.cadre || 'ADMINISTRATIVE');
+                setEditCadre(resolveCadreToSchemeName(staffData.staffProfile?.cadre || staffData.cadre, staffData.staffProfile?.rank || staffData.rank));
                 setEditLevel(staffData.staffProfile?.level || '');
                 setEditStep(staffData.staffProfile?.step || '');
                 setEditRank(staffData.staffProfile?.rank || '');
@@ -372,10 +372,13 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                 if (staffData.staffProfile?.nextPromotionDueDate) {
                     setEditNextPromotionDueDate(staffData.staffProfile.nextPromotionDueDate.substring(0, 10));
                 }
-                if (staffData.staffProfile?.cadreCriteria) {
-                    if (staffData.staffProfile.cadreCriteria === 'ACADEMIC') setEditCadreAppraisalRule('ACADEMIC_3');
-                    else if (staffData.staffProfile.cadreCriteria === 'JUNIOR') setEditCadreAppraisalRule('JUNIOR_3');
-                    else setEditCadreAppraisalRule('SENIOR_ADMIN_3');
+                const rawCadre = String(staffData.staffProfile?.cadre || staffData.cadre || staffData.staffProfile?.cadreType || '').toUpperCase();
+                if (rawCadre.includes('ACADEMIC')) {
+                    setEditCadreAppraisalRule('ACADEMIC_3');
+                } else if (rawCadre.includes('JUNIOR')) {
+                    setEditCadreAppraisalRule('JUNIOR_3');
+                } else {
+                    setEditCadreAppraisalRule('SENIOR_ADMIN_3');
                 }
             }
         } catch (err: any) {
@@ -677,7 +680,7 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Cadre</p>
-                                <p className="font-bold text-gray-800 text-sm">{staff.staffProfile?.cadre || staff.cadre || staff.staffProfile?.cadreType || staff.cadreType || 'N/A'}</p>
+                                <p className="font-bold text-gray-800 text-sm">{formatCadreDisplay(staff.staffProfile?.cadre || staff.cadre, staff.staffProfile?.cadreType || staff.cadreType, staff.staffProfile?.rank || staff.rank)}</p>
                             </div>
                         </div>
                     </div>

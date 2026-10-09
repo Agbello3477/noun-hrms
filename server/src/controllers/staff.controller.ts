@@ -406,8 +406,13 @@ export const createStaff = async (req: Request, res: Response) => {
         let passportUrl: string | undefined = undefined;
         if (req.file) {
             passportUrl = await StorageService.uploadFile(req.file);
-        } else if (req.body.passportUrl) {
-            passportUrl = req.body.passportUrl;
+        } else if (req.body.passportUrl || req.body.passport || req.body.passportPreview) {
+            const raw = String(req.body.passportUrl || req.body.passport || req.body.passportPreview).trim();
+            if (raw.startsWith('data:image/')) {
+                passportUrl = await StorageService.saveBase64Image(raw, 'passport');
+            } else {
+                passportUrl = raw;
+            }
         }
 
         if (!email) {
@@ -803,6 +808,8 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             : undefined;
         if (file) {
             effectivePassportUrl = await StorageService.uploadFile(file);
+        } else if (effectivePassportUrl && effectivePassportUrl.startsWith('data:image/')) {
+            effectivePassportUrl = await StorageService.saveBase64Image(effectivePassportUrl, 'passport');
         }
 
         let roleChangeRequested = false;

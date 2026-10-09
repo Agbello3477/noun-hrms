@@ -3965,3 +3965,89 @@ export function getNextGradeProgression(cadre: string, currentPost: string): {
     qualifications: def.qualifications,
   };
 }
+
+/**
+ * Normalizes any database Cadre enum or raw string into an exact Scheme of Service Cadre Name
+ */
+export function resolveCadreToSchemeName(cadreInput?: string | null, rankInput?: string | null): string {
+  if (!cadreInput && !rankInput) return 'Administrative Officer Cadre';
+  const trimmed = String(cadreInput || '').trim();
+
+  // If already exact match in CADRE_LIST
+  if (CADRE_LIST.includes(trimmed)) return trimmed;
+
+  // Search by rank first if rank is provided
+  if (rankInput) {
+    const rankTrimmed = String(rankInput).trim().toLowerCase();
+    for (const [cadreName, posts] of Object.entries(CADRE_POST_MAP)) {
+      if (posts.some((p) => p.post.toLowerCase() === rankTrimmed || p.post.toLowerCase().includes(rankTrimmed))) {
+        return cadreName;
+      }
+    }
+  }
+
+  const upper = trimmed.toUpperCase();
+  if (upper === 'ACADEMIC' || upper.includes('ACADEMIC') || upper.includes('LECTURER') || upper.includes('PROFESSOR') || upper.includes('READER')) {
+    return 'Academic Cadre';
+  }
+  if (upper === 'TECHNICAL' || upper.includes('ENGINEER') || upper.includes('TECHNOLOGIST') || upper.includes('WORKS') || upper.includes('SYSTEMS ANALYST') || upper.includes('PROGRAMMER')) {
+    return 'Technical Officer / Technologist Cadre';
+  }
+  if (upper === 'MEDICAL' || upper.includes('NURSE') || upper.includes('NURSING') || upper.includes('DOCTOR') || upper.includes('PHARMAC') || upper.includes('HEALTH') || upper.includes('CLINICAL')) {
+    return 'Nursing / Health Sciences Cadre';
+  }
+  if (upper === 'SECURITY' || upper.includes('SECURITY') || upper.includes('PATROL') || upper.includes('GUARD')) {
+    return 'Security / Patrol Cadre';
+  }
+  if (upper === 'JUNIOR' || upper === 'JUNIOR_STAFF' || upper.includes('DRIVER') || upper.includes('CRAFTSMAN') || upper.includes('ATTENDANT') || upper.includes('CLEANER') || upper.includes('PORTER') || upper.includes('CLERICAL')) {
+    return 'Clerical / Junior Cadre';
+  }
+  if (upper.includes('ACCOUNT') || upper.includes('BURSAR') || upper.includes('FINANCE')) {
+    return 'Accountant Cadre';
+  }
+  if (upper === 'ADMINISTRATIVE' || upper === 'SENIOR_ADMIN' || upper.includes('ADMIN')) {
+    return 'Administrative Officer Cadre';
+  }
+
+  // Fuzzy search in CADRE_LIST
+  const match = CADRE_LIST.find(
+    (c) => c.toLowerCase() === trimmed.toLowerCase() || c.toLowerCase().includes(trimmed.toLowerCase()) || trimmed.toLowerCase().includes(c.toLowerCase())
+  );
+  return match || 'Administrative Officer Cadre';
+}
+
+/**
+ * Universal Human-Readable Cadre Display Formatter
+ */
+export function formatCadreDisplay(cadre?: string | null, cadreType?: string | null, rank?: string | null): string {
+  const raw = String(cadre || cadreType || '').trim();
+  if (!raw && !rank) return 'Administrative Cadre';
+
+  if (raw.endsWith(' Cadre')) return raw;
+  const upper = raw.toUpperCase();
+
+  if (upper.includes('ACADEMIC') || upper.includes('LECTURER') || upper.includes('PROFESSOR') || upper.includes('READER')) {
+    return 'Academic Cadre';
+  }
+  if (upper.includes('MEDICAL') || upper.includes('NURSE') || upper.includes('NURSING') || upper.includes('DOCTOR') || upper.includes('PHARMAC') || upper.includes('HEALTH') || upper.includes('CLINICAL')) {
+    return 'Medical & Health Cadre';
+  }
+  if (upper.includes('SECURITY') || upper.includes('PATROL') || upper.includes('GUARD')) {
+    return 'Security Cadre';
+  }
+  if (upper.includes('TECHNICAL') || upper.includes('ENGINEER') || upper.includes('TECHNOLOGIST') || upper.includes('WORKS') || upper.includes('PROGRAMMER')) {
+    return 'Technical Cadre';
+  }
+  if (upper.includes('JUNIOR') || upper.includes('CLERICAL') || upper.includes('DRIVER') || upper.includes('CRAFTSMAN') || upper.includes('ATTENDANT')) {
+    return 'Junior Staff Cadre';
+  }
+  if (upper.includes('ACCOUNT') || upper.includes('BURSAR') || upper.includes('FINANCE')) {
+    return 'Accountant Cadre';
+  }
+  if (upper.includes('ADMINISTRATIVE') || upper.includes('SENIOR_ADMIN') || upper.includes('ADMIN')) {
+    return 'Administrative Cadre';
+  }
+
+  return raw ? `${raw} Cadre` : 'Administrative Cadre';
+}
+

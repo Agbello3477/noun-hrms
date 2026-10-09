@@ -142,6 +142,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
         let effectivePassportUrl = (passportUrl || req.body.passport || req.body.passportPreview) ? String(passportUrl || req.body.passport || req.body.passportPreview).trim() : undefined;
         if (req.file) {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
+        } else if (effectivePassportUrl && effectivePassportUrl.startsWith('data:image/')) {
+            effectivePassportUrl = await StorageService.saveBase64Image(effectivePassportUrl, 'passport');
         }
 
         const resolvedEmploymentCategory = Object.values(EmploymentCategory).includes(employmentCategory as any)
@@ -362,6 +364,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
         let effectivePassportUrl = (passportUrl || req.body.passport || req.body.passportPreview) ? String(passportUrl || req.body.passport || req.body.passportPreview).trim() : undefined;
         if (req.file) {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
+        } else if (effectivePassportUrl && effectivePassportUrl.startsWith('data:image/')) {
+            effectivePassportUrl = await StorageService.saveBase64Image(effectivePassportUrl, 'passport');
         }
 
         const resolvedEmploymentCategory = Object.values(EmploymentCategory).includes(employmentCategory as any)

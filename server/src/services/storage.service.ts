@@ -4,11 +4,13 @@ import path from 'path';
 // Mock Storage Service
 // In production, replace this with AWS S3 or Supabase Storage SDK
 
-const UPLOAD_DIR = path.join(__dirname, '../../uploads');
+const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    try {
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    } catch (e) {}
 }
 
 export const StorageService = {
@@ -37,6 +39,39 @@ export const StorageService = {
         }
 
         return `/uploads/${filename}`;
+    },
+
+    saveBase64Image: async (base64Data: string, prefix: string = 'passport'): Promise<string> => {
+        if (!base64Data || !base64Data.startsWith('data:image/')) {
+            return base64Data;
+        }
+
+        try {
+            const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                return base64Data;
+            }
+
+            const mimeType = matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+            let ext = '.png';
+            if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') ext = '.jpg';
+            else if (mimeType === 'image/webp') ext = '.webp';
+            else if (mimeType === 'image/gif') ext = '.gif';
+
+            const filename = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
+            const targetPath = path.join(UPLOAD_DIR, filename);
+
+            if (!fs.existsSync(UPLOAD_DIR)) {
+                fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+            }
+
+            await fs.promises.writeFile(targetPath, buffer);
+            return `/uploads/${filename}`;
+        } catch (error) {
+            console.error('Error saving base64 image:', error);
+            return base64Data;
+        }
     },
 
     deleteFile: async (fileUrl: string): Promise<void> => {
