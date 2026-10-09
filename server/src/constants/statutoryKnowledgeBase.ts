@@ -4,8 +4,9 @@
  * 1. NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)
  * 2. NOUN Rules and Regulations Governing Conditions of Service of Junior Staff (June 2024)
  * 3. NOUN Updated Scheme of Service (Senior Non-Teaching & Academic, May 2024)
- * 4. NOUN Academic Programme Taxonomy (146 programmes across 14 faculties)
- * 5. NOUN-HRMS End-User & Administrative Manual (Maker-Checker, WAF, Telemetry, Docket routing)
+ * 4. National Open University Act (Cap N63 LFN 2004 / Amendment Act No. 19, 2018)
+ * 5. NOUN Academic Programme Taxonomy (146 programmes across 14 faculties)
+ * 6. NOUN-HRMS End-User & Administrative Manual (Maker-Checker, WAF, Telemetry, Docket routing)
  */
 
 export interface StatutoryDocumentChunk {
@@ -21,7 +22,48 @@ export interface StatutoryDocumentChunk {
 
 export const STATUTORY_KNOWLEDGE_CHUNKS: StatutoryDocumentChunk[] = [
   // =========================================================================
-  // 1.0 SENIOR STAFF CONDITIONS OF SERVICE (JUNE 2024) - LEAVE
+  // 1.0 APPOINTMENTS, PROBATION & CONFIRMATION (3-YEAR HARD DROP RULE)
+  // =========================================================================
+  {
+    id: 'snr-prob-hard-drop',
+    cadre: 'GENERAL',
+    section: 'GENERAL',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
+    pageNumber: 12,
+    citationRef: 'Section 2.1 & 2.2 - Appointments, Probation and Confirmation',
+    title: 'Appointments, 2-Year Probation, 3-Year Hard Drop Rule, and Confirmation Prerequisites',
+    content: `Per Section 2.1 and Section 2.2 of the Conditions of Service for Senior Staff (June 2024) and Junior Staff (June 2024):
+1. Probation Period: All first appointments to established pensionable posts are subject to a two (2) year probation period.
+2. Extension of Probation: The probation period may be extended for good cause by not more than one (1) year for Senior Staff or six (6) months for Junior Staff.
+3. The 3-Year Hard Drop Rule: If an officer's appointment is not confirmed after three (3) years of service, the appointment must be terminated immediately.
+4. Prerequisite Restrictions: An unconfirmed staff member is strictly ineligible for promotion consideration, study leave, or institutional training sponsorship (other than in-house workshops).`
+  },
+  {
+    id: 'snr-spousal-colocation',
+    cadre: 'GENERAL',
+    section: 'GENERAL',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
+    pageNumber: 15,
+    citationRef: 'Section 3.8 - Spousal Co-Location Restriction',
+    title: 'Spousal Co-Location Restriction in Same Unit, Directorate, or Study Centre',
+    content: `Per Section 3.8 of the Senior Staff Conditions of Service (June 2024):
+1. Spousal Co-Location Restriction: Husband and wife shall not be deployed or posted to work in the same unit, directorate, division, or study centre.
+2. Vice-Chancellor Exemption: No exception to this restriction is permitted without the explicit written approval of the Vice-Chancellor.`
+  },
+  {
+    id: 'snr-general-sec-1-4',
+    cadre: 'GENERAL',
+    section: 'GENERAL',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
+    pageNumber: 5,
+    citationRef: 'Section 1.4 - Unlisted Scenarios and Discretionary Matters',
+    title: 'Referral of Unlisted Scenarios to Registrar via HOD (Section 1.4 Zero Hallucination Rule)',
+    content: `Per Section 1.4 of the Conditions of Service for Senior Staff (June 2024):
+Any institutional case, unique contingency, discretionary matter, or administrative scenario not explicitly covered in these Conditions of Service shall be referred to the Registrar through the Head of Department (HOD) for official determination and transmission to the Vice-Chancellor or Governing Council.`
+  },
+
+  // =========================================================================
+  // 2.0 LEAVE ENTITLEMENTS & LAPSING RULES
   // =========================================================================
   {
     id: 'snr-leave-5-1-1',
@@ -30,44 +72,72 @@ export const STATUTORY_KNOWLEDGE_CHUNKS: StatutoryDocumentChunk[] = [
     sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
     pageNumber: 24,
     citationRef: 'Section 5.1.1',
-    title: 'Annual Leave Entitlements for Senior Staff and Principal Officers',
+    title: 'Annual Leave Entitlements, Working Days Calculation, and Principal Officers',
     content: `Per Section 5.1.1 of the Senior Staff Conditions of Service (June 2024):
-Annual Leave is granted to staff per calendar year based on grade levels:
-1. Principal Officers (Vice-Chancellor, Deputy Vice-Chancellors, Registrar, Bursar, University Librarian): Exactly 42 working days.
-2. Academic Staff (CONUASS 01 to 07): Exactly 30 working days per annum.
-3. Senior Administrative and Technical Staff (CONTISS 06 to 15): Exactly 30 working days per annum.
-4. Annual leave must be planned with the Head of Department or Unit Head and approved by the Registrar through the Directorate of Human Resources.
-5. All leave applications must be processed through the NOUN-HRMS digital leave portal with HOD vetting and Registry authorization.`
+Annual Leave is granted to staff per calendar year calculated strictly on working days (excluding weekends and statutory public holidays):
+1. CONTISS 01 to 02: 14 working days per annum.
+2. CONTISS 03 to 05: 21 working days per annum.
+3. CONTISS 06 to 15 & CONUASS 01 to 07: 30 working days per annum.
+4. Principal Officers (Vice-Chancellor, Deputy Vice-Chancellors, Registrar, Bursar, University Librarian): 42 working days per annum.
+5. Planning & Approval: Annual leave must be planned with the Head of Department or Unit Head and approved by the Registrar through the NOUN-HRMS digital leave workflow.`
   },
   {
-    id: 'snr-leave-5-1-4',
-    cadre: 'SENIOR_ADMIN',
+    id: 'snr-leave-casual-deferment',
+    cadre: 'GENERAL',
     section: 'LEAVE',
     sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
     pageNumber: 26,
-    citationRef: 'Section 5.1.4',
+    citationRef: 'Section 5.1.4 & 5.1.5',
     title: 'Casual Leave, Leave Carryover, and Deferred Leave Provisions',
     content: `Per Section 5.1.4 and Section 5.1.5 of the Senior Staff Conditions of Service (June 2024):
-1. Casual Leave: A maximum of two (2) working days at a time may be granted by the Head of Department/Unit, not exceeding seven (7) working days in any calendar year with Registrar/VC approval. Casual leave shall NOT be granted if the staff member has unexhausted annual leave.
-2. Leave Carryover & Expiry: Unused annual leave for any given year lapses on December 31st unless formal approval for deferment is granted by the Registrar upon recommendation of the HOD.
-3. Deferred Leave upon Exit: A maximum of two (2) deferred annual leaves may be accumulated towards terminal leave or encashment upon official retirement or resignation.`
+1. Casual Leave: Maximum two (2) working days at a time may be granted by the Head of Department/Unit, not exceeding seven (7) working days in any calendar year with Registrar/VC approval for Senior Staff (max 3 working days by HOD / 5 days by Registrar for Junior Staff). Casual leave shall NOT be granted if the staff member has unexhausted annual leave.
+2. Leave Lapsing & Deferment: Annual leave not utilized by December 31st lapses automatically unless formal approval for deferment is granted by the Registrar. Non-principal officers can defer a maximum of two (2) annual leaves towards retirement or resignation. Principal Officers may defer unspent leave until expiration of tenure.`
   },
   {
-    id: 'snr-leave-5-1-7',
+    id: 'snr-leave-maternity-paternity',
     cadre: 'GENERAL',
     section: 'LEAVE',
     sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
     pageNumber: 28,
     citationRef: 'Section 5.1.7 & 5.1.8',
-    title: 'Maternity, Nursing Break, and Paternity Leave Provisions',
+    title: 'Maternity Leave, Nursing Breaks, and Paternity Leave Provisions',
     content: `Per Section 5.1.7 and Section 5.1.8 of the Senior Staff Conditions of Service (June 2024):
-1. Maternity Leave: A female staff member is entitled to sixteen (16) weeks maternity leave with full pay. The leave must commence not later than four (4) weeks prior to the expected date of delivery (EDD) upon submission of a certified medical certificate from a recognized university clinic or government hospital.
-2. Nursing Mothers Concession: Upon resumption from maternity leave, nursing mothers are entitled to two (2) hours daily off-duty time for nursing until the infant attains the age of six (6) months.
-3. Paternity Leave: Married male staff are entitled to a maximum of fourteen (14) working days paternity leave with full pay upon delivery of a spouse's child, grantable once every two (2) calendar years upon submission of the birth notification.`
+1. Maternity Leave: A female staff member is entitled to sixteen (16) weeks maternity leave with full pay. The leave must commence not later than four (4) weeks prior to the expected date of delivery (EDD) upon submission of a certified medical certificate.
+2. Nursing Mothers Concession: Upon resumption from maternity leave, nursing mothers receive two (2) hours daily off-duty time for nursing until the infant attains the age of six (6) months.
+3. Paternity Leave: Married male staff are entitled to a maximum of fourteen (14) working days paternity leave with full pay upon delivery of a spouse's child (restricted to one spouse, not more than once every two calendar years).`
+  },
+  {
+    id: 'snr-leave-research-sabbatical',
+    cadre: 'ACADEMIC',
+    section: 'LEAVE',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
+    pageNumber: 30,
+    citationRef: 'Section 5.1.9 & 5.1.10',
+    title: 'Research Leave and Sabbatical Leave Provisions',
+    content: `Per Section 5.1.9 and Section 5.1.10 of the Senior Staff Conditions of Service (June 2024):
+1. Research Leave: Academic staff are entitled to a maximum of twenty-six (26) working days research leave per annum.
+2. Sabbatical Leave: One (1) year sabbatical leave is available for academic staff (Senior Lecturer and above) or administrative staff (CONTISS 13 and above) after six (6) years of continuous service.`
   },
 
   // =========================================================================
-  // 1.1 SENIOR STAFF CONDITIONS OF SERVICE - DISCIPLINE
+  // 3.0 TRAINING BONDS & POST-SERVICE COMMITMENTS
+  // =========================================================================
+  {
+    id: 'snr-training-bonds',
+    cadre: 'GENERAL',
+    section: 'GENERAL',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
+    pageNumber: 38,
+    citationRef: 'Section 6.3 - Training Bonds and Post-Service Obligations',
+    title: 'Training Bonds, Study Leave Commitments, and Refund Obligations',
+    content: `Per Section 6.3 of the Senior Staff Conditions of Service (June 2024):
+1. Full-Time Study Leave: Requires a post-training service bond of twice the duration of the leave (up to a maximum of 5 years).
+2. Part-Time Study Leave: Requires a bond of one (1) year per year of study (maximum 3 to 5 years).
+3. Prohibition & Refund: Staff under bond are strictly prohibited from resigning, withdrawing service, or proceeding on sabbatical/other leave until fulfilling the bond or making full refund of all salaries, allowances, and tuition paid during the sponsorship period.`
+  },
+
+  // =========================================================================
+  // 4.0 DISCIPLINARY PROCEDURES & HALF-SALARY AUTOMATIONS
   // =========================================================================
   {
     id: 'snr-disc-8-2-1',
@@ -75,30 +145,17 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'DISCIPLINE',
     sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
     pageNumber: 42,
-    citationRef: 'Section 8.2.1',
-    title: 'Disciplinary Procedures, Queries, and Response Deadlines',
-    content: `Per Section 8.2.1 and Section 8.2.3 of the Senior Staff Conditions of Service (June 2024):
-1. Disciplinary Query: Any act of misconduct, dereliction of duty, absenteeism, or insubordination shall prompt a formal written query from the Head of Unit, Dean, or Registrar.
-2. Mandatory 24-Hour Response Window: A staff member served with a written query MUST submit a formal written representation/response within exactly twenty-four (24) hours of receipt.
-3. Three-Query Rule: Issuance of a third (3rd) unabsorbed written query within any twelve (12) month period constitutes a Final Disciplinary Warning and automatic referral to the Senior Staff Disciplinary Committee (SSDC).
-4. Registry Disciplinary Gate: Any unabsorbed or pending disciplinary query registered on a staff member's docket immediately disqualifies them from promotion screening and vetting.`
-  },
-  {
-    id: 'snr-disc-8-4-1',
-    cadre: 'GENERAL',
-    section: 'DISCIPLINE',
-    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
-    pageNumber: 46,
-    citationRef: 'Section 8.4.1',
-    title: 'Serious Misconduct, Interdiction, and Suspension Rules',
-    content: `Per Section 8.4.1 of the Senior Staff Conditions of Service (June 2024):
-1. Serious / Gross Misconduct: Includes financial misappropriation, examination malpractice, sexual harassment, insubordination to Council, and unauthorized disclosure of confidential university records.
-2. Interdiction: When a prima facie case of serious misconduct is established, the Registrar/Vice-Chancellor may place the staff on interdiction. During interdiction, the staff receives fifty percent (50%) of consolidated salary.
-3. Reinstatement or Dismissal: If exonerated by the Senior Staff Disciplinary Committee and ratified by Council, all withheld emoluments are refunded in full. If found culpable, disciplinary penalties range from demotion to immediate summary dismissal.`
+    citationRef: 'Section 8.2 & 8.4 - Disciplinary Procedures and Salary Adjustments',
+    title: 'Disciplinary Queries, 24-Hour Response, 3rd Query Rule, Suspension & Interdiction Half-Salary',
+    content: `Per Section 8.2 and Section 8.4 of the Senior Staff Conditions of Service (June 2024):
+1. Mandatory 24-Hour Response Window: A staff member served with a written query for misconduct MUST submit a formal written representation within minimum twenty-four (24) hours of receipt.
+2. Three-Query Rule: Issuance of a third (3rd) unabsorbed written query within any twelve (12) month period constitutes a Final Disciplinary Warning and triggers automatic referral to the Senior Staff Disciplinary Committee (SSDC). Any unabsorbed query blocks promotion vetting.
+3. Internal Suspension: During internal suspension pending investigation, staff is placed on 50% half salary. Withheld 50% is refunded in full if cleared; forfeited if recall is on compassionate grounds without full exoneration.
+4. Interdiction: When an officer is charged with criminal misconduct or serious offense, interdiction is applied with 50% half salary. Restored in full upon complete acquittal; dismissed with forfeiture upon conviction.`
   },
 
   // =========================================================================
-  // 1.2 STATUTORY RETIREMENT RULES
+  // 5.0 STATUTORY RETIREMENT AGES
   // =========================================================================
   {
     id: 'snr-exit-9-1-1',
@@ -106,48 +163,36 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'EXIT',
     sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Senior Staff (June 2024)',
     pageNumber: 55,
-    citationRef: 'Section 9.1.1 & 9.1.2',
-    title: 'Statutory Retirement Age and Voluntary Exit Guidelines',
+    citationRef: 'Section 9.1.1 & 9.1.2 - Statutory Retirement',
+    title: 'Statutory Retirement Ages: Professorial (70 Yrs / 75 Yrs Contract) vs Other Staff (65 Yrs / 35 Yrs Service)',
     content: `Per Section 9.1.1 and Section 9.1.2 of the Senior Staff Conditions of Service (June 2024):
-1. Professorial & Reader Cadre Retirement: Academic Staff in the professorial rank (Professor and Associate Professor / Reader) retire statutorily upon attaining exactly seventy-five (75) years of age.
-2. Non-Professorial Academic & Senior Administrative Staff: Non-professorial academic staff, senior administrative officers, and technical personnel retire upon attaining sixty-five (65) years of age or completing thirty-five (35) years of pensionable public service, whichever occurs earlier.
+1. Professorial Cadre (Professors & Readers / Associate Professors): Retire statutorily upon attaining exactly seventy (70) years of age. A contract extension up to seventy-five (75) years of age may be granted under special institutional need approved by Council.
+2. Non-Professorial Academic & Other Staff: Non-professorial academic staff, senior administrative officers, technical personnel, and junior staff retire upon attaining sixty-five (65) years of age or completing thirty-five (35) years of pensionable public service, whichever occurs earlier.
 3. Voluntary Retirement: A confirmed staff member may seek voluntary retirement upon attaining fifty (50) years of age, subject to giving three (3) months formal written notice or paying three months salary in lieu of notice.`
   },
 
   // =========================================================================
-  // 2.0 JUNIOR STAFF CONDITIONS OF SERVICE (JUNE 2024)
+  // 6.0 STATUTORY WAITING PERIODS FOR PROMOTION (ALL CADRES)
   // =========================================================================
   {
-    id: 'jnr-leave-4-1-1',
-    cadre: 'JUNIOR_STAFF',
-    section: 'LEAVE',
-    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Junior Staff (June 2024)',
-    pageNumber: 18,
-    citationRef: 'Section 4.1.1',
-    title: 'Junior Staff Leave Entitlements (CONTISS 01 - 05)',
-    content: `Per Section 4.1.1 of the Junior Staff Conditions of Service (June 2024):
-1. CONTISS 01 to 02: Fourteen (14) working days annual leave.
-2. CONTISS 03 to 05: Twenty-one (21) working days annual leave.
-3. Casual Leave: Junior staff may be granted up to three (3) days casual leave by the immediate supervisor/HOD, and up to five (5) days by the Registrar in cases of urgent compassionate grounds.
-4. Annual leave must be taken within the operational leave cycle and cannot be monetized during active employment.`
-  },
-  {
-    id: 'jnr-promo-6-1-1',
-    cadre: 'JUNIOR_STAFF',
+    id: 'sch-promotion-waiting-periods',
+    cadre: 'GENERAL',
     section: 'PROMOTIONS',
-    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Junior Staff (June 2024)',
-    pageNumber: 30,
-    citationRef: 'Section 6.1.1',
-    title: 'Junior Staff Promotion & Waiting Period Guidelines',
-    content: `Per Section 6.1.1 of the Junior Staff Conditions of Service (June 2024):
-1. Statutory Waiting Period: Junior Staff on CONTISS 01 to 05 must serve a minimum of three (3) statutory calendar years on their current grade before becoming eligible for promotion consideration.
-2. Annual Performance Evaluation Report (APER): A minimum benchmark score of 50% across the preceding three years is strictly required.
-3. Disciplinary Clearance: Candidate must be free of active queries and adverse disciplinary records.
-4. Confirmation of Appointment: Staff must have obtained official confirmation of appointment (minimum 2 years of probationary service).`
+    sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
+    pageNumber: 8,
+    citationRef: 'Scheme of Service - Statutory Promotion Waiting Periods',
+    title: 'Statutory Promotion Waiting Periods and General APER Prerequisites',
+    content: `Per the NOUN Updated Scheme of Service (May 2024):
+1. Academic Cadre (CONUASS 1 to 7): Minimum waiting period of three (3) years on existing rank, subject to fulfilling scholarship and publication requirements.
+2. Junior Staff (CONTISS 1 to 5): Minimum waiting period of three (3) years on existing grade.
+3. Senior Administrative & Technical Staff (CONTISS 6 to 9): Minimum waiting period of three (3) years.
+4. Senior Administrative & Professional Staff (CONTISS 9 to 13 and above): Minimum statutory waiting period of four (4) years.
+5. Establishment Posts (CONTISS 14 & 15 - Deputy Registrar, Deputy Bursar, Directors): Not subject to automatic progression; strictly dependent on an official vacancy declared by Management/Council.
+6. General Prerequisites: Candidate must score at least 50% in the Annual Performance Evaluation Report (APER) across preceding years and have zero unabsorbed disciplinary queries.`
   },
 
   // =========================================================================
-  // 3.0 NOUN UPDATED SCHEME OF SERVICE (MAY 2024) - ACADEMIC CADRE
+  // 7.0 ACADEMIC PUBLICATION & PROMOTION POINT MATRIX (2024 CRITERIA)
   // =========================================================================
   {
     id: 'sch-acad-lecturer2',
@@ -155,15 +200,15 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 12,
-    citationRef: 'Scheme of Service Section 1.1 - Lecturer II',
-    title: 'Scheme of Service: Lecturer II Promotion & Appointment Requirements',
+    citationRef: 'Scheme of Service Section 1.1 - Assistant Lecturer to Lecturer II',
+    title: 'Scheme of Service: Assistant Lecturer to Lecturer II Promotion Criteria',
     content: `As stipulated under Scheme of Service Section 1.1 for Academic Cadre (May 2024):
 - Rank: Lecturer II / Research Fellow II (CONUASS 03)
-- Waiting Period: Minimum 3 years on CONUASS 02 (Assistant Lecturer).
+- Waiting Period: Minimum three (3) years on CONUASS 02 (Assistant Lecturer).
 - Qualification: Master's Degree in relevant discipline OR Bachelor's Degree with verifiable proof of ongoing Ph.D. registration.
-- Publication Benchmark: Minimum 10 points (6.0-10.0 verified publication points).
+- Publication Benchmark: Minimum 10 points (journals, refereed conference proceedings, and course materials).
 - Output Constraints: Maximum 2 course materials allowed towards point evaluation.
-- Governance: Internal Faculty Board and Appointments & Promotions Committee (A&PC) evaluation.`
+- Governance: Recommended by Departmental A&PC and approved by Faculty Board / Central Academic A&PC.`
   },
   {
     id: 'sch-acad-lecturer1',
@@ -171,13 +216,13 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 14,
-    citationRef: 'Scheme of Service Section 1.2 - Lecturer I',
-    title: 'Scheme of Service: Lecturer I Promotion Requirements',
+    citationRef: 'Scheme of Service Section 1.2 - Lecturer II to Lecturer I',
+    title: 'Scheme of Service: Lecturer II to Lecturer I Promotion Criteria',
     content: `As stipulated under Scheme of Service Section 1.2 for Academic Cadre (May 2024):
 - Rank: Lecturer I / Research Fellow I (CONUASS 04)
-- Waiting Period: Minimum 3 years on CONUASS 03 (Lecturer II).
-- Qualification: Master's Degree in relevant discipline with evidence of advanced Ph.D. progress, or earned Ph.D.
-- Publication Benchmark: Minimum 16 cumulative points (with at least 12 new verified points).
+- Waiting Period: Minimum three (3) years on CONUASS 03 (Lecturer II).
+- Qualification: Master's Degree with evidence of advanced Ph.D. registration / progress, or earned Doctorate (Ph.D.).
+- Publication Benchmark: Minimum 16 points (journals, refereed conference proceedings, and course materials).
 - Output Constraints: Maximum 2 course materials allowed towards point evaluation.
 - Governance: Recommended by Departmental A&PC, reviewed by Faculty Board, and approved by Central Academic A&PC.`
   },
@@ -187,14 +232,14 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 16,
-    citationRef: 'Scheme of Service Section 1.3 - Senior Lecturer',
-    title: 'Scheme of Service: Senior Lecturer Promotion Requirements',
+    citationRef: 'Scheme of Service Section 1.3 - Lecturer I to Senior Lecturer',
+    title: 'Scheme of Service: Lecturer I to Senior Lecturer Promotion Criteria',
     content: `As stipulated under Scheme of Service Section 1.3 for Academic Cadre (May 2024):
 - Rank: Senior Lecturer / Senior Research Fellow (CONUASS 05)
-- Waiting Period: Minimum 3 years on CONUASS 04 (Lecturer I).
-- Qualification: Earned Doctorate (Ph.D.) is MANDATORY. No staff without a Ph.D. shall be promoted to Senior Lecturer.
-- Publication Benchmark: Minimum 34 cumulative publication points (with at least 24 verified points in peer-reviewed journals and conference proceedings).
-- Output Constraints: Course materials are EXCLUDED from minimum point scoring for Senior Lecturer.
+- Waiting Period: Minimum three (3) years on CONUASS 04 (Lecturer I).
+- Qualification: Earned Doctorate (Ph.D.) is MANDATORY. No candidate without a Ph.D. shall be promoted to Senior Lecturer.
+- Publication Benchmark: Minimum 34 cumulative publication points (journals, refereed conference proceedings, and books).
+- Output Constraints: Course materials capped at a maximum of 2.
 - Governance: Faculty Vetting, Central A&PC evaluation, and satisfactory teaching and administrative assessment.`
   },
   {
@@ -203,15 +248,16 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 18,
-    citationRef: 'Scheme of Service Section 1.4 - Reader (Associate Professor)',
-    title: 'Scheme of Service: Reader / Associate Professor Requirements',
+    citationRef: 'Scheme of Service Section 1.4 - Senior Lecturer to Reader (Associate Professor)',
+    title: 'Scheme of Service: Senior Lecturer to Reader / Associate Professor Criteria',
     content: `As stipulated under Scheme of Service Section 1.4 for Academic Cadre (May 2024):
 - Rank: Reader / Associate Professor (CONUASS 06)
-- Waiting Period: Minimum 3 years on CONUASS 05 (Senior Lecturer).
+- Waiting Period: Minimum three (3) years on CONUASS 05 (Senior Lecturer).
 - Qualification: Earned Doctorate (Ph.D.) is MANDATORY.
-- Publication Benchmark: Minimum 49 cumulative publication points (comprising high-impact journal articles, books, and proceedings).
-- Offshore Requirement: Minimum twenty percent (20%) of publications must be in reputable offshore / international indexed journals.
-- Governance: Positive external assessment reports from three independent external assessors of professorial standing, Central A&PC approval, and Council ratification.`
+- Publication Benchmark: Minimum 49 cumulative publication points (books, proceedings, journals; max 2 course materials).
+- Offshore Requirement: Minimum twenty percent (20%) of publications must be in international/foreign peer-reviewed journals.
+- Google Scholar Visibility (from 2025): Minimum 8 points / 80 citations (0.1 point per citation).
+- Governance: Positive external assessment reports from three (3) independent external assessors of professorial standing, Central A&PC approval, and Council ratification.`
   },
   {
     id: 'sch-acad-prof',
@@ -219,19 +265,20 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 20,
-    citationRef: 'Scheme of Service Section 1.5 - Professor',
-    title: 'Scheme of Service: Professor (Full Chair) Promotion Requirements',
+    citationRef: 'Scheme of Service Section 1.5 - Reader to Professor (Full Chair)',
+    title: 'Scheme of Service: Reader to Professor (Full Chair) Promotion Criteria',
     content: `As stipulated under Scheme of Service Section 1.5 for Academic Cadre (May 2024):
 - Rank: Professor / Research Professor (CONUASS 07)
-- Waiting Period: Minimum 3 years on CONUASS 06 (Reader / Associate Professor).
+- Waiting Period: Minimum three (3) years on CONUASS 06 (Reader / Associate Professor).
 - Qualification: Earned Doctorate (Ph.D.) is MANDATORY.
-- Publication Benchmark: Minimum 70 cumulative publication points (demonstrating sustained research leadership and scholarship).
-- Geographical & Authorship Distribution: Minimum thirty percent (30%) offshore publications AND minimum thirty percent (30%) sole or principal/lead authorship.
+- Publication Benchmark: Cumulative minimum 70 publication points (books, proceedings, journals).
+- Geographical & Authorship Distribution: Minimum thirty percent (30%) in international/foreign journals AND minimum thirty percent (30%) scored as sole or lead/corresponding author.
+- Google Scholar Visibility (from 2025): Minimum 10 points / 100 citations (0.1 point per citation).
 - Governance: Unanimous positive external assessments by renowned external assessors, Central A&PC recommendation, Senate notification, and Governing Council ratification.`
   },
 
   // =========================================================================
-  // 3.1 NOUN UPDATED SCHEME OF SERVICE - SENIOR ADMINISTRATIVE CADRE
+  // 8.0 SENIOR ADMINISTRATIVE & JUNIOR CADRE PROMOTION CRITERIA
   // =========================================================================
   {
     id: 'sch-admin-cadres',
@@ -244,12 +291,26 @@ Annual Leave is granted to staff per calendar year based on grade levels:
     content: `As stipulated under Scheme of Service Section 3.1 for Administrative Officer Cadre (May 2024):
 1. CONTISS 06 to 09 (e.g. Admin Officer II to Senior Admin Officer): Minimum 3 years statutory waiting period on current grade.
 2. CONTISS 09 and above (e.g. Principal Admin Officer CONTISS 11, Deputy Registrar CONTISS 14): Minimum 4 years statutory waiting period.
-3. Directorate & Established Positions (CONTISS 14 - Deputy Registrar, CONTISS 15 - Registrar): These are established quota posts requiring an official vacancy declaration by the Registrar/Vice-Chancellor before selection interviews can be conducted.
+3. Directorate & Established Positions (CONTISS 14 - Deputy Registrar, CONTISS 15 - Registrar): These are established quota posts requiring an official vacancy declaration by Management/Council before selection interviews can be conducted.
 4. Prerequisites: Confirmed permanent appointment, satisfactory APER rating (minimum 50%), professional membership (e.g., NIM, ANUPA, CIPM), and clean disciplinary record.`
+  },
+  {
+    id: 'jnr-promo-6-1-1',
+    cadre: 'JUNIOR_STAFF',
+    section: 'PROMOTIONS',
+    sourceDocument: 'NOUN Rules and Regulations Governing Conditions of Service of Junior Staff (June 2024)',
+    pageNumber: 30,
+    citationRef: 'Section 6.1.1 - Junior Staff Promotion',
+    title: 'Junior Staff Promotion, APER Score, and Waiting Period Guidelines',
+    content: `Per Section 6.1.1 of the Junior Staff Conditions of Service (June 2024):
+1. Statutory Waiting Period: Junior Staff on CONTISS 01 to 05 must serve a minimum of three (3) statutory calendar years on their current grade before becoming eligible for promotion consideration.
+2. Annual Performance Evaluation Report (APER): A minimum benchmark score of 50% across the preceding three years is strictly required.
+3. Disciplinary Clearance: Candidate must be free of active queries and adverse disciplinary records.
+4. Confirmation of Appointment: Staff must have obtained official confirmation of appointment (minimum 2 years of probationary service).`
   },
 
   // =========================================================================
-  // 4.0 ACADEMIC TAXONOMY & TEACHING WORKLOAD CAPS
+  // 9.0 ACADEMIC TAXONOMY & TEACHING WORKLOAD CAPS
   // =========================================================================
   {
     id: 'sch-workload-caps',
@@ -294,7 +355,7 @@ The National Open University of Nigeria operates 146 accredited programmes acros
   },
 
   // =========================================================================
-  // 5.0 NOUN-HRMS END-USER & ADMINISTRATIVE MANUAL
+  // 10.0 NOUN-HRMS END-USER & ADMINISTRATIVE MANUAL
   // =========================================================================
   {
     id: 'man-maker-checker',
@@ -322,7 +383,7 @@ The National Open University of Nigeria operates 146 accredited programmes acros
 Official applications (Study Leave, Sabbatical, Inter-University Transfer, Conversion) follow a 4-step institutional stepper:
 - Stage 1: SUBMITTED (Applicant lodges form with digital folio number, e.g. NOUN/APP/2026/00142).
 - Stage 2: DIRECTOR_VETTING (Department Director or Dean reviews, appends recommendation, and forwards).
-- Stage 3: REGISTRY_DOCKETING (Registry Clerk verfies eligibility, checks APER/Query history, and attaches docket).
+- Stage 3: REGISTRY_DOCKETING (Registry Clerk verifies eligibility, checks APER/Query history, and attaches docket).
 - Stage 4: REGISTRAR_APPROVAL (Registrar grants executive approval or refers to VC/Council).
 SLA Timers: Maximum 48 hours per staging gate before automatic escalation alerts are dispatched to Unit Admins.`
   },

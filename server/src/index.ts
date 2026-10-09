@@ -431,7 +431,7 @@ server.listen(PORT, () => {
     });
 
     // Automatically index and initialize NOUN Statutory Knowledge Base for Sentinel AI
-    KnowledgeIngestionService.initializeKnowledgeBase().then((res) => {
+    KnowledgeIngestionService.initializeKnowledgeBase().then((res: { totalIndexed: number }) => {
         console.log(`[Startup Sentinel AI] Statutory Knowledge Base initialized (${res.totalIndexed} chunks ready)`);
     }).catch((err: any) => {
         console.error('[Startup Sentinel AI] Failed to initialize knowledge base:', err);

@@ -28,8 +28,10 @@ export interface CopilotResponse {
 
 export class AiCopilotService {
   /**
-   * Main chat completion processor with deterministic tool dispatch, statutory RAG,
-   * continuous self-learning memory, and respectful persona intelligence.
+   * Main chat completion processor for NOUN-Sentinel AI:
+   * Combines Zero-Trust RBAC security, deterministic tool execution,
+   * official statutory RAG (2024 Conditions of Service & Schemes of Service),
+   * persistent memory salutations, and continuous self-learning.
    */
   public static async processChat(params: {
     user: {
@@ -50,7 +52,7 @@ export class AiCopilotService {
     const startTime = Date.now();
     const { user, prompt, clientIp = '127.0.0.1', sentinel = null } = params;
 
-    // 1. Security & Input Sanitization
+    // 1. Security & Input Sanitization (Zero-Trust Input Guard)
     const sanitized = SecurityGuardService.sanitizeAndValidateInput(prompt);
     if (!sanitized.isSafe && sanitized.securityFlags.includes('CRITICAL_SECURITY_PROBE')) {
       const durationMs = Date.now() - startTime;
@@ -66,7 +68,7 @@ export class AiCopilotService {
       });
 
       return {
-        message: '⚠️ Security Alert: This inquiry touches on confidential personnel records or protected salary dockets outside your authorization scope. This event has been logged to SentinelOps security audit.',
+        message: '⚠️ **Security Scope Exception**: This inquiry touches on confidential personnel records, cross-tenant dockets, or protected salary payroll data outside your institutional authorization scope. This access attempt has been logged to SentinelOps Telemetry.',
         durationMs,
         toolsInvoked: []
       };
@@ -94,7 +96,7 @@ export class AiCopilotService {
 
     try {
       // 4. Intent Routing & Deterministic Function Calling
-      const isPolicyQuery = (
+      const isExplicitPolicyQuery = (
         lower.includes('what are the rules') ||
         lower.includes('what is the policy') ||
         lower.includes('what is the statutory') ||
@@ -103,12 +105,21 @@ export class AiCopilotService {
         lower.includes('scheme of service') ||
         lower.includes('guidelines') ||
         lower.includes('statutory retirement') ||
-        lower.includes('nursing mothers')
+        lower.includes('nursing mothers') ||
+        lower.includes('hard drop') ||
+        lower.includes('probation') ||
+        lower.includes('training bond') ||
+        lower.includes('spousal') ||
+        lower.includes('interdiction') ||
+        lower.includes('suspension') ||
+        lower.includes('half salary') ||
+        lower.includes('publication points') ||
+        lower.includes('google scholar')
       );
 
       // Intent A: Track Applications (Personal Dossier)
       if (
-        !isPolicyQuery && (
+        !isExplicitPolicyQuery && (
           lower.includes('track') ||
           (lower.includes('application') && (lower.includes('my') || lower.includes('status') || lower.includes('where'))) ||
           lower.includes('docket movement') ||
@@ -138,7 +149,7 @@ export class AiCopilotService {
 
       // Intent B: Leave Balance & Entitlements (Personal)
       else if (
-        !isPolicyQuery && (
+        !isExplicitPolicyQuery && (
           lower.includes('leave balance') ||
           lower.includes('my leave') ||
           lower.includes('my annual leave') ||
@@ -174,7 +185,7 @@ export class AiCopilotService {
 
       // Intent C: Promotion Eligibility & Maturity (Personal or Candidate)
       else if (
-        !isPolicyQuery && (
+        !isExplicitPolicyQuery && (
           lower.includes('am i due') ||
           lower.includes('check my promotion') ||
           lower.includes('my next due year') ||
@@ -281,7 +292,7 @@ export class AiCopilotService {
         ];
       }
 
-      // Intent F: Grounded Statutory Policy RAG (Conditions of Service, Discipline, Retirement)
+      // Intent F: Grounded Statutory Policy RAG (Conditions of Service, Discipline, Retirement, Schemes of Service)
       else {
         currentTopic = 'STATUTORY_POLICY';
         toolsInvoked.push('queryKnowledgeBase');
@@ -300,20 +311,23 @@ export class AiCopilotService {
             detailsText = ragResults.map(r => `### ${r.title} (${r.citationRef})\n${r.content}`).join('\n\n---\n\n') + KnowledgeIngestionService.buildGroundedCitationText(ragResults);
           }
         } else {
-          directAnswer = `Per the National Open University of Nigeria (NOUN) Statutory Guidelines and Conditions of Service:
+          directAnswer = `Per the National Open University of Nigeria (NOUN) Statutory Regulations and Conditions of Service:
 
 Could you please specify your inquiry further? You can ask about:
-• **Leave Provisions** (Annual, Casual, Maternity, Paternity, Deferred Leave)
-• **Scheme of Service** (Academic & Administrative Progression, Waiting Periods, Publication Points)
-• **Disciplinary Procedures** (Mandatory 24-Hour Query Response, 3rd Query Rules, SSDC Gates)
-• **Statutory Retirement** (Professorial at 75 years; Non-Professorial / Admin at 65 years or 35 years service)
+• **Appointments & Probation** (2-Year Probation, 3-Year Hard Drop Rule, Confirmation Prerequisites)
+• **Leave Provisions** (Annual 14–42 working days, Dec 31 Lapsing, Casual max 2 days, Maternity 16 wks, Paternity 14 days)
+• **Scheme of Service & Promotions** (Academic Publication Points Matrix, Google Scholar citations, Waiting Periods)
+• **Disciplinary Procedures** (Mandatory 24-Hour Query Response, 3rd Query Rules, Suspension/Interdiction 50% Pay)
+• **Statutory Retirement** (Professorial at 70 years / 75 years contract; Other Staff at 65 years or 35 years service)
+• **Training Bonds** (Full-time 2x duration max 5 yrs; Part-time 1 yr/yr study)
+• **Spousal Co-Location Restriction** (VC approval required for same unit)
 • **System Operations** (File Requisitions, Maker-Checker Authorizations, Docket Stepper)`;
         }
 
         suggestedFollowUps = [
-          'What is the statutory retirement age for Professors vs Administrative staff?',
-          'What is the deadline for responding to a written query?',
-          'Explain the 13 statutory leave types in NOUN'
+          'What is the 3-Year Hard Drop Rule for unconfirmed staff?',
+          'What publication points are required for Senior Lecturer vs Professor?',
+          'What are the disciplinary half-salary rules for suspension and interdiction?'
         ];
       }
 
@@ -395,7 +409,7 @@ Could you please specify your inquiry further? You can ask about:
         'Show candidates due for 2026 promotion review',
         'Draft disciplinary query template',
         'Explain file release authorization steps',
-        'What is the 3-query rule for SSDC referral?'
+        'What is the 3-Year Hard Drop Rule for probation?'
       ];
     }
 

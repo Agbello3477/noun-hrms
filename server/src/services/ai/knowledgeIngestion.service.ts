@@ -117,19 +117,22 @@ export class KnowledgeIngestionService {
 
     let candidates: StatutoryDocumentChunk[] = [];
 
-    // Attempt DB retrieval first
+    // Attempt DB retrieval first with fast fallback to in-memory
     try {
-      const dbRecords = await prisma.hrmsKnowledgeChunk.findMany({
-        where: {
-          ...(cadreFilter && cadreFilter !== 'ALL' && cadreFilter !== 'GENERAL'
-            ? { cadre: { in: [cadreFilter, 'GENERAL'] } }
-            : {}),
-          ...(sectionFilter && sectionFilter !== 'ALL'
-            ? { section: sectionFilter }
-            : {})
-        },
-        take: 30
-      }).catch(() => null);
+      const dbRecords = await Promise.race([
+        prisma.hrmsKnowledgeChunk.findMany({
+          where: {
+            ...(cadreFilter && cadreFilter !== 'ALL' && cadreFilter !== 'GENERAL'
+              ? { cadre: { in: [cadreFilter, 'GENERAL'] } }
+              : {}),
+            ...(sectionFilter && sectionFilter !== 'ALL'
+              ? { section: sectionFilter }
+              : {})
+          },
+          take: 30
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 150))
+      ]).catch(() => null);
 
       if (dbRecords && dbRecords.length > 0) {
         candidates = dbRecords.map((r: any) => ({
@@ -165,24 +168,28 @@ export class KnowledgeIngestionService {
       const titleLower = item.title.toLowerCase();
       const citationLower = item.citationRef.toLowerCase();
 
+      const normContent = contentLower.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+      const normTitle = titleLower.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+      const normCitation = citationLower.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+
       let score = 0;
       for (const term of queryTerms) {
-        if (citationLower.includes(term)) score += 8.0;
-        if (titleLower.includes(term)) score += 5.0;
+        if (normCitation.includes(term)) score += 8.0;
+        if (normTitle.includes(term)) score += 5.0;
 
         // Exact term occurrences in body
         const regex = new RegExp(`\\b${term}\\b`, 'gi');
-        const matches = (contentLower.match(regex) || []).length;
-        score += matches * 2.0;
+        const matches = (normContent.match(regex) || []).length;
+        score += matches * 3.0;
 
-        if (contentLower.includes(term)) {
+        if (normContent.includes(term)) {
           score += 1.0;
         }
       }
 
       // Bonus for exact key phrase matches
-      if (contentLower.includes(cleanQuery)) {
-        score += 15.0;
+      if (normContent.includes(cleanQuery.replace(/[^a-z0-9\s]/g, ' '))) {
+        score += 20.0;
       }
 
       return {
