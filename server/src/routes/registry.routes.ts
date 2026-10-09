@@ -95,8 +95,8 @@ router.post('/files/existing', requireRole(fileRoles), upload.single('passport')
 router.get('/files/pending-clearance', requireRole(fileRoles), getPendingClearanceFiles);
 router.post('/files/:id/clear', requireRole(registrarAuthorizerRoles), clearStaffFile);
 router.post('/files/:id/reject', requireRole(registrarAuthorizerRoles), rejectStaffFile);
-router.get('/files/archive', requireRole([Role.HR_ADMIN, Role.REGISTRAR, Role.SUPER_USER]), getArchivedFiles);
-router.post('/files/archive/:id/restore', requireRole([Role.HR_ADMIN, Role.REGISTRAR, Role.SUPER_USER]), restoreStaffFile);
+router.get('/files/archive', requireRole([Role.HR_ADMIN, Role.REGISTRY_ADMIN, Role.REGISTRAR, Role.SUPER_USER, Role.ADMIN]), getArchivedFiles);
+router.post('/files/archive/:id/restore', requireRole([Role.HR_ADMIN, Role.REGISTRY_ADMIN, Role.REGISTRAR, Role.SUPER_USER, Role.ADMIN]), restoreStaffFile);
 router.get('/files/:id', requireRole(fileRoles), getStaffFile);
 router.get('/files', requireRole(fileRoles), getJobFiles);
 router.delete('/files/:id', requireRole(fileRoles), deleteStaffFile);

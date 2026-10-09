@@ -44,7 +44,7 @@ export default function RegistryArchivePage() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Role restriction check
-  const isAuthorized = user && ['HR_ADMIN', 'SUPER_USER'].includes(user.role);
+  const isAuthorized = user && ['HR_ADMIN', 'REGISTRY_ADMIN', 'ADMIN', 'SUPER_USER', 'REGISTRAR', 'VICE_CHANCELLOR'].includes(user.role);
 
   // Load archived files once authenticated
   const fetchArchivedFiles = async (code: string) => {

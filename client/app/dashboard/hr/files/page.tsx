@@ -215,13 +215,13 @@ export default function FileRegistryPage() {
                     <p className="text-gray-500 text-sm">Digitized staff files with dual-control Registrar clearance</p>
                 </div>
                 <div className="flex flex-wrap gap-2.5 items-center">
-                    {['HR_ADMIN', 'REGISTRAR', 'SUPER_USER'].includes(user?.role || '') && (
+                    {['HR_ADMIN', 'REGISTRY_ADMIN', 'ADMIN', 'REGISTRAR', 'SUPER_USER'].includes(user?.role || '') && (
                         <button
                             onClick={() => router.push('/dashboard/hr/archive')}
-                            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 shadow-sm text-sm font-medium"
+                            className="flex items-center gap-2 px-4 py-2 border border-emerald-300 text-emerald-800 bg-emerald-50 rounded-lg hover:bg-emerald-100 shadow-xs text-sm font-bold transition-colors"
                         >
-                            <Archive size={16} className="text-gray-500" />
-                            View Archive
+                            <Archive size={16} className="text-emerald-700" />
+                            Registry Archive (Deleted Files)
                         </button>
                     )}
                     <button

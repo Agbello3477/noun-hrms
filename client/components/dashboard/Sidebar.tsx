@@ -158,8 +158,8 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen?: boolean, setIs
                         <LinkItem href="/dashboard/registry/file-requests/ready-for-dispatch" icon={PackageCheck} label="File Dispatch & Custody" />
                         <LinkItem href="/dashboard/registry/inward-docket" icon={FileInput} label="Inward Docket & Folio Desk" />
                         <LinkItem href="/dashboard/registry/master-archive" icon={Archive} label="Master Application Archive" />
-                        {['HR_ADMIN', 'SUPER_USER'].includes(role || '') && (
-                            <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive" />
+                        {['HR_ADMIN', 'REGISTRY_ADMIN', 'ADMIN', 'SUPER_USER', 'REGISTRAR'].includes(role || '') && (
+                            <LinkItem href="/dashboard/hr/archive" icon={Archive} label="Registry Archive (Deleted Files)" badge="Vault" />
                         )}
                         <LinkItem href="/dashboard/hr/aper" icon={ClipboardCheck} label="APER & Leave" />
                         <LinkItem href="/dashboard/registry/transfers" icon={History} label="Transfer History" />
