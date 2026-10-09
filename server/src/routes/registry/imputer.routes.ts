@@ -636,7 +636,7 @@ router.post('/confirmations/draft', async (req: Request, res: Response) => {
         });
 
         // Invalidate authorizer queue cache so Registrar Cockpit immediately reflects update
-        await cacheInvalidationService.invalidateByTag('tag:authorizer_queue').catch(() => {});
+        await cacheInvalidationService.invalidateTags(['authorizer_queue']).catch(() => {});
 
         // Notify Registrar
         const registrars = await prisma.user.findMany({
