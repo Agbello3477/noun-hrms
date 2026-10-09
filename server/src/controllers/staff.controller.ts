@@ -13,6 +13,7 @@ import { PromotionService } from '../services/promotion.service';
 import { getCachedQuery, buildDbCacheKey } from '../utils/dbCache';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
 import { getDirectorPlacementScope } from '../services/leaveEntitlement.service';
+import { TrainingBondGuard } from '../services/TrainingBondGuard';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
@@ -2105,6 +2106,152 @@ export const getPendingRoleChanges = async (req: AuthRequest, res: Response) => 
         res.status(500).json({ message: 'Internal Server Error fetching pending role changes', error: error.message });
     }
 };
+
+/**
+ * Staff Exit: Resignation Application
+ * POST /api/v1/staff/exit/resign
+ */
+export const resignStaff = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const { effectiveDate, reason, noticeMonthsCount } = req.body;
+
+        const staff = await prisma.staffProfile.findUnique({
+            where: { userId },
+            include: { user: true }
+        });
+
+        if (!staff) {
+            return res.status(404).json({ message: 'Staff profile not found.' });
+        }
+
+        // Interlocking Training Bond Guard
+        const bondCheck = await TrainingBondGuard.checkActiveBond(staff.id, 'RESIGN');
+        if (bondCheck.hasActiveBond) {
+            return res.status(403).json({
+                error: bondCheck.error,
+                message: bondCheck.message
+            });
+        }
+
+        // Staged resignation
+        return res.status(200).json({
+            message: 'Resignation application submitted successfully for administrative clearance.',
+            staffId: staff.staffId,
+            effectiveDate: effectiveDate || new Date(),
+            status: 'PENDING_CLEARANCE'
+        });
+    } catch (error: any) {
+        console.error('resignStaff error:', error);
+        res.status(500).json({ message: error.message || 'Internal Server Error' });
+    }
+};
+
+/**
+ * Staff Exit: Withdrawal of Service Application
+ * POST /api/v1/staff/exit/withdraw
+ */
+export const withdrawStaff = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const { effectiveDate, reason } = req.body;
+
+        const staff = await prisma.staffProfile.findUnique({
+            where: { userId },
+            include: { user: true }
+        });
+
+        if (!staff) {
+            return res.status(404).json({ message: 'Staff profile not found.' });
+        }
+
+        // Interlocking Training Bond Guard
+        const bondCheck = await TrainingBondGuard.checkActiveBond(staff.id, 'WITHDRAW');
+        if (bondCheck.hasActiveBond) {
+            return res.status(403).json({
+                error: bondCheck.error,
+                message: bondCheck.message
+            });
+        }
+
+        return res.status(200).json({
+            message: 'Withdrawal of service application submitted successfully for administrative clearance.',
+            staffId: staff.staffId,
+            effectiveDate: effectiveDate || new Date(),
+            status: 'PENDING_CLEARANCE'
+        });
+    } catch (error: any) {
+        console.error('withdrawStaff error:', error);
+        res.status(500).json({ message: error.message || 'Internal Server Error' });
+    }
+};
+
+/**
+ * Staff Personal Career & Service Status (Strictly Read-Only for Staff Portal)
+ * GET /api/v1/staff/me/career-status
+ */
+export const getStaffCareerStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const staff = await prisma.staffProfile.findUnique({
+            where: { userId },
+            include: {
+                trainingBonds: {
+                    where: { isBondDischarged: false },
+                    orderBy: { bondEndDate: 'desc' }
+                },
+                deferredLeaves: {
+                    where: { isUtilized: false }
+                }
+            }
+        });
+
+        if (!staff) {
+            return res.status(404).json({ message: 'Staff profile not found.' });
+        }
+
+        const now = new Date();
+        const probationStart = staff.probationStartDate ? new Date(staff.probationStartDate) : (staff.dateOfFirstAppointment ? new Date(staff.dateOfFirstAppointment) : now);
+        const elapsedMonths = Math.min(24, Math.floor((now.getTime() - probationStart.getTime()) / (30.4375 * 24 * 60 * 60 * 1000)));
+
+        // Active Bond check
+        const activeBondRecord = staff.trainingBonds.find(b => new Date(b.bondEndDate) > now);
+        let activeBondInfo = null;
+        if (activeBondRecord) {
+            const remainingMs = new Date(activeBondRecord.bondEndDate).getTime() - now.getTime();
+            const remainingMonths = Math.max(1, Math.ceil(remainingMs / (30.4375 * 24 * 60 * 60 * 1000)));
+            const years = Math.floor(remainingMonths / 12);
+            const months = remainingMonths % 12;
+            const remainingStr = years > 0 ? `${years} yr ${months} mos remaining` : `${months} months remaining`;
+
+            activeBondInfo = {
+                id: activeBondRecord.id,
+                trainingType: activeBondRecord.trainingType,
+                bondEndDate: activeBondRecord.bondEndDate,
+                remainingMonths,
+                remainingFormatted: remainingStr
+            };
+        }
+
+        const deferredLeavesCount = staff.deferredLeaves.length;
+
+        res.json({
+            confirmationStatus: staff.confirmationStatus,
+            probationMonth: elapsedMonths,
+            totalProbationMonths: 24,
+            isConfirmed: staff.confirmationStatus === 'CONFIRMED',
+            activeBond: activeBondInfo,
+            deferredLeavesCount,
+            maxAllowedDeferredLeaves: 2,
+            isDisciplinarySuspended: staff.isDisciplinarySuspended,
+            isDisciplinaryInterdicted: staff.isDisciplinaryInterdicted
+        });
+    } catch (error: any) {
+        console.error('getStaffCareerStatus error:', error);
+        res.status(500).json({ message: error.message || 'Internal Server Error' });
+    }
+};
+
 
 
 

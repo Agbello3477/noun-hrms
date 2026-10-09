@@ -4,6 +4,7 @@ import { useState } from 'react';
 import EditProfileModal from '../../../components/modals/EditProfileModal';
 import { useAuth } from '../../../hooks/useAuth';
 import ActiveSessions from '../../../components/profile/ActiveSessions';
+import CareerStatusCard from '../../../components/profile/CareerStatusCard';
 import {
     User, Mail, Briefcase, MapPin, Phone, Building, Edit2,
     PenTool, Upload, CheckCircle, AlertCircle, Loader2, Trash2, TrendingUp, CreditCard
@@ -110,6 +111,9 @@ export default function ProfilePage() {
                     <Edit2 size={16} /> Edit Profile
                 </button>
             </div>
+
+            {/* Read-Only Statutory Career & Service Status */}
+            <CareerStatusCard />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Left Column: ID Card */}

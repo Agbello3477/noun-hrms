@@ -162,26 +162,51 @@ export class PayrollService {
 
                 const { basicSalary, rent, transport, meal, utility, entertainment, consolidated } = salaryDetails;
 
-                // Allowances
-                const totalAllowances = rent + transport + meal + utility + entertainment;
-                const grossPay = consolidated; 
+                // Check for Disciplinary Suspension or Interdiction (50% Statutory Reduction)
+                const isSuspended = Boolean(user.staffProfile.isDisciplinarySuspended);
+                const isInterdicted = Boolean(user.staffProfile.isDisciplinaryInterdicted);
+                const isDisciplinaryHalfPay = isSuspended || isInterdicted;
+                const multiplier = isDisciplinaryHalfPay ? 0.5 : 1.0;
+
+                // Allowances & Gross Pay (scaled by disciplinary multiplier)
+                const totalAllowances = Math.round((rent + transport + meal + utility + entertainment) * multiplier * 100) / 100;
+                const effectiveBasic = Math.round(basicSalary * multiplier * 100) / 100;
+                const grossPay = Math.round(consolidated * multiplier * 100) / 100; 
+
+                // If under disciplinary half pay, log withheld 50% into HeldEmolumentsLedger
+                if (isDisciplinaryHalfPay) {
+                    const sanctionType = isSuspended ? 'SUSPENSION' : 'INTERDICTION';
+                    const heldAmount = Math.round((consolidated * 0.5) * 100) / 100;
+                    await prisma.heldEmolumentsLedger.create({
+                        data: {
+                            staffProfileId: user.staffProfile.id,
+                            month,
+                            year,
+                            grossSalary: consolidated,
+                            heldAmount,
+                            disbursedAmount: grossPay,
+                            sanctionType,
+                            status: 'HELD'
+                        }
+                    }).catch(() => {});
+                }
 
                 // Statutory Deductions (Nigerian Payroll Rules)
                 // Pension: 8% of Gross (Employee), Employer pays 10%
                 const pension = Math.round((grossPay * 0.08) * 100) / 100;
 
                 // NHF: 2.5% of Basic Salary
-                const nhf = Math.round((basicSalary * 0.025) * 100) / 100;
+                const nhf = Math.round((effectiveBasic * 0.025) * 100) / 100;
 
                 // NHIS: 1.75% of Basic Salary
-                const nhis = Math.round((basicSalary * 0.0175) * 100) / 100;
+                const nhis = Math.round((effectiveBasic * 0.0175) * 100) / 100;
 
                 // Annual Relief Totals for PAYE Tax Calc
                 const annualPension = pension * 12;
                 const annualNHF = nhf * 12;
                 const annualNHIS = nhis * 12;
 
-                const tax = this.calculatePAYE(grossPay, basicSalary, annualPension, annualNHF, annualNHIS);
+                const tax = this.calculatePAYE(grossPay, effectiveBasic, annualPension, annualNHF, annualNHIS);
 
                 const totalDeductions = Math.round((pension + nhf + nhis + tax) * 100) / 100;
                 const netPay = Math.round((grossPay - totalDeductions) * 100) / 100;

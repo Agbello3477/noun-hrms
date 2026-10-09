@@ -61,6 +61,9 @@ import { scheduleSessionCleanupCron } from './jobs/sessionCleanupCron';
 import { scheduleLeaveResumptionCron } from './jobs/leaveResumptionCron';
 import { scheduleAperReminderCron } from './jobs/aperReminderCron';
 import { scheduleQueryDeadlineCron } from './jobs/queryDeadlineCron';
+import { LeaveCarryoverWorker } from './jobs/LeaveCarryoverWorker';
+import { ProbationConfirmationService } from './services/ProbationConfirmationService';
+import cron from 'node-cron';
 import { RlsService } from './services/rls.service';
 import { startDatabaseKeepalive } from './prisma';
 import { ensureRegistrarAccount } from './services/registrarSeed.service';
@@ -414,6 +417,16 @@ server.listen(PORT, () => {
     scheduleAperReminderCron();
     scheduleQueryDeadlineCron();
     scheduleSyntheticMonitoring();
+
+    // Statutory Compliance Crons
+    LeaveCarryoverWorker.scheduleCron();
+    cron.schedule('0 0 * * *', async () => {
+        try {
+            await ProbationConfirmationService.evaluateProbationStatus();
+        } catch (e) {
+            console.error('[Probation Cron Error]:', e);
+        }
+    });
 
     // Automatically ensure Row Level Security (RLS) is enabled on all tables
     RlsService.enableRlsOnAllTables().catch((err: any) => {

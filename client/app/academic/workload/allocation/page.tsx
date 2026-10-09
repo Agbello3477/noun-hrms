@@ -124,6 +124,8 @@ interface StaffMatrixItem {
   statusRemarks: string;
   overloadDeltaCU: number;
   underloadDeltaCU: number;
+  isDisciplinarySuspended?: boolean;
+  isDisciplinaryInterdicted?: boolean;
   allocations: AllocationItem[];
 }
 
@@ -907,13 +909,20 @@ export default function CourseAllocationMatrixPage() {
 
                       {/* Allocate Action */}
                       <div className="pt-2">
-                        <button
-                          onClick={() => handleOpenAllocateModal(staff)}
-                          className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#006533] rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Allocate Course Unit
-                        </button>
+                        {staff.isDisciplinarySuspended || staff.isDisciplinaryInterdicted ? (
+                          <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] font-bold flex items-center gap-1.5 justify-center">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Workload Allocation Suspended (Disciplinary)</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenAllocateModal(staff)}
+                            className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#006533] rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Allocate Course Unit
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

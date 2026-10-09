@@ -2,9 +2,13 @@ import { Router, Request, Response } from 'express';
 import { verifyToken } from '../../middleware/auth.middleware';
 import { requireImputerRole, Permission, requirePermission } from '../../middleware/rbac.middleware';
 import prisma from '../../prisma';
-import { Role, TransferStatus, StaffStatus } from '@prisma/client';
+import { Role, TransferStatus, StaffStatus, ResettlementBursaryStatus } from '@prisma/client';
 import { calculateNextPromotionMaturity } from '../../utils/promotionCalculator';
 import { cacheInvalidationService } from '../../services/cacheInvalidationService';
+import { PostingAllowanceEngine } from '../../services/PostingAllowanceEngine';
+import { SpousalDeploymentGuard } from '../../services/SpousalDeploymentGuard';
+import { ProbationConfirmationService } from '../../services/ProbationConfirmationService';
+import { TrainingBondGuard } from '../../services/TrainingBondGuard';
 import bcrypt from 'bcryptjs';
 
 const router = Router();
@@ -26,7 +30,9 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
             reason,
             effectiveDate,
             relocationAllowance = false,
-            relocationAllowanceAmount = 0
+            relocationAllowanceAmount = 0,
+            isManagementInitiated = true,
+            spousalConflictVcApprovalUrl = null
         } = req.body;
 
         // @ts-ignore
@@ -42,7 +48,7 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
                 ],
                 isDeleted: false
             },
-            include: { user: true, studyCenter: true, unit: true }
+            include: { user: true, studyCenter: true, unit: true, spouse: true }
         });
 
         if (!staff) {
@@ -72,7 +78,19 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
             return res.status(400).json({ message: 'Target Destination (Unit or Study Center) is required' });
         }
 
-        // 3. Create TransferLog with PENDING_REGISTRAR_APPROVAL status and imputer stamp
+        // 3. Spousal Co-Location Deployment Conflict Guard Check
+        const spousalCheck = await SpousalDeploymentGuard.checkConflict({
+            staffProfileId: staff.id,
+            targetUnitId: newUnitId,
+            targetCenterId: newCenterId,
+            vcApprovalUrl: spousalConflictVcApprovalUrl
+        });
+
+        // 4. Calculate 2% Resettlement Allowance if Management-Initiated
+        const isMgmt = isManagementInitiated === true || isManagementInitiated === 'true';
+        const allowanceCalc = await PostingAllowanceEngine.calculateAllowance(staff.id, isMgmt);
+
+        // 5. Create TransferLog with PENDING_REGISTRAR_APPROVAL status and imputer stamp
         const posting = await prisma.transferLog.create({
             data: {
                 staffId: staff.user.id,
@@ -82,11 +100,16 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
                 newUnitId,
                 newCenterId: newCenterId || newUnitId,
                 status: TransferStatus.PENDING_REGISTRAR_APPROVAL,
-                relocationAllowance: Boolean(relocationAllowance),
-                relocationAllowanceAmount: relocationAllowance ? Number(relocationAllowanceAmount) : null,
+                relocationAllowance: Boolean(relocationAllowance) || isMgmt,
+                relocationAllowanceAmount: allowanceCalc.resettlementAllowanceAmount > 0 ? allowanceCalc.resettlementAllowanceAmount : Number(relocationAllowanceAmount || 0),
+                isManagementInitiated: isMgmt,
+                resettlementAllowanceAmount: allowanceCalc.resettlementAllowanceAmount,
+                resettlementBursaryStatus: allowanceCalc.resettlementBursaryStatus,
+                spousalConflictDetected: spousalCheck.hasConflict,
+                spousalConflictVcApprovalUrl: spousalConflictVcApprovalUrl || null,
                 isEffective: false,
                 applied: false,
-                reason: reason || 'Official Administrative Posting Draft',
+                reason: reason || (isMgmt ? 'Official Management-Directed Posting Draft' : 'Staff-Requested Transfer Draft'),
                 effectiveDate: new Date(effectiveDate || Date.now())
             },
             include: {
@@ -114,7 +137,28 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
             }
         });
 
-        // 4. Notify Authorizers (Registrar & Deputy Registrar)
+        // Also record in staffPostings table for model synchronization
+        await prisma.staffPosting.create({
+            data: {
+                id: posting.id,
+                staffProfileId: staff.id,
+                oldUnitId,
+                oldCenterId,
+                newUnitId,
+                newCenterId,
+                status: TransferStatus.PENDING_REGISTRAR_APPROVAL,
+                isManagementInitiated: isMgmt,
+                resettlementAllowanceAmount: allowanceCalc.resettlementAllowanceAmount,
+                resettlementBursaryStatus: allowanceCalc.resettlementBursaryStatus,
+                spousalConflictDetected: spousalCheck.hasConflict,
+                spousalConflictVcApprovalUrl: spousalConflictVcApprovalUrl || null,
+                effectiveDate: new Date(effectiveDate || Date.now()),
+                reason: reason || (isMgmt ? 'Official Management-Directed Posting Draft' : 'Staff-Requested Transfer Draft'),
+                initiatedById: imputerId
+            }
+        }).catch(() => {});
+
+        // 6. Notify Authorizers (Registrar & Deputy Registrar)
         const authorizers = await prisma.user.findMany({
             where: {
                 role: { in: [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.SUPER_USER] },
@@ -124,13 +168,15 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
         });
 
         const staffFullName = `${staff.surname || ''} ${staff.otherNames || ''}`.trim() || staff.user.name || 'Staff';
+        const spousalWarningText = spousalCheck.hasConflict ? ' ⚠️ [Spousal Co-Location Warning: VC Waiver Required]' : '';
+
         for (const auth of authorizers) {
             await prisma.notification.create({
                 data: {
                     userId: auth.id,
-                    title: '📋 Draft Staff Posting Staged',
-                    message: `Draft posting order staged for ${staffFullName} (${staff.staffId || 'N/A'}) to ${destinationName}. Requires executive authorization.`,
-                    type: 'INFO',
+                    title: `📋 Draft Staff Posting Staged${spousalWarningText}`,
+                    message: `Draft posting order staged for ${staffFullName} (${staff.staffId || 'N/A'}) to ${destinationName}. Resettlement 2%: ₦${allowanceCalc.resettlementAllowanceAmount.toLocaleString('en-NG')}. Requires executive authorization.`,
+                    type: spousalCheck.hasConflict ? 'WARNING' : 'INFO',
                     link: '/registrar-cockpit'
                 }
             }).catch(() => {});
@@ -143,7 +189,9 @@ router.post('/postings/draft', requirePermission(Permission.CAN_IMPUTE_POSTING),
             message: 'Staff posting drafted successfully and staged for Registrar authorization.',
             posting: {
                 ...posting,
-                imputedById: posting.initiatedById
+                imputedById: posting.initiatedById,
+                spousalConflict: spousalCheck,
+                resettlementCalculation: allowanceCalc
             }
         });
     } catch (error: any) {
@@ -498,6 +546,149 @@ router.post('/queries/issue', requirePermission(Permission.CAN_ISSUE_DISCIPLINAR
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to issue query', error: error.message });
+    }
+});
+
+/**
+ * GET /api/v1/registry/confirmations/due
+ * Imputer views staff due for confirmation appraisal or 3-year review
+ */
+router.get('/confirmations/due', async (req: Request, res: Response) => {
+    try {
+        const staffList = await prisma.staffProfile.findMany({
+            where: {
+                isDeleted: false,
+                confirmationStatus: {
+                    in: ['ON_PROBATION', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED']
+                }
+            },
+            include: {
+                user: { select: { name: true, email: true } },
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } }
+            },
+            orderBy: { probationStartDate: 'asc' }
+        });
+
+        const now = new Date().getTime();
+        const formatted = staffList.map(s => {
+            const start = s.probationStartDate ? new Date(s.probationStartDate).getTime() : now;
+            const elapsedMonths = Math.floor((now - start) / (30.4375 * 24 * 60 * 60 * 1000));
+            return {
+                ...s,
+                monthsOnProbation: elapsedMonths,
+                isDueForAppraisal: elapsedMonths >= 24,
+                isHardDropThresholdExceeded: elapsedMonths >= 36
+            };
+        });
+
+        res.json(formatted);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to fetch probation list', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registry/confirmations/draft
+ * Imputer compiles and stages a confirmation dossier to Registrar
+ */
+router.post('/confirmations/draft', async (req: Request, res: Response) => {
+    try {
+        const { staffProfileId, recommendation, remarks, appraisalScore } = req.body;
+        // @ts-ignore
+        const imputerId = req.user?.id;
+
+        const staff = await prisma.staffProfile.findUnique({
+            where: { id: staffProfileId },
+            include: { user: true }
+        });
+
+        if (!staff) {
+            return res.status(404).json({ message: 'Staff profile not found' });
+        }
+
+        // Notify Registrar
+        const registrars = await prisma.user.findMany({
+            where: { role: { in: [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.SUPER_USER] }, isActive: true },
+            select: { id: true }
+        });
+
+        const staffName = `${staff.surname || ''} ${staff.otherNames || ''}`.trim() || staff.user.name || 'Staff';
+        for (const reg of registrars) {
+            await prisma.notification.create({
+                data: {
+                    userId: reg.id,
+                    title: '📋 Confirmation File Staged',
+                    message: `Confirmation appraisal dossier compiled and staged for ${staffName} (${staff.staffId || 'N/A'}). Recommendation: ${recommendation || 'CONFIRM'}.`,
+                    type: 'INFO',
+                    link: '/registrar-cockpit'
+                }
+            }).catch(() => {});
+        }
+
+        res.json({
+            message: 'Confirmation appraisal dossier compiled and staged for Registrar ratification.',
+            staffProfileId,
+            recommendation,
+            imputedById: imputerId,
+            stagedAt: new Date()
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to stage confirmation file', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registry/bonds/log
+ * Imputer logs verified training costs and computes bond expiry
+ */
+router.post('/bonds/log', async (req: Request, res: Response) => {
+    try {
+        const { staffProfileId, trainingType, studyDurationYears, totalFinancialIndemnity, bondStartDate } = req.body;
+
+        if (!staffProfileId || !trainingType || !studyDurationYears) {
+            return res.status(400).json({ message: 'staffProfileId, trainingType, and studyDurationYears are required' });
+        }
+
+        const bond = await TrainingBondGuard.createBondRecord({
+            staffProfileId,
+            trainingType,
+            studyDurationYears: Number(studyDurationYears),
+            totalFinancialIndemnity: Number(totalFinancialIndemnity || 0),
+            bondStartDate: bondStartDate ? new Date(bondStartDate) : new Date()
+        });
+
+        res.status(201).json({
+            message: 'Training service bond logged successfully.',
+            bond
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to log training bond', error: error.message });
+    }
+});
+
+/**
+ * GET /api/v1/registry/bonds
+ * Imputer views active training bond records
+ */
+router.get('/bonds', async (req: Request, res: Response) => {
+    try {
+        const bonds = await prisma.trainingBondRecord.findMany({
+            include: {
+                staffProfile: {
+                    include: {
+                        user: { select: { name: true, email: true } },
+                        unit: { select: { name: true } },
+                        studyCenter: { select: { name: true } }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json(bonds);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to fetch training bonds', error: error.message });
     }
 });
 

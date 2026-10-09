@@ -112,7 +112,21 @@ router.post('/:id/role/reject', requireRole(authorizerRoles), rejectRoleChange);
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { upload } from '../middleware/upload.middleware';
-import { updateStaff, uploadSignature, updateServiceRecord } from '../controllers/staff.controller';
+import {
+    updateStaff,
+    uploadSignature,
+    updateServiceRecord,
+    resignStaff,
+    withdrawStaff,
+    getStaffCareerStatus
+} from '../controllers/staff.controller';
+
+// Staff Personal Career & Service Status
+router.get('/me/career-status', getStaffCareerStatus);
+
+// Staff Exit Endpoints
+router.post('/exit/resign', resignStaff);
+router.post('/exit/withdraw', withdrawStaff);
 
 // Create Staff: HR Admin, Super User, Admin, Unit Head, Center Manager, Unit Admin
 router.post('/', requireRole(manageRoles), upload.single('passport'), createStaff);

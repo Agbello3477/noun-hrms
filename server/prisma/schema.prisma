@@ -143,6 +143,12 @@ model User {
   staffWorkloadComplaints                WorkloadComplaint[]           @relation("StaffWorkloadComplaints")
   hodResolvedComplaints                  WorkloadComplaint[]           @relation("HodResolvedComplaints")
 
+  // Statutory Compliance & Hardening Relations
+  bondDischarges                         TrainingBondRecord[]          @relation("BondDischargedBy")
+  authorizedDeferredLeaves               DeferredLeaveRecord[]         @relation("DeferredLeaveAuthorizer")
+  postingsInitiated                      StaffPosting[]                @relation("StaffPostingInitiator")
+  postingsAuthorized                     StaffPosting[]                @relation("StaffPostingAuthorizer")
+
   @@map("users")
 }
 
@@ -470,6 +476,22 @@ model StaffProfile {
   // File Requisition & Custody Tracking
   fileRequisitions FileRequisition[] @relation("SubjectStaffFileRequisitions")
 
+  // Statutory Compliance & Cadre Policy Hardening (2024 Conditions of Service)
+  confirmationStatus           ConfirmationStatus @default(ON_PROBATION)
+  probationStartDate           DateTime           @default(now())
+  probationExtendedAt          DateTime?
+  confirmedAt                  DateTime?
+  spouseStaffId                String?
+  spouse                       StaffProfile?      @relation("StaffSpouse", fields: [spouseStaffId], references: [id])
+  spousalPartners              StaffProfile[]     @relation("StaffSpouse")
+  isDisciplinaryInterdicted    Boolean            @default(false)
+  isDisciplinarySuspended      Boolean            @default(false)
+  annualBasicEmolument         Decimal?           @default(0.00) @db.Decimal(12, 2)
+  trainingBonds                TrainingBondRecord[]
+  deferredLeaves               DeferredLeaveRecord[]
+  heldEmoluments               HeldEmolumentsLedger[]
+  staffPostings                StaffPosting[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -496,6 +518,8 @@ model StaffProfile {
   @@index([statutoryRetirementDate])
   @@index([accountStatus])
   @@index([cadreType, rank, dateOfBirth])
+  @@index([confirmationStatus])
+  @@index([spouseStaffId])
 }
 
 enum ProgrammeLevel {
@@ -891,6 +915,13 @@ model TransferLog {
   relocationAllowanceAmount Float?
   isEffective   Boolean   @default(false)
   
+  // Statutory Management Posting & Resettlement Fields
+  isManagementInitiated       Boolean                   @default(true)
+  resettlementAllowanceAmount Decimal?                  @default(0.00) @db.Decimal(10, 2)
+  resettlementBursaryStatus   ResettlementBursaryStatus @default(NOT_APPLICABLE)
+  spousalConflictDetected     Boolean                   @default(false)
+  spousalConflictVcApprovalUrl String?
+
   initiatedById String
   initiatedBy   User      @relation("TransferInitiator", fields: [initiatedById], references: [id])
 
@@ -990,6 +1021,9 @@ model LeaveApplication {
   isPrincipalOfficer      Boolean                @default(false)
   isPaidLeave             Boolean                @default(true)
   payrollSuspensionFlag   Boolean                @default(false)
+  
+  trainingBonds           TrainingBondRecord[]
+
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
 
@@ -2351,6 +2385,143 @@ model AiUserMemory {
   @@index([userId])
   @@map("ai_user_memories")
 }
+
+// =========================================================================
+// STATUTORY COMPLIANCE & CADRE POLICY HARDENING MODELS & ENUMS
+// (NOUN Conditions of Service 2024 & Updated Scheme of Service)
+// =========================================================================
+
+enum ConfirmationStatus {
+  ON_PROBATION
+  CONFIRMED
+  PROBATION_EXTENDED
+  TERMINATION_RECOMMENDED
+}
+
+enum TrainingType {
+  FULL_TIME_SPONSORED
+  ODL_SPONSORED
+  PART_TIME_SPONSORED
+  UNSPONSORED_WITH_PAY
+}
+
+enum ResettlementBursaryStatus {
+  NOT_APPLICABLE
+  PENDING_BURSARY_DISBURSEMENT
+  DISBURSED
+}
+
+model TrainingBondRecord {
+  id                      String       @id @default(uuid())
+  staffProfileId          String
+  staffProfile            StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  studyLeaveId            String?
+  studyLeave              LeaveApplication? @relation(fields: [studyLeaveId], references: [id], onDelete: SetNull)
+  trainingType            TrainingType
+  bondDurationYears       Int          // Calculated: 2x duration for full-time (max 5 yrs); 1x for part-time (max 3-5 yrs)
+  bondStartDate           DateTime
+  bondEndDate             DateTime
+  totalFinancialIndemnity Decimal      @default(0.00) @db.Decimal(12, 2)
+  isBondDischarged        Boolean      @default(false)
+  dischargedAt            DateTime?
+  dischargedById          String?
+  dischargedBy            User?        @relation("BondDischargedBy", fields: [dischargedById], references: [id])
+  dischargeRemarks        String?      @db.Text
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  @@index([staffProfileId, isBondDischarged])
+  @@map("training_bond_records")
+}
+
+model DeferredLeaveRecord {
+  id                 String       @id @default(uuid())
+  staffProfileId     String
+  staffProfile       StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  calendarYear       Int          // e.g. 2025, 2026
+  deferredDaysCount  Int
+  approvalReference  String       // Registrar / VC memo reference
+  authorizedById     String
+  authorizedBy       User         @relation("DeferredLeaveAuthorizer", fields: [authorizedById], references: [id])
+  isUtilized         Boolean      @default(false)
+  utilizedAt         DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([staffProfileId, calendarYear])
+  @@index([staffProfileId])
+  @@map("deferred_leave_records")
+}
+
+model HeldEmolumentsLedger {
+  id                  String       @id @default(uuid())
+  staffProfileId      String
+  staffProfile        StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  month               String       // e.g. "January" or "10"
+  year                Int          // e.g. 2026
+  grossSalary         Decimal      @db.Decimal(12, 2)
+  heldAmount          Decimal      @db.Decimal(12, 2) // 50% Withheld
+  disbursedAmount     Decimal      @db.Decimal(12, 2) // 50% Paid
+  sanctionType        String       // SUSPENSION or INTERDICTION
+  status              String       @default("HELD") // HELD, REFUNDED_ARREARS, FORFEITED_TREASURY
+  settledAt           DateTime?
+  settlementReference String?      @db.Text
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([staffProfileId, status])
+  @@index([month, year])
+  @@map("held_emoluments_ledgers")
+}
+
+model StaffPosting {
+  id                           String                    @id @default(uuid())
+  staffProfileId               String
+  staffProfile                 StaffProfile              @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  oldUnitId                    String?
+  oldCenterId                  String?
+  newUnitId                    String?
+  newCenterId                  String?
+  status                       TransferStatus            @default(PENDING_REGISTRAR_AUTHORIZATION)
+  isManagementInitiated        Boolean                   @default(true) // If true: 2% resettlement allowance eligible
+  resettlementAllowanceAmount  Decimal                   @default(0.00) @db.Decimal(10, 2)
+  resettlementBursaryStatus    ResettlementBursaryStatus @default(NOT_APPLICABLE)
+  spousalConflictDetected      Boolean                   @default(false)
+  spousalConflictVcApprovalUrl String?
+  effectiveDate                DateTime                  @default(now())
+  reason                       String?                   @db.Text
+  initiatedById                String
+  initiatedBy                  User                      @relation("StaffPostingInitiator", fields: [initiatedById], references: [id])
+  authorizedById               String?
+  authorizedBy                 User?                     @relation("StaffPostingAuthorizer", fields: [authorizedById], references: [id])
+  authorizedAt                 DateTime?
+  createdAt                    DateTime                  @default(now())
+  updatedAt                    DateTime                  @updatedAt
+
+  @@index([staffProfileId])
+  @@index([status])
+  @@map("staff_postings")
+}
+
+model InstitutionalVacancy {
+  id                    String   @id @default(uuid())
+  cadre                 String   // e.g. "SENIOR_ADMIN"
+  gradeLevel            String   // e.g. "CONTISS 14", "CONTISS 15"
+  postTitle             String   // "Deputy Registrar", "Deputy Bursar", "Deputy Director"
+  departmentId          String?
+  unitId                String?
+  declaredSlots         Int      @default(1)
+  isDeclared            Boolean  @default(true)
+  declaredById          String?
+  declaredAt            DateTime @default(now())
+  approvalMemoReference String   // Registrar / VC declaration memo
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([cadre, gradeLevel, isDeclared])
+  @@map("institutional_vacancies")
+}
+
 
 
 

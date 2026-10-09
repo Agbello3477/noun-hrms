@@ -19,14 +19,21 @@ import {
     TrendingUp,
     Calendar,
     Layers,
-    RotateCcw
+    RotateCcw,
+    Award,
+    HeartHandshake,
+    Sparkles,
+    AlertTriangle,
+    Shield,
+    BookOpen,
+    HelpCircle
 } from 'lucide-react';
 
 export default function RegistryWorkspacePage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeTab, setActiveTab] = useState<'posting' | 'file' | 'query' | 'promotion' | 'drafts'>('posting');
+    const [activeTab, setActiveTab] = useState<'posting' | 'confirmations' | 'bonds' | 'file' | 'query' | 'promotion' | 'drafts'>('posting');
     const [submitting, setSubmitting] = useState(false);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -34,6 +41,27 @@ export default function RegistryWorkspacePage() {
     const [draftPostings, setDraftPostings] = useState<any[]>([]);
     const [draftFiles, setDraftFiles] = useState<any[]>([]);
     const [loadingDrafts, setLoadingDrafts] = useState(false);
+
+    // Confirmations Due Data
+    const [dueConfirmations, setDueConfirmations] = useState<any[]>([]);
+    const [loadingConfirmations, setLoadingConfirmations] = useState(false);
+    const [confirmationDraftForm, setConfirmationDraftForm] = useState({
+        staffProfileId: '',
+        hodRecommendation: 'RECOMMEND_CONFIRMATION',
+        hodAppraisalScore: 85,
+        registryRemarks: ''
+    });
+
+    // Training Bonds Data
+    const [trainingBonds, setTrainingBonds] = useState<any[]>([]);
+    const [loadingBonds, setLoadingBonds] = useState(false);
+    const [bondForm, setBondForm] = useState({
+        staffProfileId: '',
+        trainingType: 'FULL_TIME_SPONSORED',
+        studyDurationYears: 2,
+        totalFinancialIndemnity: 0,
+        bondStartDate: new Date().toISOString().split('T')[0]
+    });
 
     // Form States - Posting
     const [postingForm, setPostingForm] = useState({
@@ -43,8 +71,11 @@ export default function RegistryWorkspacePage() {
         destinationType: 'unit',
         reason: '',
         effectiveDate: new Date().toISOString().split('T')[0],
-        relocationAllowance: false,
-        relocationAllowanceAmount: 0
+        isManagementInitiated: true,
+        relocationAllowance: true,
+        relocationAllowanceAmount: 0,
+        spousalConflictDetected: false,
+        spousalConflictVcApprovalUrl: ''
     });
 
     // Form States - Staff File
@@ -88,10 +119,14 @@ export default function RegistryWorkspacePage() {
         }
     }, [user, authLoading, router]);
 
-    // Load drafts when tab is selected
+    // Tab Data Loading
     useEffect(() => {
         if (activeTab === 'drafts') {
             loadDrafts();
+        } else if (activeTab === 'confirmations') {
+            loadDueConfirmations();
+        } else if (activeTab === 'bonds') {
+            loadTrainingBonds();
         }
     }, [activeTab]);
 
@@ -111,6 +146,30 @@ export default function RegistryWorkspacePage() {
         }
     };
 
+    const loadDueConfirmations = async () => {
+        setLoadingConfirmations(true);
+        try {
+            const res = await api.get('/api/v1/registry/confirmations/due');
+            setDueConfirmations(res.data?.data || res.data || []);
+        } catch (err) {
+            console.error('Failed to load due confirmations', err);
+        } finally {
+            setLoadingConfirmations(false);
+        }
+    };
+
+    const loadTrainingBonds = async () => {
+        setLoadingBonds(true);
+        try {
+            const res = await api.get('/api/v1/registry/bonds');
+            setTrainingBonds(res.data?.data || res.data || []);
+        } catch (err) {
+            console.error('Failed to load bonds', err);
+        } finally {
+            setLoadingBonds(false);
+        }
+    };
+
     const handleDraftPosting = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
@@ -122,8 +181,10 @@ export default function RegistryWorkspacePage() {
                 toCenterId: postingForm.destinationType === 'center' ? postingForm.toCenterId : undefined,
                 reason: postingForm.reason,
                 effectiveDate: postingForm.effectiveDate,
+                isManagementInitiated: postingForm.isManagementInitiated,
                 relocationAllowance: postingForm.relocationAllowance,
-                relocationAllowanceAmount: postingForm.relocationAllowanceAmount
+                relocationAllowanceAmount: postingForm.relocationAllowanceAmount,
+                spousalConflictVcApprovalUrl: postingForm.spousalConflictVcApprovalUrl || undefined
             });
             setFeedback({ type: 'success', message: 'Staff posting order drafted and staged for Registrar authorization.' });
             setPostingForm({
@@ -133,11 +194,57 @@ export default function RegistryWorkspacePage() {
                 destinationType: 'unit',
                 reason: '',
                 effectiveDate: new Date().toISOString().split('T')[0],
-                relocationAllowance: false,
-                relocationAllowanceAmount: 0
+                isManagementInitiated: true,
+                relocationAllowance: true,
+                relocationAllowanceAmount: 0,
+                spousalConflictDetected: false,
+                spousalConflictVcApprovalUrl: ''
             });
         } catch (err: any) {
-            setFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to draft posting order' });
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to draft posting order' });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDraftConfirmation = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        setFeedback(null);
+        try {
+            await api.post('/api/v1/registry/confirmations/draft', confirmationDraftForm);
+            setFeedback({ type: 'success', message: 'Probation confirmation dossier drafted and staged on Registrar Docket.' });
+            setConfirmationDraftForm({
+                staffProfileId: '',
+                hodRecommendation: 'RECOMMEND_CONFIRMATION',
+                hodAppraisalScore: 85,
+                registryRemarks: ''
+            });
+            loadDueConfirmations();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to draft confirmation docket' });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleLogBond = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        setFeedback(null);
+        try {
+            await api.post('/api/v1/registry/bonds/log', bondForm);
+            setFeedback({ type: 'success', message: 'Post-Training Service Bond registered and locked against exit/leave.' });
+            setBondForm({
+                staffProfileId: '',
+                trainingType: 'FULL_TIME_SPONSORED',
+                studyDurationYears: 2,
+                totalFinancialIndemnity: 0,
+                bondStartDate: new Date().toISOString().split('T')[0]
+            });
+            loadTrainingBonds();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to register bond' });
         } finally {
             setSubmitting(false);
         }
@@ -160,9 +267,9 @@ export default function RegistryWorkspacePage() {
                 title: 'Mr',
                 gender: 'Male',
                 phone: '',
-                cadre: 'ADMINISTRATIVE',
-                rank: 'Administrative Officer',
-                level: 'CONTISS 08',
+                cadre: 'Administrative Cadre',
+                rank: 'Administrative Officer II',
+                level: 'CONTISS 07',
                 step: '1',
                 employmentCategory: 'PERMANENT',
                 dateOfBirth: '1990-01-01',
@@ -219,14 +326,14 @@ export default function RegistryWorkspacePage() {
                             Registry Operations Workspace
                         </span>
                         <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-50 text-[#006533] border border-emerald-200">
-                            Imputer (Maker Mode)
+                            Imputer Desk (Maker Mode)
                         </span>
                     </div>
                     <h1 className="text-xl md:text-2xl font-black text-slate-900 mt-2">
-                        Dual-Control Registry Operations Desk
+                        Statutory Registry Operations &amp; Imputation Desk
                     </h1>
                     <p className="text-xs text-slate-500 mt-0.5">
-                        Impute and stage sensitive administrative records. All actions require independent Registrar authorization before activation.
+                        Impute and stage statutory dossiers, postings, confirmation files, and post-training service bonds. All actions require independent Registrar sign-off.
                     </p>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -252,7 +359,7 @@ export default function RegistryWorkspacePage() {
                         onClick={loadDrafts}
                         icon={<RotateCcw size={14} />}
                     >
-                        Refresh Drafts
+                        Refresh
                     </Button>
                 </div>
             </div>
@@ -277,6 +384,24 @@ export default function RegistryWorkspacePage() {
                 >
                     <ArrowRightLeft size={15} />
                     Draft Staff Posting
+                </button>
+                <button
+                    onClick={() => setActiveTab('confirmations')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeTab === 'confirmations' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    <Award size={15} />
+                    Confirmation Dossiers
+                </button>
+                <button
+                    onClick={() => setActiveTab('bonds')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeTab === 'bonds' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    <HeartHandshake size={15} />
+                    Training Bonds Custody
                 </button>
                 <button
                     onClick={() => setActiveTab('file')}
@@ -312,21 +437,21 @@ export default function RegistryWorkspacePage() {
                     }`}
                 >
                     <Clock size={15} />
-                    Staged Records & Drafts
+                    Staged Records &amp; Drafts
                 </button>
             </div>
 
             {/* Tab 1: Draft Staff Posting Form */}
             {activeTab === 'posting' && (
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs max-w-3xl">
-                    <div className="mb-4">
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs max-w-3xl space-y-5">
+                    <div>
                         <h2 className="text-base font-bold text-slate-900">Draft Staff Posting / Transfer Order</h2>
-                        <p className="text-xs text-slate-500">Staged orders will be routed to the Registrar Cockpit for executive authorization.</p>
+                        <p className="text-xs text-slate-500">Staged orders will be routed to the Registrar Cockpit for executive authorization and 2% allowance approval.</p>
                     </div>
 
                     <form onSubmit={handleDraftPosting} className="space-y-4">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Email)</label>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Profile UUID / Email)</label>
                             <input
                                 type="text"
                                 required
@@ -394,31 +519,61 @@ export default function RegistryWorkspacePage() {
                             />
                         </div>
 
-                        <div className="flex items-center gap-3 pt-1">
-                            <input
-                                type="checkbox"
-                                id="relocAllowance"
-                                checked={postingForm.relocationAllowance}
-                                onChange={(e) => setPostingForm({ ...postingForm, relocationAllowance: e.target.checked })}
-                                className="h-4 w-4 text-[#006533] rounded-sm border-slate-300 focus:ring-[#006533]"
-                            />
-                            <label htmlFor="relocAllowance" className="text-xs font-medium text-slate-700">
-                                Relocation Allowance Applicable
-                            </label>
-                        </div>
-
-                        {postingForm.relocationAllowance && (
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">Allowance Amount (₦)</label>
+                        {/* Statutory Posting Classification */}
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                        <Sparkles size={14} className="text-[#006533]" />
+                                        Management-Initiated Posting (2% Resettlement Allowance)
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">
+                                        Management-directed postings automatically calculate 2% Annual Basic Emolument resettlement claim upon Registrar sign-off.
+                                    </p>
+                                </div>
                                 <input
-                                    type="number"
-                                    min="0"
-                                    value={postingForm.relocationAllowanceAmount}
-                                    onChange={(e) => setPostingForm({ ...postingForm, relocationAllowanceAmount: parseFloat(e.target.value) || 0 })}
-                                    className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] focus:border-[#006533] outline-none"
+                                    type="checkbox"
+                                    id="mgmtInitiated"
+                                    checked={postingForm.isManagementInitiated}
+                                    onChange={(e) => setPostingForm({ ...postingForm, isManagementInitiated: e.target.checked })}
+                                    className="h-4 w-4 text-[#006533] rounded-sm border-slate-300 focus:ring-[#006533]"
                                 />
                             </div>
-                        )}
+
+                            {!postingForm.isManagementInitiated && (
+                                <p className="text-[11px] text-amber-700 font-semibold bg-amber-50 p-2 rounded-md border border-amber-200">
+                                    ⚠️ Personal / Staff-Requested Transfer: ₦0.00 Resettlement claim applicable under NOUN Conditions of Service.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Spousal Co-Location Guard UI Section */}
+                        <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200/80 space-y-2">
+                            <div className="flex items-start gap-2.5">
+                                <AlertTriangle size={16} className="text-amber-700 mt-0.5 shrink-0" />
+                                <div>
+                                    <div className="text-xs font-bold text-amber-900">
+                                        Spousal Co-Location Guard (Section 3.8 Conditions of Service)
+                                    </div>
+                                    <p className="text-[11px] text-amber-800 mt-0.5">
+                                        Posting husband and wife to the same unit/centre is strictly prohibited unless an explicit Vice-Chancellor Exemption Waiver is attached.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="pt-2">
+                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">
+                                    VC Exemption Document URL (Required if posting to spouse&apos;s station):
+                                </label>
+                                <input
+                                    type="url"
+                                    value={postingForm.spousalConflictVcApprovalUrl}
+                                    onChange={(e) => setPostingForm({ ...postingForm, spousalConflictVcApprovalUrl: e.target.value })}
+                                    placeholder="https://hrms.noun.edu.ng/docs/vc_waivers/VC-WAIVER-REF.pdf"
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                />
+                            </div>
+                        </div>
 
                         <div className="pt-2 flex justify-end">
                             <Button
@@ -429,14 +584,267 @@ export default function RegistryWorkspacePage() {
                                 loadingText="Staging Posting..."
                                 icon={<Send size={15} />}
                             >
-                                Stage Posting for Registrar Approval
+                                Stage Posting for Registrar Authorization
                             </Button>
                         </div>
                     </form>
                 </div>
             )}
 
-            {/* Tab 2: Create Staff File Form */}
+            {/* Tab 2: Confirmation Dossiers Imputation */}
+            {activeTab === 'confirmations' && (
+                <div className="space-y-6 max-w-4xl">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <Award size={18} className="text-[#006533]" />
+                                Draft Statutory Confirmation Dossier
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                                Draft confirmation appraisal files for staff reaching 2-year statutory probation for Registrar ratification.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleDraftConfirmation} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={confirmationDraftForm.staffProfileId}
+                                        onChange={(e) => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: e.target.value })}
+                                        placeholder="Staff Profile UUID"
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Supervisor / HOD Recommendation</label>
+                                    <select
+                                        value={confirmationDraftForm.hodRecommendation}
+                                        onChange={(e) => setConfirmationDraftForm({ ...confirmationDraftForm, hodRecommendation: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    >
+                                        <option value="RECOMMEND_CONFIRMATION">Recommend Confirmation (Satisfactory Service)</option>
+                                        <option value="RECOMMEND_EXTENSION">Recommend 6-Month Probation Extension</option>
+                                        <option value="RECOMMEND_TERMINATION">Recommend Termination (Unsatisfactory Service)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">HOD Appraisal Score (%)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={confirmationDraftForm.hodAppraisalScore}
+                                    onChange={(e) => setConfirmationDraftForm({ ...confirmationDraftForm, hodAppraisalScore: parseInt(e.target.value, 10) || 0 })}
+                                    className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Registry Analysis Remarks</label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={confirmationDraftForm.registryRemarks}
+                                    onChange={(e) => setConfirmationDraftForm({ ...confirmationDraftForm, registryRemarks: e.target.value })}
+                                    placeholder="Verify APER reports, qualification vetting, and police character clearance..."
+                                    className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                />
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button
+                                    type="submit"
+                                    variant="emerald"
+                                    size="md"
+                                    isLoading={submitting}
+                                    loadingText="Staging Confirmation File..."
+                                    icon={<Send size={15} />}
+                                >
+                                    Stage Confirmation Docket for Registrar
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Due Staff List */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                        <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center justify-between">
+                            <span>Staff Overdue / Due for Confirmation Review</span>
+                            <span className="text-xs text-slate-500">{dueConfirmations.length} records</span>
+                        </h3>
+
+                        {loadingConfirmations ? (
+                            <div className="space-y-2 py-4">
+                                <div className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                                <div className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                            </div>
+                        ) : dueConfirmations.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-3 text-center">No probation appraisals currently pending imputation.</p>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {dueConfirmations.map((staff: any) => (
+                                    <div key={staff.id} className="py-3 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-800">
+                                                {staff.surname} {staff.otherNames} ({staff.staffId || 'N/A'})
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5">
+                                                Probation Start: {new Date(staff.probationStartDate || staff.dateOfFirstAppointment).toLocaleDateString()} &bull; Unit: {staff.unit?.name || 'General Registry'}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: staff.id })}
+                                            className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold rounded-lg transition"
+                                        >
+                                            Select Profile
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Tab 3: Training Bonds Custody */}
+            {activeTab === 'bonds' && (
+                <div className="space-y-6 max-w-4xl">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <HeartHandshake size={18} className="text-[#006533]" />
+                                Post-Training Service Bond Registry
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                                Register mandatory service bonds for sponsored study leave (Full-time: 2x max 5 years; Part-time/ODL: 1x max 3-5 years).
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleLogBond} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={bondForm.staffProfileId}
+                                        onChange={(e) => setBondForm({ ...bondForm, staffProfileId: e.target.value })}
+                                        placeholder="Staff Profile UUID"
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Sponsorship Category</label>
+                                    <select
+                                        value={bondForm.trainingType}
+                                        onChange={(e) => setBondForm({ ...bondForm, trainingType: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    >
+                                        <option value="FULL_TIME_SPONSORED">Full-Time Sponsored (2x Duration, Max 5 Yrs)</option>
+                                        <option value="PART_TIME_SPONSORED">Part-Time Sponsored (1x Duration, Max 3-5 Yrs)</option>
+                                        <option value="ODL_SPONSORED">ODL Sponsored (1x Duration, Max 3-5 Yrs)</option>
+                                        <option value="UNSPONSORED_WITH_PAY">Unsponsered With Pay (1x Duration, Max 3 Yrs)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Study Duration (Years)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="6"
+                                        value={bondForm.studyDurationYears}
+                                        onChange={(e) => setBondForm({ ...bondForm, studyDurationYears: parseInt(e.target.value, 10) || 1 })}
+                                        className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Financial Indemnity Disbursed (₦)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={bondForm.totalFinancialIndemnity}
+                                        onChange={(e) => setBondForm({ ...bondForm, totalFinancialIndemnity: parseFloat(e.target.value) || 0 })}
+                                        className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Bond Start Date</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={bondForm.bondStartDate}
+                                        onChange={(e) => setBondForm({ ...bondForm, bondStartDate: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button
+                                    type="submit"
+                                    variant="emerald"
+                                    size="md"
+                                    isLoading={submitting}
+                                    loadingText="Logging Bond..."
+                                    icon={<HeartHandshake size={15} />}
+                                >
+                                    Log Training Service Bond
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Active Bonds Table */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                        <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center justify-between">
+                            <span>Active Training Service Bonds</span>
+                            <span className="text-xs text-slate-500">{trainingBonds.length} bonds</span>
+                        </h3>
+
+                        {loadingBonds ? (
+                            <div className="space-y-2 py-4">
+                                <div className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                            </div>
+                        ) : trainingBonds.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-3 text-center">No training bonds registered.</p>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {trainingBonds.map((bond: any) => (
+                                    <div key={bond.id} className="py-3 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-800">
+                                                {bond.staffProfile?.user?.name || bond.staffProfile?.surname || 'Staff'} ({bond.staffProfile?.staffId || 'N/A'})
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5">
+                                                {bond.trainingType} &bull; Bond Duration: {bond.bondDurationYears} yrs &bull; Expires: {new Date(bond.bondEndDate).toLocaleDateString()}
+                                            </div>
+                                        </div>
+                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${
+                                            bond.isBondDischarged ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                        }`}>
+                                            {bond.isBondDischarged ? '✅ Discharged' : '🔒 Active Bond Locked'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Tab 4: Create Staff File Form */}
             {activeTab === 'file' && (
                 <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs max-w-3xl">
                     <div className="mb-4">
@@ -578,7 +986,7 @@ export default function RegistryWorkspacePage() {
                 </div>
             )}
 
-            {/* Tab 3: Issue Disciplinary Query */}
+            {/* Tab 5: Issue Disciplinary Query */}
             {activeTab === 'query' && (
                 <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs max-w-3xl">
                     <div className="mb-4">
@@ -636,7 +1044,7 @@ export default function RegistryWorkspacePage() {
                 </div>
             )}
 
-            {/* Tab 4: Promotion Override Request */}
+            {/* Tab 6: Promotion Override Request */}
             {activeTab === 'promotion' && (
                 <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs max-w-3xl">
                     <div className="mb-4">
@@ -696,7 +1104,7 @@ export default function RegistryWorkspacePage() {
                 </div>
             )}
 
-            {/* Tab 5: Staged Records & Drafts */}
+            {/* Tab 7: Staged Records & Drafts */}
             {activeTab === 'drafts' && (
                 <div className="space-y-6">
                     {/* Draft Postings List */}
@@ -725,7 +1133,7 @@ export default function RegistryWorkspacePage() {
                                                 {p.staff?.name} ({p.staff?.staffProfile?.staffId || 'N/A'})
                                             </div>
                                             <div className="text-[11px] text-slate-500 mt-0.5">
-                                                Destination: {p.newUnit?.name || p.newCenter?.name || 'Unassigned'} &bull; Effective: {new Date(p.effectiveDate).toLocaleDateString()}
+                                                Destination: {p.newUnit?.name || p.newCenter?.name || 'Unassigned'} &bull; Effective: {new Date(p.effectiveDate).toLocaleDateString()} &bull; Resettlement: {p.isManagementInitiated ? '2% Mgmt Directed' : 'None'}
                                             </div>
                                         </div>
                                         <div>

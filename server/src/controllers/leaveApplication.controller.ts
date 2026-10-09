@@ -8,6 +8,8 @@ import {
   parseSalaryScaleAndGrade,
   resolveStaffDirector,
 } from '../services/leaveEntitlement.service';
+import { ProbationConfirmationService } from '../services/ProbationConfirmationService';
+import { TrainingBondGuard } from '../services/TrainingBondGuard';
 import { notifyUser } from './notification.controller';
 import { sendLeaveNotification } from '../services/email.service';
 
@@ -153,11 +155,37 @@ export const applyForStatutoryLeave = async (req: Request, res: Response) => {
       }
     }
 
-    // Study & Training Leave: Requires Staff Development Committee approval document
-    if ((resolvedType === LeaveType.STUDY || resolvedType === LeaveType.TRAINING) && !supportingDocumentUrl) {
-      return res.status(400).json({
-        message: 'Study and Training Leave requires an uploaded Staff Development Committee approval letter.'
-      });
+    // Study & Training Leave: Hard Confirmation Prerequisite & SDC Approval Document
+    if (resolvedType === LeaveType.STUDY || resolvedType === LeaveType.TRAINING) {
+      const confirmCheck = ProbationConfirmationService.validateLeavePrerequisites(staffProfile, resolvedType);
+      if (!confirmCheck.valid) {
+        return res.status(403).json({
+          error: confirmCheck.error,
+          message: confirmCheck.message
+        });
+      }
+
+      if (!supportingDocumentUrl) {
+        return res.status(400).json({
+          message: 'Study and Training Leave requires an uploaded Staff Development Committee approval letter.'
+        });
+      }
+    }
+
+    // Active Training Bond Guard for Leave of Absence or Secondary Study/Training Leave
+    if (
+      resolvedType === LeaveType.LEAVE_OF_ABSENCE_WITHOUT_PAY ||
+      resolvedType === LeaveType.WITHOUT_PAY ||
+      resolvedType === LeaveType.STUDY ||
+      resolvedType === LeaveType.TRAINING
+    ) {
+      const bondGuard = await TrainingBondGuard.checkActiveBond(staffProfile.id, resolvedType);
+      if (bondGuard.hasActiveBond) {
+        return res.status(403).json({
+          error: bondGuard.error,
+          message: bondGuard.message
+        });
+      }
     }
 
     // Determine paid vs. unpaid
@@ -828,6 +856,19 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
 
       return updatedApp;
     });
+
+    // Auto-generate statutory TrainingBondRecord for Study / Training Leave
+    if (application.leaveType === LeaveType.STUDY || application.leaveType === LeaveType.TRAINING) {
+      const durationYears = Math.max(1, Math.round((application.endDate.getTime() - application.startDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)));
+      await TrainingBondGuard.createBondRecord({
+        staffProfileId: application.staffId,
+        studyLeaveId: application.id,
+        trainingType: 'FULL_TIME_SPONSORED' as any,
+        studyDurationYears: durationYears,
+        bondStartDate: application.startDate,
+        totalFinancialIndemnity: 0.00
+      }).catch(err => console.error('Error creating TrainingBondRecord on leave approval:', err));
+    }
 
     // Notify Staff
     try {

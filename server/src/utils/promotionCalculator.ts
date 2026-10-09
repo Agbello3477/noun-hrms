@@ -56,15 +56,15 @@ export const calculatePromotionMaturity = (
         isOctoberMaturity = true;
         cadreRuleApplied = `Academic Cadre: ${intervalYears}-Year Statutory Waiting Period (October 1st Review Cycle)`;
     } else if (normalizedCadre === 'SENIOR_ADMIN' || normalizedCadre === 'ADMINISTRATIVE' || normalizedCadre.includes('ADMIN')) {
-        if (schemeProgression.minYearsWaiting > 0) {
+        if (gradeNum && gradeNum >= 10) {
+            intervalYears = 4;
+            cadreRuleApplied = `Senior Administrative & Professional (CONTISS ${gradeNum}): 4-Year Statutory Waiting Period (January 1st)`;
+        } else if (schemeProgression.minYearsWaiting > 0) {
             intervalYears = schemeProgression.minYearsWaiting;
             cadreRuleApplied = `Senior Administrative (${rankOrPost || 'Scheme of Service'}): ${intervalYears}-Year Waiting Period (January 1st)`;
-        } else if (gradeNum && gradeNum >= 12) {
-            intervalYears = 4;
-            cadreRuleApplied = `Senior Administrative (CONTISS ${gradeNum}): 4-Year Statutory Waiting Period for Directorate/Principal Grades (January 1st)`;
         } else {
             intervalYears = 3;
-            cadreRuleApplied = `Senior Administrative (CONTISS ${gradeNum || '06-11'}): 3-Year Standard Waiting Period (January 1st)`;
+            cadreRuleApplied = `Senior Administrative & Technical (CONTISS ${gradeNum || '06-09'}): 3-Year Standard Waiting Period (January 1st)`;
         }
     } else if (normalizedCadre === 'JUNIOR_STAFF' || normalizedCadre === 'JUNIOR' || normalizedCadre.includes('JUNIOR')) {
         intervalYears = schemeProgression.minYearsWaiting > 0 ? schemeProgression.minYearsWaiting : 3;

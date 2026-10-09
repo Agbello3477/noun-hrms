@@ -28,14 +28,15 @@ import {
     FolderOpen,
     ExternalLink,
     Lock,
-    Paperclip
+    Paperclip,
+    HeartHandshake
 } from 'lucide-react';
 
 export default function RegistrarCockpitPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
 
-    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'files' | 'promotions' | 'roles' | 'audits' | 'file-releases' | 'applications'>('queue');
+    const [activeSection, setActiveSection] = useState<'queue' | 'postings' | 'confirmations' | 'discipline' | 'bonds' | 'files' | 'promotions' | 'roles' | 'audits' | 'file-releases' | 'applications'>('queue');
     const [queueSummary, setQueueSummary] = useState({
         totalPending: 0,
         postings: 0,
@@ -44,7 +45,9 @@ export default function RegistrarCockpitPage() {
         disciplinaryQueries: 0,
         roleChanges: 0,
         fileReleases: 0,
-        applications: 0
+        applications: 0,
+        confirmations: 0,
+        bonds: 0
     });
 
     const [pendingPostings, setPendingPostings] = useState<any[]>([]);
@@ -53,6 +56,8 @@ export default function RegistrarCockpitPage() {
     const [pendingRoleChanges, setPendingRoleChanges] = useState<any[]>([]);
     const [pendingFileReleases, setPendingFileReleases] = useState<any[]>([]);
     const [pendingApplications, setPendingApplications] = useState<any[]>([]);
+    const [pendingConfirmations, setPendingConfirmations] = useState<any[]>([]);
+    const [activeBonds, setActiveBonds] = useState<any[]>([]);
     const [audits, setAudits] = useState<any[]>([]);
 
     const [auditPage, setAuditPage] = useState(1);
@@ -70,9 +75,23 @@ export default function RegistrarCockpitPage() {
     const [selectedOverride, setSelectedOverride] = useState<any | null>(null);
     const [selectedFileRelease, setSelectedFileRelease] = useState<any | null>(null);
     const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
+    const [selectedConfirmation, setSelectedConfirmation] = useState<any | null>(null);
 
     // Decision modal / input state
     const [decisionRemarks, setDecisionRemarks] = useState('');
+
+    // Disciplinary & Verdict Forms
+    const [disciplineForm, setDisciplineForm] = useState({
+        staffProfileId: '',
+        sanctionType: 'SUSPENDED' as 'SUSPENDED' | 'INTERDICTED',
+        remarks: ''
+    });
+    const [verdictForm, setVerdictForm] = useState({
+        staffProfileId: '',
+        verdict: 'EXONERATED' as 'EXONERATED' | 'DISMISSED' | 'CONVICTED' | 'COMPASSIONATE_GROUNDS',
+        memoReference: '',
+        remarks: ''
+    });
 
     // Role Guard: Only Registrar, Deputy Registrar, VC, Super User, Admin
     useEffect(() => {
@@ -94,22 +113,29 @@ export default function RegistrarCockpitPage() {
     const loadCockpitData = async () => {
         setLoadingQueue(true);
         try {
-            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes, fileReleasesRes, applicationsRes] = await Promise.all([
+            const [queueRes, postingsRes, filesRes, overridesRes, roleChangesRes, fileReleasesRes, applicationsRes, confirmationsRes, bondsRes] = await Promise.all([
                 api.get('/api/v1/registrar/queue').catch(() => ({ data: { queueSummary: { totalPending: 0, postings: 0, files: 0, promotionOverrides: 0, disciplinaryQueries: 0, roleChanges: 0, applications: 0, fileReleases: 0 } } })),
                 api.get('/api/v1/registrar/postings/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/files/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/promotions/pending-overrides').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/role-changes/pending').catch(() => ({ data: [] })),
                 api.get('/api/v1/registrar/file-requests/pending').catch(() => ({ data: { data: [] } })),
-                api.get('/api/v1/applications/registrar/queue').catch(() => ({ data: { data: [] } }))
+                api.get('/api/v1/applications/registrar/queue').catch(() => ({ data: { data: [] } })),
+                api.get('/api/v1/registrar/confirmations/pending').catch(() => ({ data: { data: [] } })),
+                api.get('/api/v1/registrar/bonds/active').catch(() => ({ data: { data: [] } }))
             ]);
 
             const releases = fileReleasesRes.data?.data || [];
             const apps = applicationsRes.data?.data || applicationsRes.data?.applications || [];
+            const confs = confirmationsRes.data?.data || confirmationsRes.data || [];
+            const bonds = bondsRes.data?.data || bondsRes.data || [];
+
             const summary = {
                 ...queueRes.data.queueSummary,
                 fileReleases: releases.length,
-                applications: apps.length
+                applications: apps.length,
+                confirmations: confs.length,
+                bonds: bonds.length
             };
             setQueueSummary(summary);
             setPendingPostings(postingsRes.data || []);
@@ -118,6 +144,8 @@ export default function RegistrarCockpitPage() {
             setPendingRoleChanges(roleChangesRes.data || []);
             setPendingFileReleases(releases);
             setPendingApplications(apps);
+            setPendingConfirmations(confs);
+            setActiveBonds(bonds);
 
             if (postingsRes.data && postingsRes.data.length > 0) {
                 setSelectedPosting(postingsRes.data[0]);
@@ -133,6 +161,9 @@ export default function RegistrarCockpitPage() {
             }
             if (apps && apps.length > 0) {
                 setSelectedApplication(apps[0]);
+            }
+            if (confs && confs.length > 0) {
+                setSelectedConfirmation(confs[0]);
             }
         } catch (err: any) {
             console.error('Failed to load cockpit data', err);
@@ -287,6 +318,77 @@ export default function RegistrarCockpitPage() {
             loadCockpitData();
         } catch (err: any) {
             setFeedback({ type: 'error', message: err.response?.data?.message || 'Role change action failed' });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Probation Confirmation Ratification Decision
+    const handleRatifyConfirmation = async (staffProfileId: string, decision: 'CONFIRMED' | 'PROBATION_EXTENDED' | 'TERMINATION_RECOMMENDED') => {
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const res = await api.put(`/api/v1/registrar/confirmations/${staffProfileId}/ratify`, {
+                decision,
+                remarks: decisionRemarks || undefined
+            });
+            setFeedback({ type: 'success', message: res.data.message || `Confirmation status updated to ${decision}.` });
+            setDecisionRemarks('');
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Ratification failed' });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Apply Disciplinary Sanction (Suspension / Interdiction)
+    const handleApplyDiscipline = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const res = await api.post('/api/v1/registrar/discipline/sanction', disciplineForm);
+            setFeedback({ type: 'success', message: res.data.message || `Disciplinary ${disciplineForm.sanctionType} executed with statutory 50% payroll withholding.` });
+            setDisciplineForm({ staffProfileId: '', sanctionType: 'SUSPENDED', remarks: '' });
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to apply disciplinary sanction' });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Execute Disciplinary Verdict (Exonerated Arrears / Forfeiture)
+    const handleExecuteVerdict = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const res = await api.post('/api/v1/registrar/discipline/verdict', verdictForm);
+            setFeedback({ type: 'success', message: res.data.message || `Disciplinary verdict ${verdictForm.verdict} recorded successfully.` });
+            setVerdictForm({ staffProfileId: '', verdict: 'EXONERATED', memoReference: '', remarks: '' });
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to execute verdict' });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Discharge Training Bond
+    const handleDischargeBond = async (bondId: string) => {
+        setActionLoading(true);
+        setFeedback(null);
+        try {
+            const res = await api.put(`/api/v1/registrar/bonds/${bondId}/discharge`, {
+                remarks: decisionRemarks || 'Statutory training service bond fulfilled and discharged'
+            });
+            setFeedback({ type: 'success', message: res.data.message || 'Bond discharged successfully.' });
+            setDecisionRemarks('');
+            loadCockpitData();
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.response?.data?.message || err.response?.data?.error || 'Failed to discharge bond' });
         } finally {
             setActionLoading(false);
         }
@@ -496,6 +598,30 @@ export default function RegistrarCockpitPage() {
                     Executive Authorization Queue
                 </button>
                 <button
+                    onClick={() => setActiveSection('confirmations')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'confirmations' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Probation Confirmations ({pendingConfirmations.length})
+                </button>
+                <button
+                    onClick={() => setActiveSection('discipline')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'discipline' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Disciplinary Sanctions &amp; Payroll
+                </button>
+                <button
+                    onClick={() => setActiveSection('bonds')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        activeSection === 'bonds' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                    Training Bonds Custody ({activeBonds.length})
+                </button>
+                <button
                     onClick={() => setActiveSection('applications')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                         activeSection === 'applications' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
@@ -509,7 +635,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'postings' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Transfer &amp; Posting Ratifications ({pendingPostings.length})
+                    Transfer &amp; Postings ({pendingPostings.length})
                 </button>
                 <button
                     onClick={() => setActiveSection('files')}
@@ -533,7 +659,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'promotions' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Promotion Override Docket ({pendingOverrides.length})
+                    Promotion Overrides ({pendingOverrides.length})
                 </button>
                 <button
                     onClick={() => setActiveSection('roles')}
@@ -541,7 +667,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'roles' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Role Change Docket ({pendingRoleChanges.length})
+                    Role Changes ({pendingRoleChanges.length})
                 </button>
                 <button
                     onClick={() => {
@@ -552,7 +678,7 @@ export default function RegistrarCockpitPage() {
                         activeSection === 'audits' ? 'bg-[#006533] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
                     }`}
                 >
-                    Audit &amp; Digital Signature Trails
+                    Audit Trails
                 </button>
             </div>
 
@@ -883,6 +1009,65 @@ export default function RegistrarCockpitPage() {
                                     </div>
                                 </div>
 
+                                {/* Statutory Posting Allowances & Spousal Guard Badges */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40 text-xs">
+                                        <div className="font-bold text-blue-900 mb-1 flex items-center gap-1.5">
+                                            <Award size={14} className="text-blue-700" />
+                                            Management Resettlement Allowance (2%)
+                                        </div>
+                                        {selectedPosting.isManagementInitiated ? (
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-black text-blue-950">
+                                                    ₦{(Number(selectedPosting.resettlementAllowanceAmount) || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                                                </div>
+                                                <p className="text-[11px] text-blue-800">
+                                                    2% Annual Basic Emolument calculated. Bursary requisition will disburse upon executive authorization.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[11px] text-slate-600">
+                                                Staff-Initiated Transfer: ₦0.00 Resettlement claim (Personal Request).
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className={`p-3.5 rounded-xl border text-xs ${
+                                        selectedPosting.spousalConflictDetected
+                                            ? 'border-amber-300 bg-amber-50/60 text-amber-950'
+                                            : 'border-slate-200 bg-slate-50/50 text-slate-700'
+                                    }`}>
+                                        <div className="font-bold mb-1 flex items-center gap-1.5">
+                                            <ShieldAlert size={14} className={selectedPosting.spousalConflictDetected ? 'text-amber-700' : 'text-slate-400'} />
+                                            Spousal Co-Location Guard (Section 3.8)
+                                        </div>
+                                        {selectedPosting.spousalConflictDetected ? (
+                                            <div className="space-y-1">
+                                                <div className="font-bold text-amber-900 text-[11px]">
+                                                    ⚠️ Spousal Co-Location Conflict Detected
+                                                </div>
+                                                {selectedPosting.spousalConflictVcApprovalUrl ? (
+                                                    <div className="text-[11px] text-emerald-800 font-semibold flex items-center gap-1">
+                                                        <CheckCircle2 size={12} className="text-emerald-600" />
+                                                        VC Exemption Attached:
+                                                        <a href={selectedPosting.spousalConflictVcApprovalUrl} target="_blank" rel="noreferrer" className="underline text-blue-700 ml-1">
+                                                            View Waiver
+                                                        </a>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-[11px] text-red-700 font-bold">
+                                                        ⛔ Executive VC Waiver URL Required before sign-off.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[11px] text-slate-500">
+                                                No spousal deployment conflict registered.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
                                 {/* Fast Decision Action Bar */}
                                 <div className="border-t border-slate-100 pt-4">
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -922,10 +1107,11 @@ export default function RegistrarCockpitPage() {
                                             variant="emerald"
                                             size="md"
                                             isLoading={actionLoading}
+                                            disabled={selectedPosting.spousalConflictDetected && !selectedPosting.spousalConflictVcApprovalUrl}
                                             onClick={() => handlePostingDecision(selectedPosting.id, 'APPROVED')}
                                             icon={<Stamp size={16} />}
                                         >
-                                            Authorize & Sign with Digital Stamp
+                                            Authorize &amp; Sign with Digital Stamp
                                         </Button>
                                     </div>
                                 </div>
@@ -936,6 +1122,362 @@ export default function RegistrarCockpitPage() {
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Section: Statutory Probation Confirmations */}
+            {activeSection === 'confirmations' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+                        <div className="flex items-center justify-between mb-3 px-1">
+                            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Pending Confirmations</h2>
+                            <span className="text-[11px] text-slate-500">{pendingConfirmations.length} records</span>
+                        </div>
+
+                        {loadingQueue ? (
+                            <div className="space-y-2">
+                                <div className="h-14 bg-slate-100 rounded-xl animate-pulse" />
+                            </div>
+                        ) : pendingConfirmations.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-6 text-center">No probation reviews awaiting ratification.</p>
+                        ) : (
+                            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                                {pendingConfirmations.map((c) => {
+                                    const isSelected = selectedConfirmation?.id === c.id;
+                                    const isHardDrop = c.confirmationStatus === 'TERMINATION_RECOMMENDED';
+                                    return (
+                                        <div
+                                            key={c.id}
+                                            onClick={() => setSelectedConfirmation(c)}
+                                            className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                                                isSelected
+                                                    ? 'bg-emerald-50/60 border-emerald-400 ring-1 ring-emerald-400'
+                                                    : 'bg-white border-slate-200/70 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-xs font-bold text-slate-900">{c.surname} {c.otherNames}</div>
+                                                {isHardDrop && (
+                                                    <span className="px-1.5 py-0.5 text-[9px] font-black rounded-sm bg-red-100 text-red-800">
+                                                        3-YR HARD DROP
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5">{c.staffId} &bull; {c.rank}</div>
+                                            <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 text-[10px]">
+                                                <span className="text-slate-400">Unit: {c.unit?.name || 'General'}</span>
+                                                <span className="text-amber-700 font-semibold">{c.confirmationStatus}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs">
+                        {selectedConfirmation ? (
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                                    <div>
+                                        <span className="text-[10px] font-bold text-emerald-800 uppercase px-2 py-0.5 bg-emerald-100 rounded-sm">
+                                            Probation Confirmation Ratification
+                                        </span>
+                                        <h2 className="text-lg font-bold text-slate-900 mt-1">
+                                            {selectedConfirmation.surname} {selectedConfirmation.otherNames}
+                                        </h2>
+                                        <div className="text-xs text-slate-500">
+                                            Staff ID: {selectedConfirmation.staffId} &bull; Cadre: {selectedConfirmation.cadre} &bull; Email: {selectedConfirmation.user?.email}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${
+                                            selectedConfirmation.confirmationStatus === 'TERMINATION_RECOMMENDED'
+                                                ? 'bg-red-100 text-red-800 border border-red-200'
+                                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        }`}>
+                                            {selectedConfirmation.confirmationStatus}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2 text-xs">
+                                        <div className="font-bold text-slate-700 uppercase mb-2">Service Tenure Details</div>
+                                        <div><span className="text-slate-400">Date of First Appointment:</span> <span className="font-semibold text-slate-800">{new Date(selectedConfirmation.dateOfFirstAppointment || selectedConfirmation.probationStartDate).toLocaleDateString()}</span></div>
+                                        <div><span className="text-slate-400">Probation Start:</span> <span className="font-semibold text-slate-800">{new Date(selectedConfirmation.probationStartDate || selectedConfirmation.dateOfFirstAppointment).toLocaleDateString()}</span></div>
+                                        <div><span className="text-slate-400">Current Rank:</span> <span className="font-semibold text-slate-800">{selectedConfirmation.rank} ({selectedConfirmation.level})</span></div>
+                                        <div><span className="text-slate-400">Assigned Unit:</span> <span className="font-semibold text-slate-800">{selectedConfirmation.unit?.name || 'General Registry'}</span></div>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2 text-xs">
+                                        <div className="font-bold text-emerald-800 uppercase mb-2">Statutory Prerequisite Rule</div>
+                                        <p className="text-slate-700 text-[11px] leading-relaxed">
+                                            Confirmed status is a mandatory prerequisite for promotion maturation and sponsored study leave. Ratification immediately unlocks these career privileges.
+                                        </p>
+                                        {selectedConfirmation.confirmationStatus === 'TERMINATION_RECOMMENDED' && (
+                                            <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-900 font-bold text-[11px]">
+                                                🚨 3-Year Hard Drop Rule: Staff has exceeded 36 months on probation without confirmation. Council review is mandatory.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-4 space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                            Executive Ratification Remarks
+                                        </label>
+                                        <textarea
+                                            rows={2}
+                                            value={decisionRemarks}
+                                            onChange={(e) => setDecisionRemarks(e.target.value)}
+                                            placeholder="Add remarks for Governing Council / Registrar record..."
+                                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="danger"
+                                                size="sm"
+                                                isLoading={actionLoading}
+                                                onClick={() => handleRatifyConfirmation(selectedConfirmation.id, 'TERMINATION_RECOMMENDED')}
+                                                icon={<XCircle size={14} />}
+                                            >
+                                                Recommend Termination
+                                            </Button>
+                                            <Button
+                                                variant="amber"
+                                                size="sm"
+                                                isLoading={actionLoading}
+                                                onClick={() => handleRatifyConfirmation(selectedConfirmation.id, 'PROBATION_EXTENDED')}
+                                                icon={<RotateCcw size={14} />}
+                                            >
+                                                Extend Probation (6 Mos)
+                                            </Button>
+                                        </div>
+
+                                        <Button
+                                            variant="emerald"
+                                            size="md"
+                                            isLoading={actionLoading}
+                                            onClick={() => handleRatifyConfirmation(selectedConfirmation.id, 'CONFIRMED')}
+                                            icon={<Stamp size={16} />}
+                                        >
+                                            Ratify Confirmation of Appointment
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="py-12 text-center text-slate-400 text-xs">
+                                Select a staff confirmation dossier to review.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Section: Disciplinary Sanctions & Payroll Ledger */}
+            {activeSection === 'discipline' && (
+                <div className="space-y-6 max-w-4xl">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <ShieldAlert size={18} className="text-rose-600" />
+                                Execute Disciplinary Sanction (Suspension / Interdiction)
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                                Enforces statutory 50% salary reduction into HeldEmolumentsLedger per Senior/Junior Staff Conditions of Service.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleApplyDiscipline} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={disciplineForm.staffProfileId}
+                                        onChange={(e) => setDisciplineForm({ ...disciplineForm, staffProfileId: e.target.value })}
+                                        placeholder="Staff Profile UUID"
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Sanction Type</label>
+                                    <select
+                                        value={disciplineForm.sanctionType}
+                                        onChange={(e) => setDisciplineForm({ ...disciplineForm, sanctionType: e.target.value as any })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-none"
+                                    >
+                                        <option value="SUSPENDED">Suspension (Internal Investigation - 50% Deduction)</option>
+                                        <option value="INTERDICTED">Interdiction (Criminal / Court Charge - 50% Deduction)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Executive Disciplinary Memo Reference &amp; Remarks</label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={disciplineForm.remarks}
+                                    onChange={(e) => setDisciplineForm({ ...disciplineForm, remarks: e.target.value })}
+                                    placeholder="State citation of Senate/Council Disciplinary Panel memo reference..."
+                                    className="w-full text-xs px-3.5 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-none"
+                                />
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button
+                                    type="submit"
+                                    variant="danger"
+                                    size="md"
+                                    isLoading={actionLoading}
+                                    icon={<ShieldAlert size={15} />}
+                                >
+                                    Authorize Disciplinary Sanction &amp; 50% Deduction
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Verdict Resolution Form */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <FileCheck2 size={18} className="text-[#006533]" />
+                                Register Disciplinary Verdict &amp; Resolve Held Emoluments
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                                Exoneration generates Bursary arrears refund batch. Dismissal/Conviction permanently forfeits held salary to University Treasury.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleExecuteVerdict} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={verdictForm.staffProfileId}
+                                        onChange={(e) => setVerdictForm({ ...verdictForm, staffProfileId: e.target.value })}
+                                        placeholder="Staff Profile UUID"
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Final Verdict</label>
+                                    <select
+                                        value={verdictForm.verdict}
+                                        onChange={(e) => setVerdictForm({ ...verdictForm, verdict: e.target.value as any })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    >
+                                        <option value="EXONERATED">Exonerated (Restore 100% Pay + Generate Arrears Refund Batch)</option>
+                                        <option value="DISMISSED">Dismissed (Permanent Forfeiture to University Treasury)</option>
+                                        <option value="CONVICTED">Convicted (Permanent Forfeiture to University Treasury)</option>
+                                        <option value="COMPASSIONATE_GROUNDS">Recalled on Compassionate Grounds (100% Pay Forward, Balance Forfeited)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Official Memo Reference</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={verdictForm.memoReference}
+                                        onChange={(e) => setVerdictForm({ ...verdictForm, memoReference: e.target.value })}
+                                        placeholder="e.g. REG/DISC/2026/VR-001"
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Verdict Summary / Minutes</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={verdictForm.remarks}
+                                        onChange={(e) => setVerdictForm({ ...verdictForm, remarks: e.target.value })}
+                                        placeholder="Citation of Senior Staff Disciplinary Committee resolution..."
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button
+                                    type="submit"
+                                    variant="emerald"
+                                    size="md"
+                                    isLoading={actionLoading}
+                                    icon={<Stamp size={15} />}
+                                >
+                                    Execute Disciplinary Verdict
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Section: Training Bonds Custody */}
+            {activeSection === 'bonds' && (
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <HeartHandshake size={16} className="text-[#006533]" />
+                                Active Post-Training Service Bonds
+                            </h2>
+                            <p className="text-xs text-slate-500">
+                                Staff under binding post-training service agreements. Strictly blocked from exit (resignation/withdrawal) and leave of absence.
+                            </p>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500">{activeBonds.length} Active Bonds</span>
+                    </div>
+
+                    {loadingQueue ? (
+                        <div className="space-y-2 py-4">
+                            <div className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+                        </div>
+                    ) : activeBonds.length === 0 ? (
+                        <p className="text-xs text-slate-400 py-8 text-center">No active training bonds registered.</p>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {activeBonds.map((bond: any) => (
+                                <div key={bond.id} className="py-3 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-900">
+                                            {bond.staffProfile?.user?.name || bond.staffProfile?.surname || 'Staff'} ({bond.staffProfile?.staffId || 'N/A'})
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                            {bond.trainingType} &bull; Bond Duration: {bond.bondDurationYears} yrs &bull; Expiry: {new Date(bond.bondEndDate).toLocaleDateString()} &bull; Indemnity: ₦{(Number(bond.totalFinancialIndemnity) || 0).toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="xs"
+                                            isLoading={actionLoading}
+                                            onClick={() => handleDischargeBond(bond.id)}
+                                        >
+                                            Discharge Bond
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 

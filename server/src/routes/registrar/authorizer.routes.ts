@@ -8,6 +8,10 @@ import { sendAccountCreatedNotification } from '../../services/email.service';
 import { notifyUser } from '../../controllers/notification.controller';
 import { redisService } from '../../services/redis.service';
 import { cacheInvalidationService } from '../../services/cacheInvalidationService';
+import { ProbationConfirmationService } from '../../services/ProbationConfirmationService';
+import { DisciplinaryPayrollService } from '../../services/DisciplinaryPayrollService';
+import { TrainingBondGuard } from '../../services/TrainingBondGuard';
+import { PostingAllowanceEngine } from '../../services/PostingAllowanceEngine';
 import crypto from 'crypto';
 
 const router = Router();
@@ -169,6 +173,18 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
         const digitalStamp = digitalSignatureRef || `NOUN-REGISTRAR-STAMP-${Date.now().toString(36).toUpperCase()}`;
 
         if (decision === 'APPROVED') {
+            // Spousal Co-Location Conflict Guard
+            if (posting.spousalConflictDetected && !posting.spousalConflictVcApprovalUrl) {
+                return res.status(403).json({
+                    error: 'SPOUSAL_CONFLICT_APPROVAL_REQUIRED',
+                    message: 'SPOUSAL CO-LOCATION RESTRICTION: Husband and wife deployment to the same station requires Vice-Chancellor exemption approval URL before authorization.'
+                });
+            }
+
+            const isMgmt = posting.isManagementInitiated;
+            const staffProfId = posting.staff?.staffProfile?.id || posting.staffId;
+            const allowanceCalc = await PostingAllowanceEngine.calculateAllowance(staffProfId, isMgmt);
+
             await prisma.$transaction(async (tx) => {
                 await tx.transferLog.update({
                     where: { id: posting.id },
@@ -179,9 +195,23 @@ const handleAuthorizePosting = async (req: Request, res: Response) => {
                         authorizedById: authorizerId,
                         authorizedAt: now,
                         authorizationRemarks: remarks || 'Ratified & Authorized by Registrar',
-                        digitalSignatureRef: digitalStamp
+                        digitalSignatureRef: digitalStamp,
+                        resettlementAllowanceAmount: allowanceCalc.resettlementAllowanceAmount,
+                        resettlementBursaryStatus: allowanceCalc.resettlementBursaryStatus
                     }
                 });
+
+                // Also update staffPostings table
+                await tx.staffPosting.updateMany({
+                    where: { id: posting.id },
+                    data: {
+                        status: TransferStatus.AUTHORIZED,
+                        authorizedById: authorizerId,
+                        authorizedAt: now,
+                        resettlementAllowanceAmount: allowanceCalc.resettlementAllowanceAmount,
+                        resettlementBursaryStatus: allowanceCalc.resettlementBursaryStatus
+                    }
+                }).catch(() => {});
 
                 // Apply update to staff profile placement with foreign key validation
                 const profile = posting.staff?.staffProfile || await tx.staffProfile.findFirst({
@@ -1069,6 +1099,183 @@ router.get('/audits', async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to fetch audit dossier', error: error.message });
+    }
+});
+
+/**
+ * GET /api/v1/registrar/confirmations/pending
+ * Executive docket for pending confirmation ratifications (2-year rule, 3-year hard drop)
+ */
+router.get('/confirmations/pending', async (req: Request, res: Response) => {
+    try {
+        const staffList = await prisma.staffProfile.findMany({
+            where: {
+                isDeleted: false,
+                confirmationStatus: {
+                    in: ['ON_PROBATION', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED']
+                }
+            },
+            include: {
+                user: { select: { id: true, name: true, email: true } },
+                unit: { select: { id: true, name: true } },
+                studyCenter: { select: { id: true, name: true } }
+            },
+            orderBy: { probationStartDate: 'asc' }
+        });
+
+        const now = new Date().getTime();
+        const formatted = staffList.map(s => {
+            const start = s.probationStartDate ? new Date(s.probationStartDate).getTime() : now;
+            const elapsedMonths = Math.floor((now - start) / (30.4375 * 24 * 60 * 60 * 1000));
+            return {
+                ...s,
+                monthsOnProbation: elapsedMonths,
+                isDueForAppraisal: elapsedMonths >= 24,
+                isHardDropThresholdExceeded: elapsedMonths >= 36
+            };
+        });
+
+        res.json(formatted);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to fetch pending confirmations', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registrar/confirmations/:staffProfileId/ratify
+ * Registrar ratifies confirmation: CONFIRMED, PROBATION_EXTENDED (6/12 mos), or TERMINATION_RECOMMENDED
+ */
+router.post('/confirmations/:staffProfileId/ratify', async (req: Request, res: Response) => {
+    try {
+        const { staffProfileId } = req.params;
+        const { decision, remarks } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+
+        if (!decision || !['CONFIRMED', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED'].includes(decision)) {
+            return res.status(400).json({ message: "Decision must be 'CONFIRMED', 'PROBATION_EXTENDED', or 'TERMINATION_RECOMMENDED'" });
+        }
+
+        const result = await ProbationConfirmationService.ratifyConfirmation(
+            staffProfileId,
+            authorizerId,
+            decision as any,
+            remarks
+        );
+
+        res.json({
+            message: `Staff appointment successfully updated to ${decision}.`,
+            result
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to ratify confirmation', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registrar/discipline/sanction
+ * Registrar executes Disciplinary Suspension or Interdiction with 50% pay reduction schedule
+ */
+router.post('/discipline/sanction', async (req: Request, res: Response) => {
+    try {
+        const { staffProfileId, sanctionType, remarks } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+
+        if (!staffProfileId || !sanctionType || !['SUSPENDED', 'INTERDICTED'].includes(sanctionType)) {
+            return res.status(400).json({ message: "staffProfileId and sanctionType ('SUSPENDED' | 'INTERDICTED') are required" });
+        }
+
+        const result = await DisciplinaryPayrollService.applySanction(
+            staffProfileId,
+            sanctionType,
+            authorizerId,
+            remarks
+        );
+
+        res.json({
+            message: `Disciplinary sanction ${sanctionType} successfully executed. Statutory 50% salary reduction scheduled.`,
+            result
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to execute disciplinary sanction', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registrar/discipline/verdict
+ * Registrar executes Case Verdict: EXONERATED (refunds arrears batch), DISMISSED/CONVICTED (forfeits), COMPASSIONATE_GROUNDS
+ */
+router.post('/discipline/verdict', async (req: Request, res: Response) => {
+    try {
+        const { staffProfileId, verdict, reference } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+
+        if (!staffProfileId || !verdict || !['EXONERATED', 'DISMISSED', 'CONVICTED', 'COMPASSIONATE_GROUNDS'].includes(verdict)) {
+            return res.status(400).json({ message: "staffProfileId and verdict ('EXONERATED' | 'DISMISSED' | 'CONVICTED' | 'COMPASSIONATE_GROUNDS') are required" });
+        }
+
+        const result = await DisciplinaryPayrollService.resolveVerdict(
+            staffProfileId,
+            verdict,
+            authorizerId,
+            reference
+        );
+
+        res.json({
+            message: `Disciplinary verdict ${verdict} executed successfully.`,
+            result
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to execute disciplinary verdict', error: error.message });
+    }
+});
+
+/**
+ * GET /api/v1/registrar/bonds/active
+ * Registrar views active training bonds
+ */
+router.get('/bonds/active', async (req: Request, res: Response) => {
+    try {
+        const bonds = await prisma.trainingBondRecord.findMany({
+            include: {
+                staffProfile: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
+                        unit: { select: { name: true } },
+                        studyCenter: { select: { name: true } }
+                    }
+                }
+            },
+            orderBy: { bondEndDate: 'asc' }
+        });
+
+        res.json(bonds);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to fetch training bonds', error: error.message });
+    }
+});
+
+/**
+ * POST /api/v1/registrar/bonds/:id/discharge
+ * Registrar authorizes bond discharge
+ */
+router.post('/bonds/:id/discharge', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { remarks } = req.body;
+        // @ts-ignore
+        const authorizerId = req.user?.id;
+
+        const bond = await TrainingBondGuard.dischargeBond(id, authorizerId, remarks);
+
+        res.json({
+            message: 'Training service bond successfully discharged.',
+            bond
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to discharge training bond', error: error.message });
     }
 });
 
