@@ -7,6 +7,7 @@ import { sendAccountCreatedNotification } from '../services/email.service';
 import { redisService } from '../services/redis.service';
 import { calculateNextPromotionMaturity } from '../utils/promotionCalculator';
 import { calculateStatutoryRetirementDate } from '../utils/retirement';
+import { resolveCadre, resolveCadreType } from '../utils/cadreResolver';
 import { notifyUser } from './notification.controller';
 
 // Helper to generate next Staff ID
@@ -101,7 +102,8 @@ export const createStaffFile = async (req: Request, res: Response) => {
         } else if (role && Object.values(Role).includes(role as any)) {
             resolvedRole = role as Role;
         }
-        const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
+        const resolvedCadre = resolveCadre(cadre);
+        const resolvedCadreType = resolveCadreType(cadre);
 
         // @ts-ignore
         const currentUserId = req.user?.id;
@@ -137,7 +139,7 @@ export const createStaffFile = async (req: Request, res: Response) => {
             isDueImmediately: Boolean(isDueImmediately)
         });
 
-        let effectivePassportUrl = passportUrl ? String(passportUrl).trim() : undefined;
+        let effectivePassportUrl = (passportUrl || req.body.passport || req.body.passportPreview) ? String(passportUrl || req.body.passport || req.body.passportPreview).trim() : undefined;
         if (req.file) {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
         }
@@ -168,7 +170,9 @@ export const createStaffFile = async (req: Request, res: Response) => {
                             nin: nin ? String(nin).trim() : undefined,
                             passportUrl: effectivePassportUrl,
                             phone, gender, stateOfOrigin, lga, address,
-                            level, step, cadre: resolvedCadre,
+                            level, step,
+                            cadre: resolvedCadre,
+                            cadreType: resolvedCadreType,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
                             statutoryRetirementDate,
@@ -321,7 +325,8 @@ export const addExistingFile = async (req: Request, res: Response) => {
         } else if (role && Object.values(Role).includes(role as any)) {
             resolvedRole = role as Role;
         }
-        const resolvedCadre = (cadre && Object.values(Cadre).includes(cadre)) ? cadre : undefined;
+        const resolvedCadre = resolveCadre(cadre);
+        const resolvedCadreType = resolveCadreType(cadre);
         // @ts-ignore
         const currentUserId = req.user?.id;
 
@@ -354,7 +359,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
             isDueImmediately: Boolean(isDueImmediately)
         });
 
-        let effectivePassportUrl = passportUrl ? String(passportUrl).trim() : undefined;
+        let effectivePassportUrl = (passportUrl || req.body.passport || req.body.passportPreview) ? String(passportUrl || req.body.passport || req.body.passportPreview).trim() : undefined;
         if (req.file) {
             effectivePassportUrl = await StorageService.uploadFile(req.file);
         }
@@ -377,7 +382,7 @@ export const addExistingFile = async (req: Request, res: Response) => {
                     staffProfile: {
                         create: {
                             surname, otherNames, title,
-                            staffId, rank,
+                            staffId, rank: resolvedRank,
                             highestQualification: highestQualification ? String(highestQualification).trim() : undefined,
                             bankName: bankName ? String(bankName).trim() : undefined,
                             accountNumber: accountNumber ? String(accountNumber).trim() : undefined,
@@ -385,7 +390,9 @@ export const addExistingFile = async (req: Request, res: Response) => {
                             nin: nin ? String(nin).trim() : undefined,
                             passportUrl: effectivePassportUrl,
                             phone, gender, stateOfOrigin, lga, address,
-                            level, step, cadre: resolvedCadre,
+                            level, step,
+                            cadre: resolvedCadre,
+                            cadreType: resolvedCadreType,
                             dateOfBirth: dob,
                             dateOfFirstAppointment: apptDate,
                             statutoryRetirementDate,
@@ -691,7 +698,13 @@ export const getStaffFile = async (req: Request, res: Response) => {
             stateOfOrigin: profile.stateOfOrigin,
             lga: profile.lga,
             address: profile.address,
-            cadre: profile.cadre,
+            passportUrl: profile.passportUrl,
+            nin: profile.nin,
+            bankName: profile.bankName,
+            accountNumber: profile.accountNumber,
+            accountName: profile.accountName,
+            cadre: profile.cadre || (profile.cadreType === 'ACADEMIC' ? 'ACADEMIC' : 'ADMINISTRATIVE'),
+            cadreType: profile.cadreType,
             level: profile.level,
             step: profile.step,
             rank: profile.rank,
@@ -716,7 +729,8 @@ export const getStaffFile = async (req: Request, res: Response) => {
             serviceYearBatch: profile.serviceYearBatch,
             volunteerProgramName: profile.volunteerProgramName,
             createdAt: profile.createdAt,
-            createdBy: profile.createdBy
+            createdBy: profile.createdBy,
+            staffProfile: profile
         });
     } catch (error) {
         console.error('Get Staff File Error', error);

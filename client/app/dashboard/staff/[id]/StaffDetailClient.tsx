@@ -39,6 +39,9 @@ interface StaffDetail {
     name: string;
     email: string;
     role: string;
+    passportUrl?: string | null;
+    cadre?: string | null;
+    cadreType?: string | null;
     pendingRole?: string | null;
     roleChangeStatus?: string | null;
     roleChangeRequestedById?: string | null;
@@ -60,6 +63,7 @@ interface StaffDetail {
         level: string | null;
         step: string | null;
         cadre: string | null;
+        cadreType?: string | null;
         phone: string | null;
         gender: string | null;
         stateOfOrigin: string | null;
@@ -610,9 +614,9 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                 <div className="px-8 pb-8 relative">
                     {/* Avatar Initials or Passport overlay */}
                     <div className="absolute -top-16 left-8 h-28 w-28 bg-white rounded-3xl p-1.5 shadow-lg border border-gray-100 overflow-hidden">
-                        {staff.staffProfile?.passportUrl ? (
+                        {(staff.staffProfile?.passportUrl || staff.passportUrl) ? (
                             <img
-                                src={getImageUrl(staff.staffProfile.passportUrl)}
+                                src={getImageUrl(staff.staffProfile?.passportUrl || staff.passportUrl)}
                                 alt={staff.name}
                                 className="h-full w-full object-cover rounded-2xl"
                                 onError={(e) => {
@@ -623,7 +627,7 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                             />
                         ) : null}
                         <div 
-                            className={`avatar-initials-fallback h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner ${staff.staffProfile?.passportUrl ? 'hidden' : 'flex'}`}
+                            className={`avatar-initials-fallback h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-4xl shadow-inner ${(staff.staffProfile?.passportUrl || staff.passportUrl) ? 'hidden' : 'flex'}`}
                         >
                             {staff.name.charAt(0)}
                         </div>
@@ -673,7 +677,7 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Cadre</p>
-                                <p className="font-bold text-gray-800 text-sm">{staff.staffProfile?.cadre || 'N/A'}</p>
+                                <p className="font-bold text-gray-800 text-sm">{staff.staffProfile?.cadre || staff.cadre || staff.staffProfile?.cadreType || staff.cadreType || 'N/A'}</p>
                             </div>
                         </div>
                     </div>

@@ -14,6 +14,7 @@ import { getCachedQuery, buildDbCacheKey } from '../utils/dbCache';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
 import { getDirectorPlacementScope } from '../services/leaveEntitlement.service';
 import { TrainingBondGuard } from '../services/TrainingBondGuard';
+import { resolveCadre, resolveCadreType } from '../utils/cadreResolver';
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
@@ -476,27 +477,8 @@ export const createStaff = async (req: Request, res: Response) => {
         } else if (role && Object.values(Role).includes(role as any)) {
             resolvedRole = role as Role;
         }
-        let resolvedCadre: Cadre | undefined = undefined;
-        if (cadre) {
-            if (cadre === 'NON_ACADEMIC' || cadre === 'SENIOR') {
-                resolvedCadre = Cadre.ADMINISTRATIVE;
-            } else if (Object.values(Cadre).includes(cadre as any)) {
-                resolvedCadre = cadre as Cadre;
-            }
-        }
-
-        let resolvedCadreType: CadreType = CadreType.SENIOR_ADMIN;
-        if (cadreType && Object.values(CadreType).includes(cadreType as any)) {
-            resolvedCadreType = cadreType as CadreType;
-        } else if (resolvedCadre) {
-            const c = String(resolvedCadre).toUpperCase();
-            if (c === 'ACADEMIC') resolvedCadreType = CadreType.ACADEMIC;
-            else if (c === 'JUNIOR') resolvedCadreType = CadreType.JUNIOR_STAFF;
-            else if (c === 'TECHNICAL') resolvedCadreType = CadreType.TECHNICAL;
-            else if (c === 'MEDICAL') resolvedCadreType = CadreType.MEDICAL;
-            else if (c === 'SECURITY') resolvedCadreType = CadreType.SECURITY;
-            else resolvedCadreType = CadreType.SENIOR_ADMIN;
-        }
+        const resolvedCadre = resolveCadre(cadre);
+        const resolvedCadreType = resolveCadreType(cadre);
 
         const effectiveGradeLevel = currentGradeLevel || level || (resolvedCadreType === CadreType.ACADEMIC ? 'CONUASS 04' : 'CONTISS 08');
         const parsedFirstAppt = dateOfFirstAppointment ? new Date(dateOfFirstAppointment) : null;
@@ -813,31 +795,14 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
             isDueImmediately, registryOverride, overrideReason
         } = req.body;
 
-        let resolvedCadre: Cadre | undefined = undefined;
-        if (cadre) {
-            if (cadre === 'NON_ACADEMIC' || cadre === 'SENIOR') {
-                resolvedCadre = Cadre.ADMINISTRATIVE;
-            } else if (Object.values(Cadre).includes(cadre as any)) {
-                resolvedCadre = cadre as Cadre;
-            }
-        }
+        const resolvedCadre = cadre !== undefined ? resolveCadre(cadre) : undefined;
+        const resolvedCadreType = (cadreType !== undefined || cadre !== undefined) ? resolveCadreType(cadre || cadreType) : undefined;
 
-        let resolvedCadreType: CadreType | undefined = undefined;
-        if (cadreType && Object.values(CadreType).includes(cadreType as any)) {
-            resolvedCadreType = cadreType as CadreType;
-        } else if (resolvedCadre) {
-            const c = String(resolvedCadre).toUpperCase();
-            if (c === 'ACADEMIC') resolvedCadreType = CadreType.ACADEMIC;
-            else if (c === 'JUNIOR') resolvedCadreType = CadreType.JUNIOR_STAFF;
-            else if (c === 'TECHNICAL') resolvedCadreType = CadreType.TECHNICAL;
-            else if (c === 'MEDICAL') resolvedCadreType = CadreType.MEDICAL;
-            else if (c === 'SECURITY') resolvedCadreType = CadreType.SECURITY;
-            else resolvedCadreType = CadreType.SENIOR_ADMIN;
-        }
-
-        let passportUrl = undefined;
+        let effectivePassportUrl = (req.body.passportUrl || req.body.passport || req.body.passportPreview)
+            ? String(req.body.passportUrl || req.body.passport || req.body.passportPreview).trim()
+            : undefined;
         if (file) {
-            passportUrl = await StorageService.uploadFile(file);
+            effectivePassportUrl = await StorageService.uploadFile(file);
         }
 
         let roleChangeRequested = false;
@@ -1033,7 +998,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 accountName: accountName ? String(accountName).trim() : undefined,
                 nin: nin ? String(nin).trim() : undefined,
                 gender,
-                passportUrl,
+                passportUrl: effectivePassportUrl,
                 rank: targetRank || rank || undefined,
                 dateOfBirth: dob,
                 dateOfFirstAppointment: apptDate,
@@ -1097,7 +1062,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
                 status: finalStatus,
                 isDeleted: finalIsDeleted,
                 deletedAt: finalDeletedAt,
-                ...(passportUrl ? { passportUrl } : {}),
+                ...(effectivePassportUrl ? { passportUrl: effectivePassportUrl } : {}),
                 ...(isAdmin ? {
                     unitId: unitId !== undefined ? (unitId === '' || unitId === 'null' ? null : unitId) : undefined,
                     centerId: centerId !== undefined ? (centerId === '' || centerId === 'null' ? null : centerId) : undefined
@@ -1176,7 +1141,7 @@ export const updateStaff = async (req: AuthRequest, res: Response) => {
 
         res.json({
             message: successMessage,
-            passportUrl,
+            passportUrl: effectivePassportUrl,
             roleChangeRequested,
             roleChangeDirectlyAuthorized,
             pendingRole: roleChangeRequested ? role : null,

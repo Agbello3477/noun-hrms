@@ -38,7 +38,7 @@ export default function BioDataTab({ staff }: { staff: any }) {
                         <User className="text-nounGreen" size={20} /> Personal Information
                     </h3>
                     <div className="space-y-4">
-                        {(profile.passportUrl || staff.passportUrl) && (
+                        {(profile.passportUrl || staff.passportUrl || staff.staffProfile?.passportUrl) && (
                             <div className="grid grid-cols-3 gap-2 border-b pb-3 items-center">
                                 <span className="text-gray-500 text-sm flex items-center gap-1">
                                     <Camera size={14} className="text-nounGreen" /> Passport Photo
@@ -46,7 +46,7 @@ export default function BioDataTab({ staff }: { staff: any }) {
                                 <div className="col-span-2">
                                     <div className="h-16 w-16 rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-slate-50">
                                         <img
-                                            src={getImageUrl(profile.passportUrl || staff.passportUrl)}
+                                            src={getImageUrl(profile.passportUrl || staff.passportUrl || staff.staffProfile?.passportUrl)}
                                             alt={staff.name}
                                             className="h-full w-full object-cover"
                                             onError={(e) => {
@@ -112,7 +112,7 @@ export default function BioDataTab({ staff }: { staff: any }) {
                         </div>
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Cadre</span>
-                            <span className="col-span-2 font-medium text-gray-900">{staff.cadre || 'N/A'}</span>
+                            <span className="col-span-2 font-medium text-gray-900">{profile.cadre || staff.cadre || profile.cadreType || staff.cadreType || 'N/A'}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 border-b pb-3">
                             <span className="text-gray-500 text-sm">Level/Step</span>
