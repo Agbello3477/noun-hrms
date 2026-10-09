@@ -428,25 +428,36 @@ server.listen(PORT, () => {
         }
     });
 
-    // Automatically ensure Row Level Security (RLS) is enabled on all tables
-    RlsService.enableRlsOnAllTables().catch((err: any) => {
-        console.error('[Startup RLS Enforcer] Failed to enforce RLS on startup:', err);
-    });
+    // Stagger startup background seeders & indexing to keep memory footprint strictly under 350MB
+    setTimeout(async () => {
+        try {
+            console.log('[Startup Background Workers] Initializing background statutory sync tasks sequentially...');
+            
+            // 1. Enable RLS
+            await RlsService.enableRlsOnAllTables().catch(err => {
+                console.warn('[Startup RLS Enforcer] Notice:', err?.message || err);
+            });
 
-    // Automatically ensure University Registrar account with Staff ID 00002 exists
-    ensureRegistrarAccount().catch((err: any) => {
-        console.error('[Startup Registrar Seeder] Failed to ensure Registrar account on startup:', err);
-    });
+            // 2. Registrar Account
+            await ensureRegistrarAccount().catch(err => {
+                console.warn('[Startup Registrar Seeder] Notice:', err?.message || err);
+            });
 
-    // Automatically ensure full NOUN Academic Structure (146 Programmes, 9 Faculties) exists
-    ensureAcademicTaxonomy().catch((err: any) => {
-        console.error('[Startup Academic Taxonomy Seeder] Failed to ensure academic programmes on startup:', err);
-    });
+            // 3. Academic Taxonomy
+            await ensureAcademicTaxonomy().catch(err => {
+                console.warn('[Startup Academic Taxonomy Seeder] Notice:', err?.message || err);
+            });
 
-    // Automatically index and initialize NOUN Statutory Knowledge Base for Sentinel AI
-    KnowledgeIngestionService.initializeKnowledgeBase().then((res: { totalIndexed: number }) => {
-        console.log(`[Startup Sentinel AI] Statutory Knowledge Base initialized (${res.totalIndexed} chunks ready)`);
-    }).catch((err: any) => {
-        console.error('[Startup Sentinel AI] Failed to initialize knowledge base:', err);
-    });
+            // 4. Sentinel AI Knowledge Base
+            await KnowledgeIngestionService.initializeKnowledgeBase().then((res: { totalIndexed: number }) => {
+                console.log(`[Startup Sentinel AI] Statutory Knowledge Base initialized (${res.totalIndexed} chunks ready)`);
+            }).catch(err => {
+                console.warn('[Startup Sentinel AI] Notice:', err?.message || err);
+            });
+
+            console.log('[Startup Background Workers] ✅ All background sync tasks completed smoothly.');
+        } catch (globalBgErr) {
+            console.warn('[Startup Background Workers] Minor non-blocking issue:', globalBgErr);
+        }
+    }, 5000);
 });

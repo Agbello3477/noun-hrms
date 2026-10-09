@@ -5,10 +5,14 @@ services:
     plan: free
     rootDir: server
     buildCommand: npm install && npx prisma generate && npx prisma db push --accept-data-loss && npm run build
-    startCommand: npm start
+    startCommand: node --max-old-space-size=350 dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=350
+      - key: AUTO_DB_SYNC
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
