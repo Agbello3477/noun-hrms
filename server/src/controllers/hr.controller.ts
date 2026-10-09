@@ -646,6 +646,24 @@ export const getJobFiles = async (req: Request, res: Response) => {
                         fileRequests: {
                             where: { status: 'APPROVED' }
                         },
+                        fileRequisitions: {
+                            where: {
+                                status: { in: ['AUTHORIZED_BY_REGISTRAR', 'DISPATCHED_RELEASED'] }
+                            },
+                            select: {
+                                id: true,
+                                requisitionNumber: true,
+                                status: true,
+                                requesterDepartment: true,
+                                purposeOfRequest: true,
+                                urgencyLevel: true,
+                                requestedFileFormat: true,
+                                expectedReturnDate: true,
+                                authorizedAt: true,
+                                dispatchedAt: true,
+                                requester: { select: { id: true, name: true, email: true, role: true } }
+                            }
+                        },
                         leaves: {
                             where: { status: 'APPROVED' }
                         }
@@ -679,7 +697,25 @@ export const getStaffFile = async (req: Request, res: Response) => {
                 user: true,
                 unit: true,
                 studyCenter: true,
-                createdBy: { select: { name: true } }
+                createdBy: { select: { name: true } },
+                fileRequisitions: {
+                    where: {
+                        status: { in: ['AUTHORIZED_BY_REGISTRAR', 'DISPATCHED_RELEASED'] }
+                    },
+                    select: {
+                        id: true,
+                        requisitionNumber: true,
+                        status: true,
+                        requesterDepartment: true,
+                        purposeOfRequest: true,
+                        urgencyLevel: true,
+                        requestedFileFormat: true,
+                        expectedReturnDate: true,
+                        authorizedAt: true,
+                        dispatchedAt: true,
+                        requester: { select: { id: true, name: true, email: true, role: true } }
+                    }
+                }
             }
         });
 

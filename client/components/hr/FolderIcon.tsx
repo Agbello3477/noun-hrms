@@ -23,9 +23,9 @@ export const FolderIcon = ({ staffName, staffId, createdAt, createdBy, onClick, 
         badgeClass = "text-red-800 bg-red-100/60";
         hoverBgClass = "hover:bg-red-50";
     } else if (color === 'yellow') {
-        folderClass = "text-yellow-400 fill-yellow-250 group-hover:text-yellow-500 group-hover:fill-yellow-300 transition-colors";
-        badgeClass = "text-yellow-900 bg-yellow-100/60";
-        hoverBgClass = "hover:bg-yellow-50";
+        folderClass = "text-amber-400 fill-amber-200 group-hover:text-amber-500 group-hover:fill-amber-300 transition-colors";
+        badgeClass = "text-amber-900 bg-amber-100 font-bold border border-amber-300";
+        hoverBgClass = "hover:bg-amber-50/70";
     }
 
     return (

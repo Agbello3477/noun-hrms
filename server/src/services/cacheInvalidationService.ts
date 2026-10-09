@@ -158,11 +158,14 @@ export class CacheInvalidationService {
             'tag:file_requisitions',
             'tag:pending_file_docket',
             'tag:registry_dockets',
-            'tag:dashboard_kpis'
+            'tag:dashboard_kpis',
+            'tag:staff_roster'
         ]);
         await redisService.clearPattern('file-requests:*');
         await redisService.clearPattern('registry:*');
         await redisService.clearPattern('registrar:*');
+        await redisService.clearPattern('staff:*');
+        await redisService.clearPattern('hr:*');
     }
 
     /**

@@ -24,7 +24,8 @@ import {
   History,
   Send,
   Eye,
-  X
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { RequisitionStatusStepper, FileRequisitionStatus } from '@/components/fileRequisition/RequisitionStatusStepper';
 import { LodgeRequisitionModal } from '@/components/fileRequisition/LodgeRequisitionModal';
@@ -67,6 +68,12 @@ export default function RegistryFileRequestsGatewayPage() {
   const [trackingNotes, setTrackingNotes] = useState('');
   const [isSubmittingDispatch, setIsSubmittingDispatch] = useState(false);
   const [dispatchError, setDispatchError] = useState('');
+
+  // Return Action Form State
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnNotes, setReturnNotes] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [returnError, setReturnError] = useState('');
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -173,6 +180,39 @@ export default function RegistryFileRequestsGatewayPage() {
       setDispatchError(err.response?.data?.message || 'Failed to dispatch file.');
     } finally {
       setIsSubmittingDispatch(false);
+    }
+  };
+
+  const handleOpenReturn = (req: any) => {
+    setSelectedReq(req);
+    setReturnNotes('');
+    setReturnError('');
+    setIsReturnModalOpen(true);
+  };
+
+  const submitReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReq) return;
+
+    setIsSubmittingReturn(true);
+    setReturnError('');
+    try {
+      const res = await api.post(`/api/v1/registry/file-requests/${selectedReq.id}/return`, {
+        returnNotes: returnNotes.trim() || undefined,
+      });
+
+      if (res.data?.success) {
+        setIsReturnModalOpen(false);
+        setSelectedReq(null);
+        await fetchAllData();
+        alert('Personnel file returned to Vault and custody docket closed successfully.');
+      } else {
+        setReturnError(res.data?.message || 'Return logging failed.');
+      }
+    } catch (err: any) {
+      setReturnError(err.response?.data?.message || err.response?.data?.error || 'Failed to log file return.');
+    } finally {
+      setIsSubmittingReturn(false);
     }
   };
 
@@ -608,6 +648,16 @@ export default function RegistryFileRequestsGatewayPage() {
                                 Release File
                               </button>
                             )}
+                            {(req.status === 'DISPATCHED_RELEASED' || req.status === 'AUTHORIZED_BY_REGISTRAR') && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReturn(req)}
+                                className="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition flex items-center gap-1"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Return File
+                              </button>
+                            )}
                             {req.dispatchReceiptNumber && (
                               <button
                                 type="button"
@@ -882,6 +932,87 @@ export default function RegistryFileRequestsGatewayPage() {
                   className="px-4 py-2 rounded-xl bg-emerald-700 font-bold text-white shadow-xs hover:bg-emerald-800"
                 >
                   {isSubmittingDispatch ? 'Releasing...' : 'Issue Gatepass & Dispatch File'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Return File Modal */}
+      {isReturnModalOpen && selectedReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-amber-200 bg-amber-50 -mx-6 -mt-6 px-6 py-4 rounded-t-2xl mb-4">
+              <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-amber-700" />
+                Receive &amp; Archive Returned Personnel File
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsReturnModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitReturn} className="space-y-4 text-xs">
+              {returnError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{returnError}</span>
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <div><span className="text-slate-500">Requisition:</span> <strong className="font-mono">{selectedReq.requisitionNumber}</strong></div>
+                <div><span className="text-slate-500">Subject Staff:</span> <strong className="text-slate-800">{selectedReq.staffProfile?.user?.name || 'Staff'}</strong></div>
+                {selectedReq.registryFolioReference && (
+                  <div><span className="text-slate-500">Vault Folio:</span> <strong className="font-mono text-emerald-800">{selectedReq.registryFolioReference}</strong></div>
+                )}
+                {selectedReq.dispatchReceiptNumber && (
+                  <div><span className="text-slate-500">Receipt:</span> <strong className="font-mono text-blue-800">{selectedReq.dispatchReceiptNumber}</strong></div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Vault Return Notes &amp; Custody Verification Remarks
+                </label>
+                <textarea
+                  rows={3}
+                  value={returnNotes}
+                  onChange={(e) => setReturnNotes(e.target.value)}
+                  placeholder="Verify folder contents intact and note vault shelf/cabinet location..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-amber-500 outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReturnModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="px-4 py-2 rounded-xl bg-amber-600 font-bold text-white shadow-xs hover:bg-amber-700 transition flex items-center gap-1.5"
+                >
+                  {isSubmittingReturn ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Logging Return...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Confirm Return to Vault
+                    </>
+                  )}
                 </button>
               </div>
             </form>

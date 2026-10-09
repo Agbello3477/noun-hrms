@@ -101,7 +101,7 @@ router.post(
 // ─── TIER 5: RETURN & RE-ARCHIVING ───────────────────────────────────────────
 router.post(
   '/:id/return',
-  requireRole(REGISTRY_ALLOWED_ROLES),
+  requireRole([...REGISTRY_ALLOWED_ROLES, ...AUTHORIZED_FILE_REQUISITION_ROLES] as any),
   returnRequisition
 );
 

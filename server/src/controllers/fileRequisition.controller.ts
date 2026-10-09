@@ -919,10 +919,13 @@ export async function returnRequisition(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: 'File requisition not found.' });
     }
 
-    if (requisition.status !== FileRequisitionStatus.DISPATCHED_RELEASED) {
+    if (
+      requisition.status !== FileRequisitionStatus.DISPATCHED_RELEASED &&
+      requisition.status !== FileRequisitionStatus.AUTHORIZED_BY_REGISTRAR
+    ) {
       return res.status(400).json({
         success: false,
-        error: `Cannot log return for requisition in status: ${requisition.status}. Must be DISPATCHED_RELEASED.`,
+        error: `Cannot log return for requisition in status: ${requisition.status}. Must be AUTHORIZED_BY_REGISTRAR or DISPATCHED_RELEASED.`,
       });
     }
 

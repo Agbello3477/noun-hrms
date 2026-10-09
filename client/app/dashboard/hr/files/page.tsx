@@ -35,6 +35,7 @@ interface FileUser {
         studyCenter?: { name: string };
         queries?: any[];
         fileRequests?: any[];
+        fileRequisitions?: any[];
     };
 }
 
@@ -334,11 +335,14 @@ export default function FileRegistryPage() {
                         let folderColor: 'blue' | 'yellow' | 'red' = 'blue';
                         const isPendingClearance = file.staffProfile?.accountStatus === 'PENDING_REGISTRAR_CLEARANCE';
                         const hasOpenQuery = file.staffProfile?.queries && file.staffProfile.queries.length > 0;
-                        const hasActiveTransfer = file.staffProfile?.fileRequests && file.staffProfile.fileRequests.length > 0;
+                        const hasActiveRequisition = Boolean(
+                            (file.staffProfile?.fileRequisitions && file.staffProfile.fileRequisitions.length > 0) ||
+                            (file.staffProfile?.fileRequests && file.staffProfile.fileRequests.length > 0)
+                        );
 
                         if (hasOpenQuery) {
                             folderColor = 'red';
-                        } else if (hasActiveTransfer || isPendingClearance) {
+                        } else if (hasActiveRequisition || isPendingClearance) {
                             folderColor = 'yellow';
                         }
 
@@ -359,6 +363,15 @@ export default function FileRegistryPage() {
                                     designation={designation}
                                     onClick={() => setSelectedStaffFileId(file.id)}
                                 />
+
+                                {hasActiveRequisition && !isPendingClearance && (
+                                    <div className="mt-1 flex flex-col items-center gap-1 w-full px-2">
+                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-center flex items-center justify-center gap-1 shadow-xs">
+                                            <AlertTriangle size={10} className="text-amber-700" />
+                                            Requisitioned (Out in Custody)
+                                        </span>
+                                    </div>
+                                )}
 
                                 {isPendingClearance && (
                                     <div className="mt-1 flex flex-col items-center gap-1 w-full px-2">
