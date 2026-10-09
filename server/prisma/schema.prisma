@@ -2315,4 +2315,42 @@ model HrmsKnowledgeChunk {
   @@map("hrms_knowledge_chunks")
 }
 
+model AiLearnedInsight {
+  id                    String   @id @default(uuid())
+  topic                 String   // e.g. "LEAVE_CARRYOVER", "PROMOTION_WAITING_PERIOD", "WORKLOAD_REBATES", "DOCKET_ROUTING"
+  triggerPattern        String   // Search keywords or regex pattern
+  learnedInsight        String   @db.Text // Refined intelligent answer or policy synthesis
+  statutorySource       String?  // Optional statutory anchor reference
+  positiveFeedbackCount Int      @default(0)
+  negativeFeedbackCount Int      @default(0)
+  confidenceScore       Float    @default(0.85) // Dynamic learning weight (0.0 - 1.0)
+  sourceUserId          String?
+  sourceUserRole        String?
+  correctionHistory     Json?    // Array of user corrections / refinements
+  isInstitutionalRule   Boolean  @default(false) // Whether verified by Registry/Executive
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([topic])
+  @@index([confidenceScore])
+  @@map("ai_learned_insights")
+}
+
+model AiUserMemory {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  resolvedSalutation  String?  // e.g. "Prof. Bello", "Dr. Adams", "Registrar"
+  preferredTitle      String?  // User-specified or rank-derived title
+  dossierContext      Json?    // Remembers active application references, promotion maturity year, leave balance snapshot
+  userPreferences     Json?    // Conciseness preference, favorite modules, topics
+  interactionCount    Int      @default(0)
+  lastInteractionAt   DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@map("ai_user_memories")
+}
+
+
 

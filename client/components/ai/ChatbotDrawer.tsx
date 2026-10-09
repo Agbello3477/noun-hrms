@@ -13,7 +13,12 @@ import {
   BookOpen,
   ChevronDown,
   ShieldCheck,
-  Compass
+  Compass,
+  ThumbsUp,
+  ThumbsDown,
+  BrainCircuit,
+  Maximize2,
+  CheckCircle2
 } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,6 +32,9 @@ interface Message {
   actionCard?: ActionCardProps['card'];
   citations?: string[];
   suggestedFollowUps?: string[];
+  learnedInsightApplied?: boolean;
+  userQueryOrigin?: string;
+  feedbackGiven?: 'THUMBS_UP' | 'THUMBS_DOWN' | 'CORRECTION';
   timestamp: string;
 }
 
@@ -42,16 +50,31 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
+  const [correctionModalMsgId, setCorrectionModalMsgId] = useState<string | null>(null);
+  const [correctionText, setCorrectionText] = useState('');
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Initialize initial greeting and suggestion chips based on user role
+  // Initialize initial greeting with respectful salutation
   useEffect(() => {
     if (messages.length === 0) {
+      const roleStr = String(user?.role || 'STAFF');
+      const nameStr = user?.name || 'Colleague';
+      
+      let title = 'Colleague';
+      if (roleStr === 'REGISTRAR') title = 'Registrar';
+      else if (roleStr === 'VICE_CHANCELLOR') title = 'Vice-Chancellor';
+      else if (roleStr === 'DEAN') title = 'Dean';
+      else if (roleStr === 'HOD') title = 'HOD';
+      else if (roleStr === 'BURSAR') title = 'Bursar';
+      else if (nameStr.toLowerCase().includes('prof')) title = 'Prof.';
+      else if (nameStr.toLowerCase().includes('dr')) title = 'Dr.';
+
       const defaultGreeting: Message = {
         id: 'initial-greeting',
         sender: 'assistant',
-        text: `Welcome to **NOUN-Sentinel AI**, your enterprise knowledge assistant and administrative co-pilot.\n\nI am grounded in the **Senior & Junior Staff Conditions of Service (June 2024)**, the **Updated Scheme of Service (May 2024)**, and institutional HRMS workflows.\n\nHow may I assist you today?`,
+        text: `Good day, **${title} ${nameStr}**.\n\nWelcome to **NOUN-Sentinel AI**, your enterprise administrative co-pilot.\n\nBy default, I provide **laser-specific answers** and **proactive institutional recommendations**. (Ask for a *"detailed breakdown"* anytime you need the full step-by-step statutory citations).\n\nHow may I assist you today?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages([defaultGreeting]);
@@ -65,7 +88,6 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
         }
       })
       .catch(() => {
-        // Fallback default suggestions
         const role = String(user?.role || 'STAFF');
         if (role === 'REGISTRY_ADMIN' || role === 'HR_ADMIN') {
           setSuggestedPrompts([
@@ -89,7 +111,7 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
       });
   }, [user]);
 
-  // Auto-scroll to bottom of message list
+  // Auto-scroll to bottom
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,13 +133,8 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
         setIsListening(false);
       };
 
-      rec.onerror = () => {
-        setIsListening(false);
-      };
-
-      rec.onend = () => {
-        setIsListening(false);
-      };
+      rec.onerror = () => setIsListening(false);
+      rec.onend = () => setIsListening(false);
 
       recognitionRef.current = rec;
     }
@@ -176,6 +193,8 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
         actionCard: data.actionCard,
         citations: data.citations,
         suggestedFollowUps: data.suggestedFollowUps,
+        learnedInsightApplied: data.learnedInsightApplied,
+        userQueryOrigin: query,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -194,6 +213,35 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFeedback = async (msgId: string, type: 'THUMBS_UP' | 'THUMBS_DOWN' | 'CORRECTION', correction?: string) => {
+    const targetMsg = messages.find((m) => m.id === msgId);
+    if (!targetMsg) return;
+
+    try {
+      await api.post('/api/v1/ai/feedback', {
+        query: targetMsg.userQueryOrigin || targetMsg.text.slice(0, 100),
+        copilotResponse: targetMsg.text,
+        feedbackType: type,
+        userCorrection: correction
+      });
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, feedbackGiven: type } : m))
+      );
+    } catch {
+      // Graceful ignore
+    }
+  };
+
+  const submitCorrection = async () => {
+    if (!correctionModalMsgId || !correctionText.trim()) return;
+    setIsSubmittingCorrection(true);
+    await handleFeedback(correctionModalMsgId, 'CORRECTION', correctionText);
+    setIsSubmittingCorrection(false);
+    setCorrectionModalMsgId(null);
+    setCorrectionText('');
   };
 
   const clearChat = () => {
@@ -228,7 +276,7 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold tracking-tight text-white">NOUN-Sentinel AI</h3>
                 <span className="rounded-full bg-[#DAA520]/20 px-2 py-0.5 text-[10px] font-extrabold text-[#DAA520] border border-[#DAA520]/30 uppercase">
-                  Zero-Trust
+                  Self-Learning
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-medium">Enterprise Policy & Administrative Co-Pilot</p>
@@ -253,10 +301,16 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
           </div>
         </div>
 
-        {/* Security & Grounding Banner */}
-        <div className="flex items-center gap-2 border-b border-amber-200/60 bg-amber-50/70 px-4 py-2 text-[11px] font-medium text-amber-900">
-          <ShieldCheck className="h-3.5 w-3.5 text-amber-700 flex-shrink-0" />
-          <span>Grounded in NOUN Conditions of Service (2024) & Scheme of Service.</span>
+        {/* Security & Self-Learning Grounding Banner */}
+        <div className="flex items-center justify-between border-b border-amber-200/60 bg-amber-50/80 px-4 py-2 text-[11px] font-medium text-amber-900">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5 text-amber-700 flex-shrink-0" />
+            <span>Grounded in NOUN Conditions of Service (2024)</span>
+          </div>
+          <div className="flex items-center gap-1 text-slate-500 text-[10px]">
+            <BrainCircuit className="h-3 w-3 text-[#002D62]" />
+            <span>Adaptive Memory Active</span>
+          </div>
         </div>
 
         {/* Message Thread */}
@@ -272,7 +326,7 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
                 </div>
               )}
 
-              <div className={`max-w-[85%] space-y-1.5 ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`max-w-[88%] space-y-1.5 ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
                 <div
                   className={`rounded-2xl px-4 py-3 text-sm shadow-sm leading-relaxed ${
                     msg.sender === 'user'
@@ -280,7 +334,15 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
                       : 'bg-white text-slate-900 border border-slate-200/80 rounded-tl-none'
                   }`}
                 >
-                  {/* Message body with basic markdown line formatting */}
+                  {/* Learned Insight Badge */}
+                  {msg.learnedInsightApplied && (
+                    <div className="mb-2 inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                      <BrainCircuit className="h-3 w-3" />
+                      <span>Enhanced with Learned Institutional Memory</span>
+                    </div>
+                  )}
+
+                  {/* Message body */}
                   <div className="space-y-2 whitespace-pre-wrap">
                     {msg.text.split('\n\n').map((para, pIdx) => {
                       if (para.startsWith('• ') || para.startsWith('* ') || para.startsWith('- ')) {
@@ -308,10 +370,59 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
                   {msg.actionCard && (
                     <ChatbotActionCard card={msg.actionCard} />
                   )}
+
+                  {/* Expand Details Trigger Button */}
+                  {msg.sender === 'assistant' && msg.text.includes('Need the full step-by-step') && (
+                    <div className="mt-3 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => handleSendMessage(`Provide the complete step-by-step detailed breakdown for: ${msg.userQueryOrigin || 'this inquiry'}`)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 hover:bg-[#002D62] hover:text-white px-3 py-1.5 text-xs font-semibold text-[#002D62] transition-colors"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        <span>Expand Full Step-by-Step Breakdown</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className={`text-[10px] text-slate-400 px-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
-                  {msg.timestamp}
+                {/* Footer metadata and feedback / self-learning buttons */}
+                <div className={`flex items-center gap-3 text-[10px] text-slate-400 px-1 ${msg.sender === 'user' ? 'justify-end' : 'justify-between'}`}>
+                  <span>{msg.timestamp}</span>
+
+                  {msg.sender === 'assistant' && msg.id !== 'initial-greeting' && (
+                    <div className="flex items-center gap-1.5">
+                      {msg.feedbackGiven ? (
+                        <span className="flex items-center gap-1 text-emerald-600 font-medium text-[10px]">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>Feedback recorded & learned</span>
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleFeedback(msg.id, 'THUMBS_UP')}
+                            title="Accurate & helpful"
+                            className="p-1 hover:text-emerald-600 rounded transition-colors"
+                          >
+                            <ThumbsUp className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => handleFeedback(msg.id, 'THUMBS_DOWN')}
+                            title="Needs improvement"
+                            className="p-1 hover:text-rose-600 rounded transition-colors"
+                          >
+                            <ThumbsDown className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => setCorrectionModalMsgId(msg.id)}
+                            title="Teach AI / Suggest institutional correction"
+                            className="hover:text-[#002D62] underline ml-1 font-medium transition-colors"
+                          >
+                            Teach / Correct
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -407,6 +518,54 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
         </div>
 
       </div>
+
+      {/* Teach AI / Suggest Correction Modal */}
+      {correctionModalMsgId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-4 border border-slate-200 animate-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#002D62]">
+                <BrainCircuit className="h-5 w-5 text-[#DAA520]" />
+                <h4 className="font-bold text-base">Teach NOUN-Sentinel AI</h4>
+              </div>
+              <button onClick={() => setCorrectionModalMsgId(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Help the AI co-pilot learn institutional nuances or recent departmental resolutions. Your correction will be indexed into its continuous adaptive memory.
+            </p>
+
+            <textarea
+              rows={3}
+              value={correctionText}
+              onChange={(e) => setCorrectionText(e.target.value)}
+              placeholder="Provide the exact institutional rule or clarified handling..."
+              className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#002D62] focus:outline-none focus:ring-1 focus:ring-[#002D62]"
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCorrectionModalMsgId(null)}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <Button
+                size="sm"
+                onClick={submitCorrection}
+                isLoading={isSubmittingCorrection}
+                disabled={!correctionText.trim()}
+                className="bg-[#002D62] text-white hover:bg-[#001f44] text-xs font-bold"
+              >
+                Save to Learned Memory
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

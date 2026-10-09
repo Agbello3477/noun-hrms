@@ -1,7 +1,9 @@
-import { Role } from '@prisma/client';
+import { Role, Cadre } from '@prisma/client';
 import { KnowledgeIngestionService, RetrievedChunk } from './knowledgeIngestion.service';
 import { AiToolsService, ActionCardData } from './aiTools.service';
 import { SecurityGuardService, SecurityScopeException } from './securityGuard.service';
+import { AiPersonalityService, UserContext, ResolvedSalutation } from './aiPersonality.service';
+import { AiLearningEngineService } from './aiLearningEngine.service';
 import { SentinelSDK } from '../../sentinel-sdk';
 
 export interface ChatMessage {
@@ -10,6 +12,7 @@ export interface ChatMessage {
   actionCard?: ActionCardData;
   citations?: string[];
   suggestedFollowUps?: string[];
+  learnedInsightApplied?: boolean;
 }
 
 export interface CopilotResponse {
@@ -19,14 +22,26 @@ export interface CopilotResponse {
   suggestedFollowUps?: string[];
   toolsInvoked?: string[];
   durationMs: number;
+  salutation?: ResolvedSalutation;
+  learnedInsightApplied?: boolean;
 }
 
 export class AiCopilotService {
   /**
-   * Main chat completion processor with deterministic tool dispatch, statutory RAG, and Zero-Trust security
+   * Main chat completion processor with deterministic tool dispatch, statutory RAG,
+   * continuous self-learning memory, and respectful persona intelligence.
    */
   public static async processChat(params: {
-    user: { id: string; role: Role | string; assignedUnitId?: string | null; name?: string };
+    user: {
+      id: string;
+      role: Role | string;
+      assignedUnitId?: string | null;
+      name?: string | null;
+      rank?: string | null;
+      cadre?: Cadre | string | null;
+      level?: string | null;
+      isPrincipalOfficer?: boolean;
+    };
     prompt: string;
     conversationHistory?: ChatMessage[];
     clientIp?: string;
@@ -61,13 +76,24 @@ export class AiCopilotService {
     const lower = cleanPrompt.toLowerCase();
     const toolsInvoked: string[] = [];
 
-    let responseText = '';
+    // 2. Personality & Salutation Engine
+    const salutation = AiPersonalityService.resolveSalutation(user);
+    const isDetailed = AiPersonalityService.isDetailedRequest(cleanPrompt);
+
+    // 3. Continuous Self-Learning Engine (Retrieve Adaptive Insights)
+    const learnedInsights = await AiLearningEngineService.getRelevantInsights(cleanPrompt, 1);
+    const learnedInsightApplied = learnedInsights.length > 0;
+
+    let directAnswer = '';
+    let detailsText: string | undefined;
+    let outOfTheBoxTip: string | undefined;
     let actionCard: ActionCardData | undefined;
     let citations: string[] | undefined;
     let suggestedFollowUps: string[] = [];
+    let currentTopic = 'GENERAL_POLICY';
 
     try {
-      // 2. Intent Routing & Deterministic Function Calling
+      // 4. Intent Routing & Deterministic Function Calling
       const isPolicyQuery = (
         lower.includes('what are the rules') ||
         lower.includes('what is the policy') ||
@@ -80,7 +106,7 @@ export class AiCopilotService {
         lower.includes('nursing mothers')
       );
 
-      // Intent A: Track Applications (Personal)
+      // Intent A: Track Applications (Personal Dossier)
       if (
         !isPolicyQuery && (
           lower.includes('track') ||
@@ -89,14 +115,24 @@ export class AiCopilotService {
           lower.includes('pending request')
         )
       ) {
+        currentTopic = 'APPLICATION_TRACKING';
         toolsInvoked.push('trackMyApplications');
         const toolRes = await AiToolsService.trackMyApplications(user);
-        responseText = toolRes.message;
         actionCard = toolRes.actionCard;
+
+        if (toolRes.applicationsCount > 0) {
+          directAnswer = `Here is your active application status:\n• ${toolRes.message.split('\n\n')[0] || toolRes.message}`;
+          detailsText = toolRes.message;
+          outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('APPLICATION_DELAY', { apps: toolRes.actionCard?.data?.items });
+        } else {
+          directAnswer = toolRes.message;
+          outOfTheBoxTip = `You can submit a new statutory application anytime through the Portal Applications desk.`;
+        }
+
         suggestedFollowUps = [
           'What is my current leave balance?',
           'Check my promotion eligibility',
-          'How do institutional applications get approved?'
+          'How do institutional applications get approved in NOUN?'
         ];
       }
 
@@ -110,10 +146,14 @@ export class AiCopilotService {
           (lower.includes('how many') && lower.includes('leave') && lower.includes('i have'))
         )
       ) {
+        currentTopic = 'LEAVE_MANAGEMENT';
         toolsInvoked.push('getMyLeaveBalance');
         const toolRes = await AiToolsService.getMyLeaveBalance(user);
-        responseText = toolRes.message;
         actionCard = toolRes.actionCard;
+
+        directAnswer = toolRes.message.split('\n\n')[0] || toolRes.message;
+        detailsText = toolRes.message;
+        outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('LEAVE_OPTIMIZATION', null);
 
         // Augment with statutory citation
         const leaveRag = await KnowledgeIngestionService.queryKnowledgeBase({
@@ -122,10 +162,7 @@ export class AiCopilotService {
           limit: 1
         });
         if (leaveRag.length > 0) {
-          citations = [
-            `${leaveRag[0].sourceDocument} (${leaveRag[0].citationRef || 'Section 5.1.1'})`
-          ];
-          responseText += `\n\n*Reference: ${leaveRag[0].citationRef || 'Section 5.1.1'} of ${leaveRag[0].sourceDocument}*`;
+          citations = [`${leaveRag[0].sourceDocument} (${leaveRag[0].citationRef || 'Section 5.1.1'})`];
         }
 
         suggestedFollowUps = [
@@ -145,21 +182,30 @@ export class AiCopilotService {
           lower.includes('evaluate candidate')
         )
       ) {
+        currentTopic = 'PROMOTIONS';
         toolsInvoked.push('checkPromotionEligibility');
         const toolRes = await AiToolsService.checkPromotionEligibility(user);
-        responseText = toolRes.message;
         actionCard = toolRes.actionCard;
 
-        // Fetch Scheme of Service citations
+        const isEligible = toolRes.message.includes('ELIGIBLE');
+        const scoreMatch = toolRes.message.match(/Points:\s*(\d+)/i);
+        const points = scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
+
+        directAnswer = toolRes.message.split('\n\n')[0] || toolRes.message;
+        detailsText = toolRes.message;
+        outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('PROMOTION_GAP', {
+          isEligible,
+          pointsGap: isEligible ? 0 : Math.max(0, 34 - points),
+          yearsGap: isEligible ? 0 : 1
+        });
+
         const promoRag = await KnowledgeIngestionService.queryKnowledgeBase({
           query: cleanPrompt,
           sectionFilter: 'PROMOTIONS',
-          limit: 2
+          limit: 1
         });
-
         if (promoRag.length > 0) {
           citations = promoRag.map(r => `${r.sourceDocument} (${r.citationRef || 'Scheme of Service'})`);
-          responseText += `\n\n${promoRag.map(r => `> **${r.title}:**\n> ${r.content}`).join('\n\n')}`;
         }
 
         suggestedFollowUps = [
@@ -169,7 +215,6 @@ export class AiCopilotService {
         ];
       }
 
-
       // Intent D: Departmental Workload Caps & Rebates
       else if (
         lower.includes('workload') ||
@@ -178,11 +223,15 @@ export class AiCopilotService {
         lower.includes('underload') ||
         lower.includes('teaching allocation')
       ) {
+        currentTopic = 'WORKLOAD';
         toolsInvoked.push('getDepartmentalWorkloadSummary');
         const deptId = user.assignedUnitId || 'COMPUTER_SCIENCE';
         const toolRes = await AiToolsService.getDepartmentalWorkloadSummary(user, deptId);
-        responseText = toolRes.message;
         actionCard = toolRes.actionCard;
+
+        directAnswer = toolRes.message.split('\n\n')[0] || toolRes.message;
+        detailsText = toolRes.message;
+        outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('WORKLOAD_REBALANCING', null);
 
         const workloadRag = await KnowledgeIngestionService.queryKnowledgeBase({
           query: 'teaching workload caps credit unit rebate',
@@ -191,7 +240,6 @@ export class AiCopilotService {
         });
         if (workloadRag.length > 0) {
           citations = [`${workloadRag[0].sourceDocument} (${workloadRag[0].citationRef})`];
-          responseText += `\n\n${workloadRag[0].content}`;
         }
 
         suggestedFollowUps = [
@@ -212,6 +260,7 @@ export class AiCopilotService {
         lower.includes('manual') ||
         lower.includes('workflow')
       ) {
+        currentTopic = 'SYSTEM_MANUAL';
         toolsInvoked.push('searchSystemManual');
         const moduleName = lower.includes('file') ? 'File Requisition'
           : lower.includes('memo') ? 'Internal Memos'
@@ -220,8 +269,10 @@ export class AiCopilotService {
           : 'HRMS Workflow';
 
         const toolRes = await AiToolsService.searchSystemManual(moduleName, cleanPrompt);
-        responseText = toolRes.message;
         actionCard = toolRes.actionCard;
+
+        directAnswer = toolRes.message.split('\n\n')[0] || toolRes.message;
+        detailsText = toolRes.message;
 
         suggestedFollowUps = [
           'Explain Maker-Checker dual control authorization',
@@ -230,25 +281,26 @@ export class AiCopilotService {
         ];
       }
 
-      // Intent F: Grounded Statutory Policy RAG (Conditions of Service, Discipline, Retirement, Taxonomy)
+      // Intent F: Grounded Statutory Policy RAG (Conditions of Service, Discipline, Retirement)
       else {
+        currentTopic = 'STATUTORY_POLICY';
         toolsInvoked.push('queryKnowledgeBase');
         const ragResults = await KnowledgeIngestionService.queryKnowledgeBase({
           query: cleanPrompt,
-          limit: 3
+          limit: isDetailed ? 3 : 1
         });
 
         if (ragResults.length > 0) {
           citations = ragResults.map(r => `${r.sourceDocument} (${r.citationRef || 'Section ' + r.pageNumber})`);
 
-          // Format grounded synthesis with citations
-          const groundedBodies = ragResults.map(r => {
-            return `### ${r.title} (${r.citationRef})\n${r.content}`;
-          }).join('\n\n---\n\n');
+          const primary = ragResults[0];
+          directAnswer = `Per **${primary.sourceDocument} (${primary.citationRef})**:\n${primary.content.split('\n\n')[0] || primary.content}`;
 
-          responseText = `${groundedBodies}${KnowledgeIngestionService.buildGroundedCitationText(ragResults)}`;
+          if (ragResults.length > 1 || isDetailed) {
+            detailsText = ragResults.map(r => `### ${r.title} (${r.citationRef})\n${r.content}`).join('\n\n---\n\n') + KnowledgeIngestionService.buildGroundedCitationText(ragResults);
+          }
         } else {
-          responseText = `Per the National Open University of Nigeria (NOUN) Statutory Guidelines and Conditions of Service:
+          directAnswer = `Per the National Open University of Nigeria (NOUN) Statutory Guidelines and Conditions of Service:
 
 Could you please specify your inquiry further? You can ask about:
 • **Leave Provisions** (Annual, Casual, Maternity, Paternity, Deferred Leave)
@@ -264,36 +316,72 @@ Could you please specify your inquiry further? You can ask about:
           'Explain the 13 statutory leave types in NOUN'
         ];
       }
-    } catch (err: any) {
-      if (err instanceof SecurityScopeException) {
-        responseText = `⛔ **Scope Enforcement**: ${err.message}`;
-      } else {
-        responseText = `An operational error occurred while evaluating your inquiry: ${err.message}`;
+
+      // 5. If Continuous Learned Insight exists, append as dynamic institutional intelligence
+      if (learnedInsights.length > 0) {
+        const li = learnedInsights[0];
+        directAnswer += `\n\n🧠 **Learned Institutional Note:**\n${li.learnedInsight}`;
+        if (li.statutorySource && !citations?.includes(li.statutorySource)) {
+          citations = citations ? [...citations, li.statutorySource] : [li.statutorySource];
+        }
       }
+
+      // 6. Format Response with Salutation, Specific Conciseness by Default, and Strategic Tip
+      const formattedMessage = AiPersonalityService.formatResponse({
+        salutation,
+        directAnswer,
+        detailsText,
+        isDetailed,
+        outOfTheBoxTip
+      });
+
+      // 7. Update User Persistent Memory asynchronously
+      await AiPersonalityService.getOrUpdateUserMemory(user.id, {
+        salutation: salutation.salutation,
+        lastTopic: currentTopic,
+        dossierSnapshot: actionCard?.data ? { [currentTopic]: actionCard.data } : undefined
+      });
+
+      const durationMs = Date.now() - startTime;
+
+      // 8. Log to SentinelOps Telemetry
+      await SecurityGuardService.logCopilotAudit(sentinel, {
+        userId: user.id,
+        userRole: String(user.role),
+        promptSnippet: prompt,
+        toolsInvoked,
+        durationMs,
+        clientIp,
+        securityFlags: sanitized.securityFlags,
+        status: 'SUCCESS'
+      });
+
+      return {
+        message: formattedMessage,
+        actionCard,
+        citations,
+        suggestedFollowUps,
+        toolsInvoked,
+        durationMs,
+        salutation,
+        learnedInsightApplied
+      };
+
+    } catch (err: any) {
+      const durationMs = Date.now() - startTime;
+      let errorResponse = '';
+      if (err instanceof SecurityScopeException) {
+        errorResponse = `⛔ **Scope Enforcement**: ${err.message}`;
+      } else {
+        errorResponse = `An operational error occurred while evaluating your inquiry: ${err.message}`;
+      }
+
+      return {
+        message: errorResponse,
+        durationMs,
+        toolsInvoked
+      };
     }
-
-    const durationMs = Date.now() - startTime;
-
-    // Log to SentinelOps Telemetry
-    await SecurityGuardService.logCopilotAudit(sentinel, {
-      userId: user.id,
-      userRole: String(user.role),
-      promptSnippet: prompt,
-      toolsInvoked,
-      durationMs,
-      clientIp,
-      securityFlags: sanitized.securityFlags,
-      status: 'SUCCESS'
-    });
-
-    return {
-      message: responseText,
-      actionCard,
-      citations,
-      suggestedFollowUps,
-      toolsInvoked,
-      durationMs
-    };
   }
 
   /**

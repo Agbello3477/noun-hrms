@@ -5,7 +5,9 @@ import {
   handleDirectToolCall,
   getSuggestedPrompts,
   initKnowledgeBase,
-  searchKnowledge
+  searchKnowledge,
+  handleRecordFeedback,
+  handleGetLearnedInsights
 } from '../controllers/aiCopilot.controller';
 
 const router = Router();
@@ -25,5 +27,9 @@ router.get('/suggestions', getSuggestedPrompts);
 // Knowledge Base & RAG Endpoints
 router.post('/ingest/init', initKnowledgeBase);
 router.get('/knowledge', searchKnowledge);
+
+// Continuous Self-Learning & Feedback Endpoints
+router.post('/feedback', handleRecordFeedback);
+router.get('/insights', handleGetLearnedInsights);
 
 export default router;

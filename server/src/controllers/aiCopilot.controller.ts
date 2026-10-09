@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AiCopilotService } from '../services/ai/aiCopilot.service';
 import { AiToolsService } from '../services/ai/aiTools.service';
 import { KnowledgeIngestionService } from '../services/ai/knowledgeIngestion.service';
+import { AiLearningEngineService } from '../services/ai/aiLearningEngine.service';
 import prisma from '../prisma';
 
 export const handleCopilotChat = async (req: Request, res: Response) => {
@@ -16,10 +17,10 @@ export const handleCopilotChat = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Message string is required' });
     }
 
-    // Fetch user profile for enriched context (unit, rank, cadre)
+    // Fetch user profile for enriched context (unit, rank, cadre, isPrincipalOfficer)
     const profile = await prisma.staffProfile.findUnique({
       where: { userId: user.id },
-      select: { unitId: true, centerId: true, rank: true, cadre: true, level: true, staffId: true }
+      select: { unitId: true, centerId: true, rank: true, cadre: true, level: true, staffId: true, isPrincipalOfficer: true }
     }).catch(() => null);
 
     const clientIp = (
@@ -34,7 +35,11 @@ export const handleCopilotChat = async (req: Request, res: Response) => {
         id: user.id,
         role: user.role,
         assignedUnitId: profile?.unitId,
-        name: (user as any).name
+        name: (user as any).name,
+        rank: profile?.rank,
+        cadre: profile?.cadre,
+        level: profile?.level,
+        isPrincipalOfficer: profile?.isPrincipalOfficer
       },
       prompt: message,
       conversationHistory,
@@ -48,6 +53,48 @@ export const handleCopilotChat = async (req: Request, res: Response) => {
       message: 'Failed to process AI copilot query',
       error: error.message
     });
+  }
+};
+
+export const handleRecordFeedback = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (!user || !user.id) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const { query, copilotResponse, feedbackType, userCorrection, topic } = req.body;
+    if (!query || !feedbackType) {
+      return res.status(400).json({ message: 'query and feedbackType (THUMBS_UP, THUMBS_DOWN, CORRECTION) are required' });
+    }
+
+    const result = await AiLearningEngineService.recordFeedbackAndLearn({
+      userId: user.id,
+      userRole: user.role,
+      query,
+      copilotResponse: copilotResponse || '',
+      feedbackType,
+      userCorrection,
+      topic
+    });
+
+    return res.status(200).json({
+      status: 'SUCCESS',
+      message: 'Feedback recorded and incorporated into continuous learning memory',
+      result
+    });
+  } catch (error: any) {
+    console.error('🔥 AI Feedback Error:', error);
+    return res.status(500).json({ message: 'Failed to record feedback', error: error.message });
+  }
+};
+
+export const handleGetLearnedInsights = async (req: Request, res: Response) => {
+  try {
+    const insights = AiLearningEngineService.getAllLearnedInsights();
+    return res.status(200).json({ insights });
+  } catch (error: any) {
+    return res.status(500).json({ message: 'Failed to retrieve learned insights', error: error.message });
   }
 };
 
