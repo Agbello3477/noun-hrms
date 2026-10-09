@@ -655,11 +655,30 @@ router.post('/bonds/log', async (req: Request, res: Response) => {
         const { staffProfileId, trainingType, studyDurationYears, totalFinancialIndemnity, bondStartDate } = req.body;
 
         if (!staffProfileId || !trainingType || !studyDurationYears) {
-            return res.status(400).json({ message: 'staffProfileId, trainingType, and studyDurationYears are required' });
+            return res.status(400).json({ message: 'Staff Member Identifier, Sponsorship Category, and Study Duration are required.' });
+        }
+
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            },
+            include: { user: true }
+        });
+
+        if (!staff) {
+            return res.status(404).json({
+                message: `Staff profile not found for identifier "${staffProfileId}". Please verify the Staff ID or select from the directory.`
+            });
         }
 
         const bond = await TrainingBondGuard.createBondRecord({
-            staffProfileId,
+            staffProfileId: staff.id,
             trainingType,
             studyDurationYears: Number(studyDurationYears),
             totalFinancialIndemnity: Number(totalFinancialIndemnity || 0),
@@ -671,7 +690,8 @@ router.post('/bonds/log', async (req: Request, res: Response) => {
             bond
         });
     } catch (error: any) {
-        res.status(500).json({ message: 'Failed to log training bond', error: error.message });
+        console.error('Error logging training bond:', error);
+        res.status(400).json({ message: error.message || 'Failed to log training bond' });
     }
 });
 

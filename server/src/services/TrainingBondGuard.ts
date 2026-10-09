@@ -52,7 +52,11 @@ export class TrainingBondGuard {
             }
         });
 
-        const targetProfileId = profile ? profile.id : staffProfileId;
+        if (!profile) {
+            throw new Error(`Staff profile not found for identifier "${staffProfileId}"`);
+        }
+
+        const targetProfileId = profile.id;
 
         const bondDurationYears = this.calculateBondDuration(trainingType, studyDurationYears);
         const start = new Date(bondStartDate);

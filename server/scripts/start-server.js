@@ -64,10 +64,10 @@ async function runDbSyncWithRetry(maxRetries = 3) {
 }
 
 async function startServer() {
-  if (process.env.AUTO_DB_SYNC === 'true') {
+  if (process.env.AUTO_DB_SYNC !== 'false') {
     await runDbSyncWithRetry();
   } else {
-    console.log('[STARTUP] ✅ Runtime db push skipped (Database synchronized during Render build step to conserve RAM).');
+    console.log('[STARTUP] ✅ Runtime db push skipped (Database synchronized during build step).');
   }
 
   console.log('[STARTUP] 🚀 Launching Express Web Server (node --max-old-space-size=400 dist/index.js)...');
