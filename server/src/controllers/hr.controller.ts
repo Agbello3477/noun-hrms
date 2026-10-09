@@ -483,7 +483,7 @@ export const clearStaffFile = async (req: Request, res: Response) => {
         // @ts-ignore
         const authorizerRole = req.user?.role;
 
-        if (authorizerRole !== Role.REGISTRAR && authorizerRole !== Role.SUPER_USER && authorizerRole !== Role.VICE_CHANCELLOR) {
+        if (![Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.DEPUTY_REGISTRAR].includes(authorizerRole)) {
             return res.status(403).json({ message: 'Unauthorized: Only the Registrar can grant official staff file clearance.' });
         }
 
@@ -573,7 +573,7 @@ export const rejectStaffFile = async (req: Request, res: Response) => {
         // @ts-ignore
         const authorizerRole = req.user?.role;
 
-        if (authorizerRole !== Role.REGISTRAR && authorizerRole !== Role.SUPER_USER && authorizerRole !== Role.VICE_CHANCELLOR) {
+        if (![Role.REGISTRAR, Role.SUPER_USER, Role.VICE_CHANCELLOR, Role.DEPUTY_REGISTRAR].includes(authorizerRole)) {
             return res.status(403).json({ message: 'Unauthorized: Only the Registrar can reject staff file clearance.' });
         }
 

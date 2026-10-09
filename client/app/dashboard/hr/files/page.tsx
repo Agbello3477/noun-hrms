@@ -66,7 +66,8 @@ export default function FileRegistryPage() {
     // Clearance Actions
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-    const isRegistrarOrAdmin = user && ['REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR', 'ADMIN'].includes(user.role);
+    // Only Registrar / Authorizer roles can clear or reject file creation clearance
+    const isRegistrarAuthorizer = user && ['REGISTRAR', 'SUPER_USER', 'VICE_CHANCELLOR', 'DEPUTY_REGISTRAR'].includes(user.role);
 
     const fetchData = async () => {
         try {
@@ -361,10 +362,11 @@ export default function FileRegistryPage() {
 
                                 {isPendingClearance && (
                                     <div className="mt-1 flex flex-col items-center gap-1 w-full px-2">
-                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-center">
-                                            Pending Clearance
+                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-center flex items-center justify-center gap-1">
+                                            <Clock size={10} className="text-amber-700" />
+                                            Pending Registrar Clearance
                                         </span>
-                                        {isRegistrarOrAdmin && file.staffProfile?.id && (
+                                        {isRegistrarAuthorizer && file.staffProfile?.id && (
                                             <div className="flex items-center gap-1 mt-0.5">
                                                 <button
                                                     onClick={(e) => {
