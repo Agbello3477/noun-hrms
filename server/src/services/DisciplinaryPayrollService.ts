@@ -14,8 +14,16 @@ export class DisciplinaryPayrollService {
         authorizerId: string,
         remarks?: string
     ) {
-        const staff = await prisma.staffProfile.findUnique({
-            where: { id: staffProfileId },
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            },
             include: { user: true }
         });
 
@@ -27,7 +35,7 @@ export class DisciplinaryPayrollService {
         const isInterdicted = sanctionType === 'INTERDICTED';
 
         const updated = await prisma.staffProfile.update({
-            where: { id: staffProfileId },
+            where: { id: staff.id },
             data: {
                 isDisciplinarySuspended: isSuspended,
                 isDisciplinaryInterdicted: isInterdicted,
@@ -104,8 +112,16 @@ export class DisciplinaryPayrollService {
         authorizerId: string,
         reference?: string
     ) {
-        const staff = await prisma.staffProfile.findUnique({
-            where: { id: staffProfileId },
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            },
             include: { user: true }
         });
 
@@ -116,7 +132,7 @@ export class DisciplinaryPayrollService {
         const now = new Date();
         const heldRecords = await prisma.heldEmolumentsLedger.findMany({
             where: {
-                staffProfileId,
+                staffProfileId: staff.id,
                 status: 'HELD'
             }
         });
@@ -131,7 +147,7 @@ export class DisciplinaryPayrollService {
         if (verdict === 'EXONERATED') {
             // 1. Reset disciplinary flags
             await prisma.staffProfile.update({
-                where: { id: staffProfileId },
+                where: { id: staff.id },
                 data: {
                     isDisciplinarySuspended: false,
                     isDisciplinaryInterdicted: false,

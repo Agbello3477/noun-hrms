@@ -39,6 +39,21 @@ export class TrainingBondGuard {
             totalFinancialIndemnity = 0.00
         } = params;
 
+        // Resolve profile ID flexibly
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            }
+        });
+
+        const targetProfileId = profile ? profile.id : staffProfileId;
+
         const bondDurationYears = this.calculateBondDuration(trainingType, studyDurationYears);
         const start = new Date(bondStartDate);
         const bondEndDate = new Date(start);
@@ -46,7 +61,7 @@ export class TrainingBondGuard {
 
         return prisma.trainingBondRecord.create({
             data: {
-                staffProfileId,
+                staffProfileId: targetProfileId,
                 studyLeaveId,
                 trainingType,
                 bondDurationYears,

@@ -606,17 +606,53 @@ export default function RegistryWorkspacePage() {
                         </div>
 
                         <form onSubmit={handleDraftConfirmation} className="space-y-4">
+                            {/* Selected Staff Profile Preview Card */}
+                            {(() => {
+                                const selectedStaff = dueConfirmations.find((s: any) => s.id === confirmationDraftForm.staffProfileId || s.staffId === confirmationDraftForm.staffProfileId);
+                                if (!selectedStaff) return null;
+                                return (
+                                    <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-[#006533] text-white font-bold flex items-center justify-center text-xs">
+                                                {selectedStaff.surname?.[0] || 'S'}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold text-slate-900">
+                                                    {selectedStaff.surname} {selectedStaff.otherNames}
+                                                    <span className="ml-2 font-mono text-[11px] font-bold px-1.5 py-0.5 bg-emerald-200/80 text-emerald-900 rounded">
+                                                        {selectedStaff.staffId || selectedStaff.id}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[11px] text-slate-600 mt-0.5">
+                                                    {selectedStaff.rank} &bull; Unit: {selectedStaff.unit?.name || 'General Registry'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: '' })}
+                                            className="text-xs text-slate-500 hover:text-rose-600 font-semibold px-2.5 py-1 rounded-md hover:bg-white transition"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Email)</label>
                                     <input
                                         type="text"
                                         required
                                         value={confirmationDraftForm.staffProfileId}
                                         onChange={(e) => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: e.target.value })}
-                                        placeholder="Staff Profile UUID"
+                                        placeholder="e.g. NOUN/2026/0012 or ST-1001"
                                         className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
                                     />
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        Enter human-readable Staff ID, email, or click &ldquo;Select Profile&rdquo; from the due list below.
+                                    </p>
                                 </div>
 
                                 <div>
@@ -691,15 +727,18 @@ export default function RegistryWorkspacePage() {
                                 {dueConfirmations.map((staff: any) => (
                                     <div key={staff.id} className="py-3 flex items-center justify-between">
                                         <div>
-                                            <div className="text-xs font-bold text-slate-800">
-                                                {staff.surname} {staff.otherNames} ({staff.staffId || 'N/A'})
+                                            <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                                <span>{staff.surname} {staff.otherNames}</span>
+                                                <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded">
+                                                    {staff.staffId || staff.id}
+                                                </span>
                                             </div>
                                             <div className="text-[11px] text-slate-500 mt-0.5">
                                                 Probation Start: {new Date(staff.probationStartDate || staff.dateOfFirstAppointment).toLocaleDateString()} &bull; Unit: {staff.unit?.name || 'General Registry'}
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: staff.id })}
+                                            onClick={() => setConfirmationDraftForm({ ...confirmationDraftForm, staffProfileId: staff.staffId || staff.id })}
                                             className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#006533] text-xs font-bold rounded-lg transition"
                                         >
                                             Select Profile
@@ -729,15 +768,18 @@ export default function RegistryWorkspacePage() {
                         <form onSubmit={handleLogBond} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Email)</label>
                                     <input
                                         type="text"
                                         required
                                         value={bondForm.staffProfileId}
                                         onChange={(e) => setBondForm({ ...bondForm, staffProfileId: e.target.value })}
-                                        placeholder="Staff Profile UUID"
+                                        placeholder="e.g. NOUN/2026/0012 or ST-1001"
                                         className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
                                     />
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        Enter human-readable Staff ID (e.g. NOUN/2026/0012) or staff email.
+                                    </p>
                                 </div>
 
                                 <div>

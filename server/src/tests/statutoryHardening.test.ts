@@ -135,14 +135,16 @@ const runTests = async () => {
         }
 
         // 2. Exoneration verdict creates arrears refund
-        (prisma.staffProfile as any).findUnique = async (args: any) => ({
+        const mockStaffDisc = {
             id: 'staff-disc-001',
             staffId: 'NOUN/DSC/001',
             userId: 'user-disc-001',
             isDisciplinarySuspended: true,
             isDisciplinaryInterdicted: false,
             user: { id: 'user-disc-001', name: 'Exonerated Staff' }
-        });
+        };
+        (prisma.staffProfile as any).findUnique = async (args: any) => mockStaffDisc;
+        (prisma.staffProfile as any).findFirst = async (args: any) => mockStaffDisc;
 
         (prisma.heldEmolumentsLedger as any).findMany = async () => [
             { id: 'ledger-001', staffProfileId: 'staff-disc-001', heldAmount: 250000, status: 'HELD' }

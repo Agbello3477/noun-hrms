@@ -598,8 +598,16 @@ router.post('/confirmations/draft', async (req: Request, res: Response) => {
         // @ts-ignore
         const imputerId = req.user?.id;
 
-        const staff = await prisma.staffProfile.findUnique({
-            where: { id: staffProfileId },
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            },
             include: { user: true }
         });
 

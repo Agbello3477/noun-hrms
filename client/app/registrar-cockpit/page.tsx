@@ -1297,15 +1297,18 @@ export default function RegistrarCockpitPage() {
                         <form onSubmit={handleApplyDiscipline} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Email)</label>
                                     <input
                                         type="text"
                                         required
                                         value={disciplineForm.staffProfileId}
                                         onChange={(e) => setDisciplineForm({ ...disciplineForm, staffProfileId: e.target.value })}
-                                        placeholder="Staff Profile UUID"
+                                        placeholder="e.g. NOUN/2026/0012 or ST-1001"
                                         className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-none"
                                     />
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        Enter human-readable Staff ID or email address.
+                                    </p>
                                 </div>
 
                                 <div>
@@ -1362,15 +1365,18 @@ export default function RegistrarCockpitPage() {
                         <form onSubmit={handleExecuteVerdict} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Profile ID</label>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member Identifier (Staff ID / Email)</label>
                                     <input
                                         type="text"
                                         required
                                         value={verdictForm.staffProfileId}
                                         onChange={(e) => setVerdictForm({ ...verdictForm, staffProfileId: e.target.value })}
-                                        placeholder="Staff Profile UUID"
+                                        placeholder="e.g. NOUN/2026/0012 or ST-1001"
                                         className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#006533] outline-none"
                                     />
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        Enter human-readable Staff ID or email address.
+                                    </p>
                                 </div>
 
                                 <div>

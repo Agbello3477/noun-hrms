@@ -191,8 +191,16 @@ export class ProbationConfirmationService {
         decision: ConfirmationStatus | 'CONFIRMED' | 'PROBATION_EXTENDED' | 'TERMINATION_RECOMMENDED',
         remarks?: string
     ) {
-        const profile = await prisma.staffProfile.findUnique({
-            where: { id: staffProfileId },
+        const profile = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { id: staffProfileId },
+                    { staffId: staffProfileId },
+                    { userId: staffProfileId },
+                    { user: { email: staffProfileId } }
+                ],
+                isDeleted: false
+            },
             include: { user: true }
         });
 
