@@ -120,10 +120,10 @@ export class AiCopilotService {
         const toolRes = await AiToolsService.trackMyApplications(user);
         actionCard = toolRes.actionCard;
 
-        if (toolRes.applicationsCount > 0) {
+        if (toolRes.applications && toolRes.applications.length > 0) {
           directAnswer = `Here is your active application status:\n• ${toolRes.message.split('\n\n')[0] || toolRes.message}`;
           detailsText = toolRes.message;
-          outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('APPLICATION_DELAY', { apps: toolRes.actionCard?.data?.items });
+          outOfTheBoxTip = AiPersonalityService.generateOutOfTheBoxAdvisory('APPLICATION_DELAY', { apps: toolRes.actionCard?.details?.items || toolRes.applications });
         } else {
           directAnswer = toolRes.message;
           outOfTheBoxTip = `You can submit a new statutory application anytime through the Portal Applications desk.`;
@@ -339,7 +339,7 @@ Could you please specify your inquiry further? You can ask about:
       await AiPersonalityService.getOrUpdateUserMemory(user.id, {
         salutation: salutation.salutation,
         lastTopic: currentTopic,
-        dossierSnapshot: actionCard?.data ? { [currentTopic]: actionCard.data } : undefined
+        dossierSnapshot: actionCard?.details ? { [currentTopic]: actionCard.details } : undefined
       });
 
       const durationMs = Date.now() - startTime;
