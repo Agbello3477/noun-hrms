@@ -615,6 +615,29 @@ router.post('/confirmations/draft', async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Staff profile not found' });
         }
 
+        // Update Staff Profile with staged appraisal docket
+        const updatedProfile = await prisma.staffProfile.update({
+            where: { id: staff.id },
+            data: {
+                confirmationStaged: true,
+                confirmationStagedAt: new Date(),
+                confirmationRecommendation: recommendation || 'RECOMMEND_CONFIRMATION',
+                confirmationAppraisalScore: appraisalScore !== undefined && appraisalScore !== null ? Number(appraisalScore) : 85,
+                confirmationRemarks: remarks || '',
+                confirmationImputedById: imputerId,
+                confirmationDossier: {
+                    recommendation: recommendation || 'RECOMMEND_CONFIRMATION',
+                    appraisalScore: Number(appraisalScore || 85),
+                    remarks: remarks || '',
+                    stagedAt: new Date(),
+                    imputedById: imputerId
+                }
+            }
+        });
+
+        // Invalidate authorizer queue cache so Registrar Cockpit immediately reflects update
+        await cacheInvalidationService.invalidateByTag('tag:authorizer_queue').catch(() => {});
+
         // Notify Registrar
         const registrars = await prisma.user.findMany({
             where: { role: { in: [Role.REGISTRAR, Role.DEPUTY_REGISTRAR, Role.SUPER_USER] }, isActive: true },
@@ -636,10 +659,11 @@ router.post('/confirmations/draft', async (req: Request, res: Response) => {
 
         res.json({
             message: 'Confirmation appraisal dossier compiled and staged for Registrar ratification.',
-            staffProfileId,
+            staffProfileId: staff.id,
             recommendation,
             imputedById: imputerId,
-            stagedAt: new Date()
+            stagedAt: new Date(),
+            profile: updatedProfile
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to stage confirmation file', error: error.message });

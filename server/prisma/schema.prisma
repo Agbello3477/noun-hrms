@@ -481,6 +481,13 @@ model StaffProfile {
   probationStartDate           DateTime           @default(now())
   probationExtendedAt          DateTime?
   confirmedAt                  DateTime?
+  confirmationStaged           Boolean            @default(false)
+  confirmationStagedAt         DateTime?
+  confirmationRecommendation   String?
+  confirmationAppraisalScore   Int?
+  confirmationRemarks          String?            @db.Text
+  confirmationImputedById      String?
+  confirmationDossier          Json?
   spouseStaffId                String?
   spouse                       StaffProfile?      @relation("StaffSpouse", fields: [spouseStaffId], references: [id])
   spousalPartners              StaffProfile[]     @relation("StaffSpouse")

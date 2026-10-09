@@ -2193,8 +2193,19 @@ export const withdrawStaff = async (req: AuthRequest, res: Response) => {
 export const getStaffCareerStatus = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const staff = await prisma.staffProfile.findUnique({
-            where: { userId },
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+
+        const staff = await prisma.staffProfile.findFirst({
+            where: {
+                OR: [
+                    { userId },
+                    { id: userId },
+                    { user: { id: userId } }
+                ],
+                isDeleted: false
+            },
             include: {
                 trainingBonds: {
                     where: { isBondDischarged: false },
@@ -2215,21 +2226,27 @@ export const getStaffCareerStatus = async (req: AuthRequest, res: Response) => {
         const elapsedMonths = Math.min(24, Math.floor((now.getTime() - probationStart.getTime()) / (30.4375 * 24 * 60 * 60 * 1000)));
 
         // Active Bond check
-        const activeBondRecord = staff.trainingBonds.find(b => new Date(b.bondEndDate) > now);
+        const activeBondRecord = staff.trainingBonds.length > 0 ? staff.trainingBonds[0] : null;
         let activeBondInfo = null;
         if (activeBondRecord) {
             const remainingMs = new Date(activeBondRecord.bondEndDate).getTime() - now.getTime();
-            const remainingMonths = Math.max(1, Math.ceil(remainingMs / (30.4375 * 24 * 60 * 60 * 1000)));
+            const remainingMonths = Math.max(0, Math.ceil(remainingMs / (30.4375 * 24 * 60 * 60 * 1000)));
             const years = Math.floor(remainingMonths / 12);
             const months = remainingMonths % 12;
-            const remainingStr = years > 0 ? `${years} yr ${months} mos remaining` : `${months} months remaining`;
+            const remainingStr = remainingMonths <= 0 
+                ? 'Bond term expired (Awaiting discharge authorization)' 
+                : (years > 0 ? `${years} yr ${months} mos remaining` : `${months} months remaining`);
 
             activeBondInfo = {
                 id: activeBondRecord.id,
                 trainingType: activeBondRecord.trainingType,
+                bondDurationYears: activeBondRecord.bondDurationYears,
+                bondStartDate: activeBondRecord.bondStartDate,
                 bondEndDate: activeBondRecord.bondEndDate,
+                totalFinancialIndemnity: activeBondRecord.totalFinancialIndemnity,
                 remainingMonths,
-                remainingFormatted: remainingStr
+                remainingFormatted: remainingStr,
+                isBondDischarged: activeBondRecord.isBondDischarged
             };
         }
 

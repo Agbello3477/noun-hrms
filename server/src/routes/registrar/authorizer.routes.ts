@@ -26,7 +26,17 @@ router.use(requireAuthorizerRole);
  */
 router.get('/queue', async (req: Request, res: Response) => {
     try {
-        const [pendingPostings, pendingFiles, pendingOverrides, pendingQueries, pendingRoleChanges, pendingApplications, pendingFileReleases] = await Promise.all([
+        const [
+            pendingPostings, 
+            pendingFiles, 
+            pendingOverrides, 
+            pendingQueries, 
+            pendingRoleChanges, 
+            pendingApplications, 
+            pendingFileReleases,
+            pendingConfirmations,
+            activeBonds
+        ] = await Promise.all([
             prisma.transferLog.count({
                 where: {
                     status: {
@@ -65,19 +75,35 @@ router.get('/queue', async (req: Request, res: Response) => {
                 where: {
                     status: 'ACKNOWLEDGED_PENDING_REGISTRAR'
                 }
+            }),
+            prisma.staffProfile.count({
+                where: {
+                    isDeleted: false,
+                    OR: [
+                        { confirmationStaged: true },
+                        { confirmationStatus: { in: ['ON_PROBATION', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED'] } }
+                    ]
+                }
+            }),
+            prisma.trainingBondRecord.count({
+                where: {
+                    isBondDischarged: false
+                }
             })
         ]);
 
         res.json({
             queueSummary: {
-                totalPending: pendingPostings + pendingFiles + pendingOverrides + pendingQueries + pendingRoleChanges + pendingApplications + pendingFileReleases,
+                totalPending: pendingPostings + pendingFiles + pendingOverrides + pendingQueries + pendingRoleChanges + pendingApplications + pendingFileReleases + pendingConfirmations,
                 postings: pendingPostings,
                 files: pendingFiles,
                 promotionOverrides: pendingOverrides,
                 disciplinaryQueries: pendingQueries,
                 roleChanges: pendingRoleChanges,
                 applications: pendingApplications,
-                fileReleases: pendingFileReleases
+                fileReleases: pendingFileReleases,
+                confirmations: pendingConfirmations,
+                bonds: activeBonds
             }
         });
     } catch (error: any) {
@@ -1104,28 +1130,36 @@ router.get('/audits', async (req: Request, res: Response) => {
 
 /**
  * GET /api/v1/registrar/confirmations/pending
- * Executive docket for pending confirmation ratifications (2-year rule, 3-year hard drop)
+ * Executive docket for pending confirmation ratifications (2-year rule, 3-year hard drop, and HR Staged Dossiers)
  */
 router.get('/confirmations/pending', async (req: Request, res: Response) => {
     try {
         const staffList = await prisma.staffProfile.findMany({
             where: {
                 isDeleted: false,
-                confirmationStatus: {
-                    in: ['ON_PROBATION', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED']
-                }
+                OR: [
+                    { confirmationStaged: true },
+                    {
+                        confirmationStatus: {
+                            in: ['ON_PROBATION', 'PROBATION_EXTENDED', 'TERMINATION_RECOMMENDED']
+                        }
+                    }
+                ]
             },
             include: {
                 user: { select: { id: true, name: true, email: true } },
                 unit: { select: { id: true, name: true } },
                 studyCenter: { select: { id: true, name: true } }
             },
-            orderBy: { probationStartDate: 'asc' }
+            orderBy: [
+                { confirmationStaged: 'desc' },
+                { probationStartDate: 'asc' }
+            ]
         });
 
         const now = new Date().getTime();
         const formatted = staffList.map(s => {
-            const start = s.probationStartDate ? new Date(s.probationStartDate).getTime() : now;
+            const start = s.probationStartDate ? new Date(s.probationStartDate).getTime() : (s.dateOfFirstAppointment ? new Date(s.dateOfFirstAppointment).getTime() : now);
             const elapsedMonths = Math.floor((now - start) / (30.4375 * 24 * 60 * 60 * 1000));
             return {
                 ...s,
@@ -1143,9 +1177,10 @@ router.get('/confirmations/pending', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/registrar/confirmations/:staffProfileId/ratify
+ * PUT /api/v1/registrar/confirmations/:staffProfileId/ratify
  * Registrar ratifies confirmation: CONFIRMED, PROBATION_EXTENDED (6/12 mos), or TERMINATION_RECOMMENDED
  */
-router.post('/confirmations/:staffProfileId/ratify', async (req: Request, res: Response) => {
+const handleRatifyConfirmation = async (req: Request, res: Response) => {
     try {
         const { staffProfileId } = req.params;
         const { decision, remarks } = req.body;
@@ -1170,7 +1205,10 @@ router.post('/confirmations/:staffProfileId/ratify', async (req: Request, res: R
     } catch (error: any) {
         res.status(500).json({ message: 'Failed to ratify confirmation', error: error.message });
     }
-});
+};
+
+router.post('/confirmations/:staffProfileId/ratify', handleRatifyConfirmation);
+router.put('/confirmations/:staffProfileId/ratify', handleRatifyConfirmation);
 
 /**
  * POST /api/v1/registrar/discipline/sanction

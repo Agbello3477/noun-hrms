@@ -210,7 +210,8 @@ export class ProbationConfirmationService {
 
         const now = new Date();
         let updateData: any = {
-            confirmationStatus: decision as ConfirmationStatus
+            confirmationStatus: decision as ConfirmationStatus,
+            confirmationStaged: false
         };
 
         const resolvedDecision = String(decision);
@@ -221,9 +222,19 @@ export class ProbationConfirmationService {
         }
 
         const updated = await prisma.staffProfile.update({
-            where: { id: staffProfileId },
+            where: { id: profile.id },
             data: updateData
         });
+
+        // Invalidate authorizer queues and staff cache
+        try {
+            const { redisService } = await import('./redis.service');
+            await Promise.all([
+                redisService.clearPattern('tag:authorizer_queue*'),
+                redisService.clearPattern('registrar:*'),
+                redisService.clearPattern(`staff:*`)
+            ]);
+        } catch (e) {}
 
         // Notify Staff Member
         await prisma.notification.create({

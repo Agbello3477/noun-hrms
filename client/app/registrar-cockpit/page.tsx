@@ -1145,6 +1145,7 @@ export default function RegistrarCockpitPage() {
                                 {pendingConfirmations.map((c) => {
                                     const isSelected = selectedConfirmation?.id === c.id;
                                     const isHardDrop = c.confirmationStatus === 'TERMINATION_RECOMMENDED';
+                                    const isStaged = c.confirmationStaged;
                                     return (
                                         <div
                                             key={c.id}
@@ -1157,11 +1158,15 @@ export default function RegistrarCockpitPage() {
                                         >
                                             <div className="flex items-center justify-between">
                                                 <div className="text-xs font-bold text-slate-900">{c.surname} {c.otherNames}</div>
-                                                {isHardDrop && (
+                                                {isStaged ? (
+                                                    <span className="px-1.5 py-0.5 text-[9px] font-black rounded-sm bg-blue-100 text-blue-800 border border-blue-200">
+                                                        STAGED DOSSIER
+                                                    </span>
+                                                ) : isHardDrop ? (
                                                     <span className="px-1.5 py-0.5 text-[9px] font-black rounded-sm bg-red-100 text-red-800">
                                                         3-YR HARD DROP
                                                     </span>
-                                                )}
+                                                ) : null}
                                             </div>
                                             <div className="text-[11px] text-slate-500 mt-0.5">{c.staffId} &bull; {c.rank}</div>
                                             <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 text-[10px]">
@@ -1200,6 +1205,26 @@ export default function RegistrarCockpitPage() {
                                         </span>
                                     </div>
                                 </div>
+
+                                {selectedConfirmation.confirmationStaged && (
+                                    <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50 space-y-2 text-xs">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-blue-900 uppercase text-[10px] tracking-wider">Registry Imputer Appraisal Dossier</span>
+                                            <span className="px-2 py-0.5 rounded-full font-bold bg-blue-200 text-blue-900 text-[10px]">
+                                                Score: {selectedConfirmation.confirmationAppraisalScore ?? 'N/A'}%
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-slate-700">
+                                            <div><span className="text-slate-500">Recommended Action:</span> <strong className="text-blue-900">{selectedConfirmation.confirmationRecommendation || 'CONFIRM_APPOINTMENT'}</strong></div>
+                                            <div><span className="text-slate-500">Staged Date:</span> <span>{selectedConfirmation.confirmationStagedAt ? new Date(selectedConfirmation.confirmationStagedAt).toLocaleString() : 'Recent'}</span></div>
+                                        </div>
+                                        {selectedConfirmation.confirmationRemarks && (
+                                            <div className="p-2.5 bg-white rounded-lg border border-blue-200/80 text-[11px] text-slate-700 italic">
+                                                &ldquo;{selectedConfirmation.confirmationRemarks}&rdquo;
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2 text-xs">

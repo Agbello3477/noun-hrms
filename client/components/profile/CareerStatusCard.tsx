@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { ShieldCheck, Clock, Award, AlertCircle, FileCheck, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Clock, Award, AlertCircle, FileCheck, CheckCircle2, Lock, Banknote } from 'lucide-react';
 
 interface CareerStatus {
     confirmationStatus: string;
@@ -12,9 +12,13 @@ interface CareerStatus {
     activeBond: {
         id: string;
         trainingType: string;
+        bondDurationYears?: number;
+        bondStartDate?: string;
         bondEndDate: string;
+        totalFinancialIndemnity?: number | string;
         remainingMonths: number;
         remainingFormatted: string;
+        isBondDischarged?: boolean;
     } | null;
     deferredLeavesCount: number;
     maxAllowedDeferredLeaves: number;
@@ -37,9 +41,10 @@ export default function CareerStatusCard() {
         return (
             <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs animate-pulse">
                 <div className="h-4 bg-slate-200 rounded w-1/3 mb-4"></div>
-                <div className="space-y-2">
-                    <div className="h-8 bg-slate-100 rounded"></div>
-                    <div className="h-8 bg-slate-100 rounded"></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="h-16 bg-slate-100 rounded-xl"></div>
+                    <div className="h-16 bg-slate-100 rounded-xl"></div>
+                    <div className="h-16 bg-slate-100 rounded-xl"></div>
                 </div>
             </div>
         );
@@ -55,10 +60,10 @@ export default function CareerStatusCard() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                     <Award size={18} className="text-[#006533]" />
-                    <h3 className="text-sm font-bold text-slate-900">Career & Statutory Service Status</h3>
+                    <h3 className="text-sm font-bold text-slate-900">Career &amp; Statutory Service Status</h3>
                 </div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Official Record
+                    Official Registry Docket
                 </span>
             </div>
 
@@ -74,7 +79,7 @@ export default function CareerStatusCard() {
                     ) : isTerminationRecommended ? (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 text-xs font-bold w-fit">
                             <AlertCircle size={14} />
-                            Termination Review
+                            Termination Review (3-Yr Rule)
                         </div>
                     ) : (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 text-xs font-bold w-fit">
@@ -86,11 +91,24 @@ export default function CareerStatusCard() {
 
                 {/* 2. Training Bond Status */}
                 {status.activeBond ? (
-                    <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-col justify-between">
-                        <span className="text-[11px] font-semibold text-amber-800 mb-1">Active Training Bond</span>
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-200/80 text-amber-950 text-xs font-bold w-fit">
-                            <ShieldCheck size={14} className="text-amber-700" />
-                            {status.activeBond.remainingFormatted}
+                    <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-900">Active Training Bond</span>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-200 text-amber-900">
+                                <Lock size={10} /> Exit Locked
+                            </span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-200/90 text-amber-950 text-xs font-bold w-fit">
+                                <ShieldCheck size={14} className="text-amber-700" />
+                                {status.activeBond.remainingFormatted}
+                            </div>
+                            <div className="text-[10px] text-amber-800/90 flex items-center justify-between pt-1">
+                                <span>{status.activeBond.trainingType?.replace(/_/g, ' ')}</span>
+                                {status.activeBond.totalFinancialIndemnity ? (
+                                    <span className="font-semibold font-mono">₦{Number(status.activeBond.totalFinancialIndemnity).toLocaleString()}</span>
+                                ) : null}
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -112,7 +130,7 @@ export default function CareerStatusCard() {
 
             {/* Disciplinary Notice if any */}
             {(status.isDisciplinarySuspended || status.isDisciplinaryInterdicted) && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs text-rose-900 font-medium">
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs text-rose-900 font-medium">
                     <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
                     <span>
                         Staff dossier currently under official {status.isDisciplinarySuspended ? 'Suspension' : 'Interdiction'} sanction with statutory 50% emolument withholding.

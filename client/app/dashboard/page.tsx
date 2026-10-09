@@ -11,6 +11,7 @@ import {
 import { useSwrData } from '../../hooks/useSwrData';
 import Link from 'next/link';
 import AperClosingBanner from '../../components/aper/AperClosingBanner';
+import CareerStatusCard from '../../components/profile/CareerStatusCard';
 
 // Emergency Contact Banner Component
 const EmergencyContacts = ({ hotlines, className }: { hotlines?: any; className?: string }) => {
@@ -986,6 +987,9 @@ export default function DashboardHome() {
                         </div>
                     </div>
                 </div>
+
+                {/* Statutory Career, Confirmation & Training Bond Status Card */}
+                <CareerStatusCard />
 
                 {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
