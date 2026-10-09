@@ -23,7 +23,18 @@ export default function StaffDossierPage({ params, onBack }: { params?: { id?: s
         }
     }, []);
 
-    const id = params?.id || (routeParams?.id as string) || urlId || '';
+    const id = (() => {
+        if (params?.id && params.id !== 'default') return params.id;
+        if (routeParams?.id && routeParams.id !== 'default') return routeParams.id as string;
+        if (urlId) return urlId;
+        if (typeof window !== 'undefined') {
+            const cleanPath = window.location.pathname.replace(/\/$/, '');
+            const segments = cleanPath.split('/');
+            const last = segments[segments.length - 1];
+            if (last && last !== 'files' && last !== 'default') return last;
+        }
+        return (routeParams?.id as string) || params?.id || '';
+    })();
     const [staff, setStaff] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');

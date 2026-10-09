@@ -30,6 +30,56 @@ export default function OfficialLeaveBookletModal({
   const [viewMode, setViewMode] = useState<'VIEW' | 'FORM'>(initialViewMode);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const currentYear = new Date().getFullYear();
+
+  const safeBooklet: OfficialLeaveBooklet = {
+    leaveYear: booklet?.leaveYear || currentYear,
+    staffNo: booklet?.staffNo || profile?.staffId || profile?.user?.staffId || '',
+    fullName: booklet?.fullName || (profile?.surname ? `${profile?.surname}, ${profile?.otherNames || ''}` : profile?.user?.name || ''),
+    surname: booklet?.surname || profile?.surname || profile?.user?.surname || '',
+    otherNames: booklet?.otherNames || profile?.otherNames || profile?.user?.otherNames || '',
+    designation: booklet?.designation || profile?.rank || profile?.designation || 'Staff',
+    salaryScale: booklet?.salaryScale || (profile?.level ? `CONTISS ${profile.level}` : 'CONUASS 04'),
+    dateOfAppointment: booklet?.dateOfAppointment || (profile?.dateOfFirstAppointment ? new Date(profile.dateOfFirstAppointment).toISOString().split('T')[0] : '2020-01-15'),
+    facultyDeptStudyCenter: booklet?.facultyDeptStudyCenter || profile?.department || profile?.unit?.name || profile?.studyCenter?.name || 'National Open University of Nigeria',
+    location: booklet?.location || profile?.studyCenter?.name || 'Abuja Headquarters',
+    phoneNo: booklet?.phoneNo || profile?.phoneNumber || '',
+    officialEmail: booklet?.officialEmail || profile?.officialEmail || profile?.user?.email || '',
+    dateResumedPreviousLeave: booklet?.dateResumedPreviousLeave || '',
+    dateProceedingOnLeave: booklet?.dateProceedingOnLeave || '',
+    dateLeaveEnds: booklet?.dateLeaveEnds || '',
+    dateOfResumption: booklet?.dateOfResumption || '',
+    staffSignature: booklet?.staffSignature || '',
+    staffSignatureDate: booklet?.staffSignatureDate || new Date().toISOString().split('T')[0],
+    reliefOfficerName: booklet?.reliefOfficerName || '',
+    reliefOfficerStaffId: booklet?.reliefOfficerStaffId || '',
+    reliefOfficerRank: booklet?.reliefOfficerRank || '',
+    reliefOfficerDepartment: booklet?.reliefOfficerDepartment || '',
+    supervisorComment: booklet?.supervisorComment || '',
+    supervisorName: booklet?.supervisorName || '',
+    supervisorDesignation: booklet?.supervisorDesignation || '',
+    supervisorSignature: booklet?.supervisorSignature || '',
+    supervisorSignatureDate: booklet?.supervisorSignatureDate || '',
+    deanDirectorComment: booklet?.deanDirectorComment || '',
+    deanDirectorName: booklet?.deanDirectorName || '',
+    deanDirectorTitle: booklet?.deanDirectorTitle || '',
+    deanDirectorSignature: booklet?.deanDirectorSignature || '',
+    deanDirectorSignatureDate: booklet?.deanDirectorSignatureDate || '',
+    directorHrComment: booklet?.directorHrComment || '',
+    directorHrName: booklet?.directorHrName || '',
+    directorHrSignature: booklet?.directorHrSignature || '',
+    directorHrSignatureDate: booklet?.directorHrSignatureDate || '',
+    registrarComment: booklet?.registrarComment || '',
+    registrarName: booklet?.registrarName || '',
+    registrarSignature: booklet?.registrarSignature || '',
+    registrarSignatureDate: booklet?.registrarSignatureDate || '',
+    referenceNo: booklet?.referenceNo || '',
+    status: booklet?.status || 'APPROVED',
+    leaveType: booklet?.leaveType || 'ANNUAL',
+    workingDays: booklet?.workingDays || 30,
+    ...(booklet || {})
+  };
+
   if (!isOpen) return null;
 
   const handleFormSubmit = async (data: OfficialLeaveBooklet, isDraft: boolean) => {
@@ -106,13 +156,13 @@ export default function OfficialLeaveBookletModal({
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {viewMode === 'VIEW' ? (
             <OfficialLeaveBookletViewer
-              booklet={booklet as OfficialLeaveBooklet}
+              booklet={safeBooklet}
               onClose={onClose}
               showPrintActions={true}
             />
           ) : (
             <OfficialLeaveBookletForm
-              initialData={booklet}
+              initialData={safeBooklet}
               profile={profile}
               userRole={userRole}
               mode={reviewMode}

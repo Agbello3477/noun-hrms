@@ -95,8 +95,21 @@ interface OrganizationData {
 
 export default function StaffDetailPage({ params, onBack }: { params?: { id?: string }; onBack?: () => void }) {
     const routeParams = useParams();
-    const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
+    
+    // Resolve staff ID flexibly across SSR params, Next.js route params, and direct URL path for static export
+    const id = useMemo(() => {
+        if (params?.id && params.id !== 'default') return params.id;
+        if (routeParams?.id && routeParams.id !== 'default') return routeParams.id as string;
+        if (typeof window !== 'undefined') {
+            const cleanPath = window.location.pathname.replace(/\/$/, '');
+            const segments = cleanPath.split('/');
+            const last = segments[segments.length - 1];
+            if (last && last !== 'staff' && last !== 'default') return last;
+        }
+        return (routeParams?.id as string) || params?.id || '';
+    }, [params?.id, routeParams?.id]);
+
     const { user: currentUser } = useAuth();
     const [staff, setStaff] = useState<StaffDetail | null>(null);
     const [orgData, setOrgData] = useState<OrganizationData>({ centers: [], units: [] });

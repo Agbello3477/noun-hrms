@@ -9,6 +9,18 @@
     "cleanUrls": true,
     "rewrites": [
       {
+        "source": "/dashboard/research/**",
+        "destination": "/dashboard/research/default.html"
+      },
+      {
+        "source": "/dashboard/hr/files/**",
+        "destination": "/dashboard/hr/files/default.html"
+      },
+      {
+        "source": "/dashboard/staff/**",
+        "destination": "/dashboard/staff/default.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

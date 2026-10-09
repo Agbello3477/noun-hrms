@@ -50,12 +50,33 @@ import Link from 'next/link';
 
 export default function ResearchWorkspace({ params }: { params?: { id?: string } }) {
     const routeParams = useParams();
-    const id = params?.id || (routeParams?.id as string) || '';
     const router = useRouter();
+    
+    // Resolve project ID flexibly across SSR params, Next.js route params, and direct URL path
+    const getResolvedId = () => {
+        if (params?.id && params.id !== 'default') return params.id;
+        if (routeParams?.id && routeParams.id !== 'default') return routeParams.id as string;
+        if (typeof window !== 'undefined') {
+            const cleanPath = window.location.pathname.replace(/\/$/, '');
+            const segments = cleanPath.split('/');
+            const last = segments[segments.length - 1];
+            if (last && last !== 'research' && last !== 'default') return last;
+        }
+        return (routeParams?.id as string) || params?.id || '';
+    };
+
+    const [id, setId] = useState<string>(getResolvedId);
     const [project, setProject] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [isRestricted, setIsRestricted] = useState(false);
+
+    useEffect(() => {
+        const resolved = getResolvedId();
+        if (resolved && resolved !== id) {
+            setId(resolved);
+        }
+    }, [routeParams, params]);
     
     // Modals & form state
     const [showInviteModal, setShowInviteModal] = useState(false);

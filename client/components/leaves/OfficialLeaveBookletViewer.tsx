@@ -5,7 +5,7 @@ import { OfficialLeaveBooklet } from '../../types/leaveBooklet';
 import { Printer, Download, CheckCircle2, ShieldCheck, FileCheck, Building, Calendar, User, Phone, Mail, Award, Clock } from 'lucide-react';
 
 interface OfficialLeaveBookletViewerProps {
-  booklet: OfficialLeaveBooklet;
+  booklet?: Partial<OfficialLeaveBooklet> | null;
   onClose?: () => void;
   showPrintActions?: boolean;
 }
@@ -18,6 +18,14 @@ export default function OfficialLeaveBookletViewer({
   const handlePrint = () => {
     window.print();
   };
+
+  const b = booklet || {};
+  const currentYear = new Date().getFullYear();
+  const leaveYear = b.leaveYear || currentYear;
+  const staffNo = b.staffNo || '—';
+  const fullName = b.fullName || (b.surname ? `${b.surname}, ${b.otherNames || ''}` : '—');
+  const referenceNo = b.referenceNo || `NOUN/LVB/${leaveYear}/${staffNo !== '—' ? staffNo : '00000'}`;
+  const status = b.status || 'OFFICIAL RECORD';
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden max-w-4xl mx-auto my-4 text-slate-800">
@@ -81,18 +89,18 @@ export default function OfficialLeaveBookletViewer({
         <div className="flex flex-wrap items-center justify-between bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs">
           <div>
             <span className="text-slate-500 font-bold">1. Leave Year: </span>
-            <span className="font-black text-[#006533] text-sm">{booklet.leaveYear || new Date().getFullYear()}</span>
+            <span className="font-black text-[#006533] text-sm">{leaveYear}</span>
           </div>
           <div>
             <span className="text-slate-500 font-bold">Dossier Ref: </span>
             <span className="font-mono font-bold text-slate-800">
-              {booklet.referenceNo || `NOUN/LVB/${booklet.leaveYear || new Date().getFullYear()}/${booklet.staffNo || '00000'}`}
+              {referenceNo}
             </span>
           </div>
           <div>
             <span className="text-slate-500 font-bold">Status: </span>
             <span className="font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
-              {booklet.status || 'OFFICIAL RECORD'}
+              {status}
             </span>
           </div>
         </div>
@@ -109,16 +117,16 @@ export default function OfficialLeaveBookletViewer({
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200">
               <div className="md:col-span-3 p-3 bg-slate-50/50">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">1. Leave Year</span>
-                <span className="font-bold text-slate-900 text-sm">{booklet.leaveYear}</span>
+                <span className="font-bold text-slate-900 text-sm">{leaveYear}</span>
               </div>
               <div className="md:col-span-3 p-3 bg-slate-50/50">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">2. Staff No</span>
-                <span className="font-mono font-bold text-[#006533] text-sm">{booklet.staffNo || '—'}</span>
+                <span className="font-mono font-bold text-[#006533] text-sm">{staffNo}</span>
               </div>
               <div className="md:col-span-6 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">3. Full Name: (Surname First)</span>
                 <span className="font-black text-slate-900 uppercase text-sm">
-                  {booklet.fullName || `${booklet.surname || ''}, ${booklet.otherNames || ''}`}
+                  {fullName}
                 </span>
               </div>
             </div>
@@ -127,15 +135,15 @@ export default function OfficialLeaveBookletViewer({
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200">
               <div className="md:col-span-4 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">4. Designation</span>
-                <span className="font-bold text-slate-900">{booklet.designation || '—'}</span>
+                <span className="font-bold text-slate-900">{b.designation || '—'}</span>
               </div>
               <div className="md:col-span-4 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">5. Salary Scale</span>
-                <span className="font-bold text-slate-900">{booklet.salaryScale || '—'}</span>
+                <span className="font-bold text-slate-900">{b.salaryScale || '—'}</span>
               </div>
               <div className="md:col-span-4 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">6. Date of Appointment</span>
-                <span className="font-bold text-slate-900">{booklet.dateOfAppointment || '—'}</span>
+                <span className="font-bold text-slate-900">{b.dateOfAppointment || '—'}</span>
               </div>
             </div>
 
@@ -145,11 +153,11 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">
                   7. Faculty / Department/ Study Center
                 </span>
-                <span className="font-bold text-slate-900">{booklet.facultyDeptStudyCenter || '—'}</span>
+                <span className="font-bold text-slate-900">{b.facultyDeptStudyCenter || '—'}</span>
               </div>
               <div className="md:col-span-5 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">8. Location</span>
-                <span className="font-bold text-slate-900">{booklet.location || '—'}</span>
+                <span className="font-bold text-slate-900">{b.location || '—'}</span>
               </div>
             </div>
 
@@ -157,11 +165,11 @@ export default function OfficialLeaveBookletViewer({
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200">
               <div className="md:col-span-6 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">9. Phone No</span>
-                <span className="font-bold text-slate-900">{booklet.phoneNo || '—'}</span>
+                <span className="font-bold text-slate-900">{b.phoneNo || '—'}</span>
               </div>
               <div className="md:col-span-6 p-3">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">10. Official Email</span>
-                <span className="font-bold text-slate-900">{booklet.officialEmail || '—'}</span>
+                <span className="font-bold text-slate-900">{b.officialEmail || '—'}</span>
               </div>
             </div>
 
@@ -171,25 +179,25 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">
                   11. Date Resumed Duty from previous Leave
                 </span>
-                <span className="font-bold text-slate-900">{booklet.dateResumedPreviousLeave || 'N/A (First Application)'}</span>
+                <span className="font-bold text-slate-900">{b.dateResumedPreviousLeave || 'N/A (First Application)'}</span>
               </div>
               <div className="md:col-span-3 p-3">
                 <span className="font-bold text-emerald-800 block text-[10px] uppercase">
                   12. Date Proceeding on Leave
                 </span>
-                <span className="font-black text-emerald-950 text-sm">{booklet.dateProceedingOnLeave || '—'}</span>
+                <span className="font-black text-emerald-950 text-sm">{b.dateProceedingOnLeave || '—'}</span>
               </div>
               <div className="md:col-span-3 p-3">
                 <span className="font-bold text-emerald-800 block text-[10px] uppercase">
                   13. Date Leave Ends
                 </span>
-                <span className="font-black text-emerald-950 text-sm">{booklet.dateLeaveEnds || '—'}</span>
+                <span className="font-black text-emerald-950 text-sm">{b.dateLeaveEnds || '—'}</span>
               </div>
               <div className="md:col-span-3 p-3">
                 <span className="font-bold text-[#006533] block text-[10px] uppercase">
                   14. Date of Resumption of duty
                 </span>
-                <span className="font-black text-[#006533] text-sm">{booklet.dateOfResumption || '—'}</span>
+                <span className="font-black text-[#006533] text-sm">{b.dateOfResumption || '—'}</span>
               </div>
             </div>
 
@@ -199,10 +207,10 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">
                   15. Staff Signature
                 </span>
-                {booklet.staffSignature ? (
+                {b.staffSignature ? (
                   <div className="h-16 flex items-center">
                     <img
-                      src={booklet.staffSignature}
+                      src={b.staffSignature}
                       alt="Staff Signature"
                       className="max-h-14 object-contain border border-slate-200 rounded-md p-1 bg-white"
                     />
@@ -216,10 +224,10 @@ export default function OfficialLeaveBookletViewer({
               <div className="md:col-span-4 p-3 flex flex-col justify-between">
                 <div>
                   <span className="font-bold text-slate-500 block text-[10px] uppercase">16. Date</span>
-                  <span className="font-bold text-slate-900 text-sm">{booklet.staffSignatureDate || '—'}</span>
+                  <span className="font-bold text-slate-900 text-sm">{b.staffSignatureDate || '—'}</span>
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
-                  Digital Timestamp ID: {booklet.staffNo}-{booklet.leaveYear}
+                  Digital Timestamp ID: {staffNo}-{leaveYear}
                 </div>
               </div>
             </div>
@@ -230,12 +238,12 @@ export default function OfficialLeaveBookletViewer({
                 17. Person responsible for duties during absence (if applicable)
               </span>
               <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-900">
-                <span>Name: {booklet.reliefOfficerName || 'Not Assigned / Nil'}</span>
-                {booklet.reliefOfficerStaffId && (
-                  <span className="text-slate-500">Staff ID: {booklet.reliefOfficerStaffId}</span>
+                <span>Name: {b.reliefOfficerName || 'Not Assigned / Nil'}</span>
+                {b.reliefOfficerStaffId && (
+                  <span className="text-slate-500">Staff ID: {b.reliefOfficerStaffId}</span>
                 )}
-                {booklet.reliefOfficerRank && (
-                  <span className="text-slate-500">Rank: {booklet.reliefOfficerRank}</span>
+                {b.reliefOfficerRank && (
+                  <span className="text-slate-500">Rank: {b.reliefOfficerRank}</span>
                 )}
               </div>
             </div>
@@ -254,7 +262,7 @@ export default function OfficialLeaveBookletViewer({
                 18. Comment by the Immediate Supervisor (HOD in the case of Academic Staff)
               </span>
               <p className="text-xs text-slate-800 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 min-h-[48px]">
-                {booklet.supervisorComment || 'Recommended as applied. Adequate relief coverage is in place.'}
+                {b.supervisorComment || 'Recommended as applied. Adequate relief coverage is in place.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200 p-3">
@@ -262,21 +270,21 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">
                   19. Supervisor Signature
                 </span>
-                {booklet.supervisorSignature ? (
+                {b.supervisorSignature ? (
                   <img
-                    src={booklet.supervisorSignature}
+                    src={b.supervisorSignature}
                     alt="Supervisor Signature"
                     className="max-h-12 object-contain border border-slate-200 rounded p-1 bg-white"
                   />
                 ) : (
                   <span className="font-mono text-xs text-[#006533] font-bold">
-                    ✓ Verified &amp; Endorsed by HOD ({booklet.supervisorName || 'Department Head'})
+                    ✓ Verified &amp; Endorsed by HOD ({b.supervisorName || 'Department Head'})
                   </span>
                 )}
               </div>
               <div className="md:col-span-4 pl-0 md:pl-3 pt-2 md:pt-0">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">19. Date</span>
-                <span className="font-bold text-slate-900">{booklet.supervisorSignatureDate || '—'}</span>
+                <span className="font-bold text-slate-900">{b.supervisorSignatureDate || '—'}</span>
               </div>
             </div>
           </div>
@@ -294,7 +302,7 @@ export default function OfficialLeaveBookletViewer({
                 20. Comment by Principal Officer, Dean, Director or Head of Unit
               </span>
               <p className="text-xs text-slate-800 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 min-h-[48px]">
-                {booklet.deanDirectorComment || 'Endorsed and forwarded for Director HR verification and Registrar approval.'}
+                {b.deanDirectorComment || 'Endorsed and forwarded for Director HR verification and Registrar approval.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200 p-3">
@@ -302,21 +310,21 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">
                   21. Signature
                 </span>
-                {booklet.deanDirectorSignature ? (
+                {b.deanDirectorSignature ? (
                   <img
-                    src={booklet.deanDirectorSignature}
+                    src={b.deanDirectorSignature}
                     alt="Dean Signature"
                     className="max-h-12 object-contain border border-slate-200 rounded p-1 bg-white"
                   />
                 ) : (
                   <span className="font-mono text-xs text-[#006533] font-bold">
-                    ✓ Endorsed by {booklet.deanDirectorName || 'Dean / Director of Directorate'}
+                    ✓ Endorsed by {b.deanDirectorName || 'Dean / Director of Directorate'}
                   </span>
                 )}
               </div>
               <div className="md:col-span-4 pl-0 md:pl-3 pt-2 md:pt-0">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">21. Date</span>
-                <span className="font-bold text-slate-900">{booklet.deanDirectorSignatureDate || '—'}</span>
+                <span className="font-bold text-slate-900">{b.deanDirectorSignatureDate || '—'}</span>
               </div>
             </div>
           </div>
@@ -334,7 +342,7 @@ export default function OfficialLeaveBookletViewer({
                 22. Comment by the Director (HR)
               </span>
               <p className="text-xs text-slate-800 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 min-h-[48px]">
-                {booklet.directorHrComment || 'Leave entitlement verified against Statutory Matrix. Balance is adequate. Recommended for Registrar sign-off.'}
+                {b.directorHrComment || 'Leave entitlement verified against Statutory Matrix. Balance is adequate. Recommended for Registrar sign-off.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200 p-3">
@@ -342,9 +350,9 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">
                   23. Signature of Director / HR
                 </span>
-                {booklet.directorHrSignature ? (
+                {b.directorHrSignature ? (
                   <img
-                    src={booklet.directorHrSignature}
+                    src={b.directorHrSignature}
                     alt="Director HR Signature"
                     className="max-h-12 object-contain border border-slate-200 rounded p-1 bg-white"
                   />
@@ -356,7 +364,7 @@ export default function OfficialLeaveBookletViewer({
               </div>
               <div className="md:col-span-4 pl-0 md:pl-3 pt-2 md:pt-0">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">24. Date</span>
-                <span className="font-bold text-slate-900">{booklet.directorHrSignatureDate || '—'}</span>
+                <span className="font-bold text-slate-900">{b.directorHrSignatureDate || '—'}</span>
               </div>
             </div>
           </div>
@@ -378,7 +386,7 @@ export default function OfficialLeaveBookletViewer({
                 25. Comment(s) by the Registrar
               </span>
               <p className="text-xs text-slate-900 font-bold bg-white p-3 rounded-lg border border-emerald-300 min-h-[48px]">
-                {booklet.registrarComment || 'APPROVED as recommended by the Directorate of Human Resources.'}
+                {b.registrarComment || 'APPROVED as recommended by the Directorate of Human Resources.'}
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-emerald-200 p-3 bg-white">
@@ -386,9 +394,9 @@ export default function OfficialLeaveBookletViewer({
                 <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">
                   26. Signature of Registrar / Official Seal
                 </span>
-                {booklet.registrarSignature ? (
+                {b.registrarSignature ? (
                   <img
-                    src={booklet.registrarSignature}
+                    src={b.registrarSignature}
                     alt="Registrar Seal"
                     className="max-h-14 object-contain border border-emerald-300 rounded p-1 bg-white"
                   />
@@ -406,7 +414,7 @@ export default function OfficialLeaveBookletViewer({
               </div>
               <div className="md:col-span-4 pl-0 md:pl-3 pt-2 md:pt-0">
                 <span className="font-bold text-slate-500 block text-[10px] uppercase">26. Date</span>
-                <span className="font-bold text-[#006533] text-sm">{booklet.registrarSignatureDate || '—'}</span>
+                <span className="font-bold text-[#006533] text-sm">{b.registrarSignatureDate || '—'}</span>
               </div>
             </div>
           </div>
@@ -418,7 +426,7 @@ export default function OfficialLeaveBookletViewer({
             Official Electronic Leave Booklet • Directorate of Human Resources • NOUN
           </div>
           <div className="font-mono">
-            Security Hash: {booklet.staffNo ? btoa(booklet.staffNo + (booklet.leaveYear || '2026')).substring(0, 16) : 'NOUN-STATUTORY'}
+            Security Hash: {staffNo !== '—' ? btoa(staffNo + (leaveYear || '2026')).substring(0, 16) : 'NOUN-STATUTORY'}
           </div>
         </div>
       </div>
