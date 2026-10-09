@@ -680,7 +680,7 @@ export default function StaffDetailPage({ params, onBack }: { params?: { id?: st
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Cadre</p>
-                                <p className="font-bold text-gray-800 text-sm">{formatCadreDisplay(staff.staffProfile?.cadre || staff.cadre, staff.staffProfile?.cadreType || staff.cadreType, staff.staffProfile?.rank || staff.rank)}</p>
+                                <p className="font-bold text-gray-800 text-sm">{formatCadreDisplay(staff.staffProfile?.cadre || staff.cadre, staff.staffProfile?.cadreType || staff.cadreType, staff.staffProfile?.rank)}</p>
                             </div>
                         </div>
                     </div>
