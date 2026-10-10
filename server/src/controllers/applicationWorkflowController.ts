@@ -214,7 +214,7 @@ export async function submitApplication(req: Request, res: Response) {
     if (facultyHierarchy?.isFacultyStaff) {
       if (!facultyHierarchy.isCallerHod && !facultyHierarchy.isCallerDean && facultyHierarchy.hod) {
         resolvedDirectorId = facultyHierarchy.hod.id;
-      } else if (facultyHierarchy.isCallerHod && facultyHierarchy.dean) {
+      } else if ((facultyHierarchy.isCallerHod || !facultyHierarchy.hod) && facultyHierarchy.dean) {
         resolvedDirectorId = facultyHierarchy.dean.id;
       }
     }
@@ -1970,7 +1970,7 @@ export async function getEligibleDirectors(req: Request, res: Response) {
           title: facultyHierarchy.hod.title || 'HOD',
           reason: `Head of Department (HOD) for ${facultyHierarchy.department?.name || 'Department'} (Faculty of ${facultyHierarchy.faculty?.name || 'Faculty'})`
         };
-      } else if (facultyHierarchy?.isFacultyStaff && facultyHierarchy.dean && facultyHierarchy.isCallerHod) {
+      } else if (facultyHierarchy?.isFacultyStaff && facultyHierarchy.dean && (facultyHierarchy.isCallerHod || !facultyHierarchy.hod)) {
         designatedDirector = {
           id: facultyHierarchy.dean.id,
           name: facultyHierarchy.dean.name,
