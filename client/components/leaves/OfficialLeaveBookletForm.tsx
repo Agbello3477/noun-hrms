@@ -442,21 +442,21 @@ export default function OfficialLeaveBookletForm({
       <div className={`border rounded-2xl p-5 md:p-6 space-y-4 ${mode === 'HOD_REVIEW' ? 'bg-amber-50/40 border-amber-300 ring-2 ring-amber-200' : 'bg-slate-50/50 border-slate-200'}`}>
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
           <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-            <Building size={16} className="text-[#006533]" /> Part B: Immediate Supervisor / HOD Recommendation (Items 18 – 19)
+            <Building size={16} className="text-[#006533]" /> Part B: Immediate Supervisor / HOD Recommendation (Pushed to Dean) (Items 18 – 19)
           </h3>
           <span className="text-[11px] font-bold text-slate-400">Supervisor Endorsement</span>
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1">
-            18. Comment by the Immediate Supervisor (HOD in the case of Academic Staff)
+            18. Comment by the Immediate Supervisor (HOD in the case of Academic / Faculty Staff)
           </label>
           <textarea
             rows={3}
             value={formData.supervisorComment || ''}
             onChange={(e) => handleFieldChange('supervisorComment', e.target.value)}
             disabled={mode !== 'HOD_REVIEW'}
-            placeholder={mode === 'HOD_REVIEW' ? 'Enter supervisor recommendation and coverage confirmation...' : 'Pending HOD / Supervisor review'}
+            placeholder={mode === 'HOD_REVIEW' ? 'Enter supervisor recommendation and coverage confirmation (to be forwarded to Dean)...' : 'Pending HOD / Supervisor review'}
             className="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-[#006533]"
           />
         </div>
@@ -487,9 +487,9 @@ export default function OfficialLeaveBookletForm({
       <div className={`border rounded-2xl p-5 md:p-6 space-y-4 ${mode === 'DEAN_REVIEW' ? 'bg-amber-50/40 border-amber-300 ring-2 ring-amber-200' : 'bg-slate-50/50 border-slate-200'}`}>
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
           <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-            <Award size={16} className="text-[#006533]" /> Part C: Dean / Director / Head of Unit Endorsement (Items 20 – 21)
+            <Award size={16} className="text-[#006533]" /> Part C: Faculty Dean Final Approval or Directorate Endorsement (Items 20 – 21)
           </h3>
-          <span className="text-[11px] font-bold text-slate-400">Principal Officer / Dean / Director</span>
+          <span className="text-[11px] font-bold text-slate-400">Faculty Dean / Principal Officer</span>
         </div>
 
         <div>

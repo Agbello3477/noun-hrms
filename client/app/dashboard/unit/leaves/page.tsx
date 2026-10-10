@@ -132,8 +132,8 @@ export default function UnitLeavesPage() {
         'ADMIN'
     ].includes(userRole);
 
-    const isHOD = userRole === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'DEPARTMENT';
-    const isDean = userRole === 'UNIT_HEAD' && currentUser?.staffProfile?.unit?.type === 'FACULTY';
+    const isHOD = (userRole as string) === 'HOD' || (userRole === 'UNIT_HEAD' && (currentUser?.staffProfile?.unit?.type === 'DEPARTMENT' || ((currentUser?.staffProfile?.unit as any)?.code && (currentUser?.staffProfile?.unit as any)?.code.startsWith('DEP-'))));
+    const isDean = (userRole as string) === 'DEAN' || (userRole === 'UNIT_HEAD' && (currentUser?.staffProfile?.unit?.type === 'FACULTY' || ((currentUser?.staffProfile?.unit as any)?.code && (currentUser?.staffProfile?.unit as any)?.code.startsWith('FAC-'))));
     const canApprove = [
         'UNIT_HEAD',
         'UNIT_ADMIN',
@@ -193,15 +193,15 @@ export default function UnitLeavesPage() {
         }
     };
 
-    // Level 1: HOD Endorsement
+    // Level 1: HOD Endorsement (Pushed to Dean)
     const handleEndorseHod = async () => {
         if (!selectedLeave) return;
         setSubmittingAction('endorse');
         try {
             await api.put(`/api/v1/leave/${selectedLeave.id}/endorse-hod`, {
-                remarks: reviewRemarks.trim() || 'Endorsed by Unit Head / HOD for administrative clearance.'
+                remarks: reviewRemarks.trim() || 'Recommended by HOD and pushed to Dean for final clearance.'
             });
-            alert('Leave application endorsed successfully and forwarded to Registry (Level 2).');
+            alert('Leave application recommended successfully and pushed to Dean.');
             setSelectedLeave(null);
             fetchPendingLeaves();
         } catch (error: any) {
@@ -217,6 +217,36 @@ export default function UnitLeavesPage() {
                 fetchPendingLeaves();
             } catch (legacyError: any) {
                 alert(legacyError.response?.data?.message || error.response?.data?.message || 'Failed to endorse leave application.');
+            }
+        } finally {
+            setSubmittingAction(null);
+        }
+    };
+
+    // Dean Final Approval (Faculty Staff)
+    const handleAuthorizeDean = async () => {
+        if (!selectedLeave) return;
+        setSubmittingAction('authorize-dean');
+        try {
+            await api.put(`/api/v1/leave/${selectedLeave.id}/authorize-dean`, {
+                remarks: reviewRemarks.trim() || 'Approved by Faculty Dean (Final Statutory Approval).'
+            });
+            alert('Leave application officially approved by Dean and quota balance deducted.');
+            setSelectedLeave(null);
+            fetchPendingLeaves();
+            fetchActiveLeaves();
+        } catch (error: any) {
+            console.warn('Failed on /authorize-dean, attempting /authorize-registry fallback', error);
+            try {
+                await api.put(`/api/v1/leave/${selectedLeave.id}/authorize-registry`, {
+                    remarks: reviewRemarks.trim() || 'Approved by Faculty Dean.'
+                });
+                alert('Leave application approved.');
+                setSelectedLeave(null);
+                fetchPendingLeaves();
+                fetchActiveLeaves();
+            } catch (fallbackError: any) {
+                alert(fallbackError.response?.data?.message || error.response?.data?.message || 'Failed to approve leave application.');
             }
         } finally {
             setSubmittingAction(null);
@@ -931,15 +961,26 @@ export default function UnitLeavesPage() {
                                     size="sm"
                                     onClick={handleEndorseHod}
                                     isLoading={submittingAction === 'endorse'}
-                                    loadingText="Endorsing..."
+                                    loadingText="Recommending..."
                                     disabled={submittingAction !== null}
                                 >
-                                    Endorse (Level 1)
+                                    {isHOD ? 'Recommend & Forward to Dean' : 'Endorse (Level 1)'}
                                 </Button>
                             ) : null}
 
-                            {/* Level 2 Registry Clearance Button */}
-                            {isRegistryOrExecutive && (
+                            {/* Dean Final Approval or Level 2 Registry Clearance Button */}
+                            {isDean && (selectedLeave.status === 'PENDING_REGISTRY' || selectedLeave.status === 'PENDING_HOD' || selectedLeave.status === 'PENDING') ? (
+                                <Button
+                                    variant="emerald"
+                                    size="sm"
+                                    onClick={handleAuthorizeDean}
+                                    isLoading={submittingAction === 'authorize-dean'}
+                                    loadingText="Approving..."
+                                    disabled={submittingAction !== null}
+                                >
+                                    Approve Leave (Dean Final Approval)
+                                </Button>
+                            ) : isRegistryOrExecutive && selectedLeave.status === 'PENDING_REGISTRY' ? (
                                 <Button
                                     variant="primary"
                                     size="sm"
@@ -950,7 +991,7 @@ export default function UnitLeavesPage() {
                                 >
                                     Authorize (Level 2)
                                 </Button>
-                            )}
+                            ) : null}
                         </div>
                     </div>
                 </div>

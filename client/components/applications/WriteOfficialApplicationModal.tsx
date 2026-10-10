@@ -60,6 +60,16 @@ interface DesignatedDirectorInfo {
     reason?: string;
 }
 
+interface FacultyStaffHierarchy {
+    isFacultyStaff: boolean;
+    department?: { id: string; name: string; code: string };
+    hod?: { id: string; name: string; email: string; title?: string };
+    faculty?: { id: string; name: string; code: string };
+    dean?: { id: string; name: string; email: string; title?: string };
+    isCallerHod: boolean;
+    isCallerDean: boolean;
+}
+
 const LEADERSHIP_ROLES = [
     'DIRECTOR',
     'UNIT_HEAD',
@@ -91,6 +101,7 @@ export default function WriteOfficialApplicationModal({
     const [directors, setDirectors] = useState<DirectorOption[]>([]);
     const [directorId, setDirectorId] = useState('');
     const [designatedDirector, setDesignatedDirector] = useState<DesignatedDirectorInfo | null>(null);
+    const [facultyHierarchy, setFacultyHierarchy] = useState<FacultyStaffHierarchy | null>(null);
     const [loadingDirectors, setLoadingDirectors] = useState(false);
 
     // Form fields
@@ -132,6 +143,10 @@ export default function WriteOfficialApplicationModal({
             const directorList: DirectorOption[] = res?.data?.directors || res?.data?.data || [];
             setDirectors(directorList);
 
+            if (res?.data?.facultyHierarchy) {
+                setFacultyHierarchy(res.data.facultyHierarchy);
+            }
+
             if (res?.data?.designatedDirector) {
                 const detected = res.data.designatedDirector;
                 setDesignatedDirector(detected);
@@ -139,7 +154,15 @@ export default function WriteOfficialApplicationModal({
 
                 // Dynamically update the Through line in template if it has the generic placeholder
                 setContent((prevContent) => {
-                    const throughLine = `Through: ${detected.name} (${detected.unit || 'Designated Head / Director'})`;
+                    const fh = res.data.facultyHierarchy;
+                    let throughLine = `Through: ${detected.name} (${detected.unit || 'Designated Head / Director'})`;
+                    if (fh?.isFacultyStaff) {
+                        if (!fh.isCallerHod && !fh.isCallerDean) {
+                            throughLine = `Through: The Head of Department (HOD) - ${fh.hod?.name || 'HOD'}, Department of ${fh.department?.name || 'Department'}\nThrough: The Dean - ${fh.dean?.name || 'Dean'}, Faculty of ${fh.faculty?.name || 'Faculty'}`;
+                        } else if (fh.isCallerHod) {
+                            throughLine = `Through: The Dean - ${fh.dean?.name || 'Dean'}, Faculty of ${fh.faculty?.name || 'Faculty'}`;
+                        }
+                    }
                     if (!prevContent || prevContent.includes('Through: The Director / Head of Unit')) {
                         if (!prevContent) return prevContent;
                         return prevContent.replace('Through: The Director / Head of Unit', throughLine);
@@ -164,9 +187,17 @@ export default function WriteOfficialApplicationModal({
             setCustomUnit(defaultUnit);
             setCustomRank(defaultRank);
 
-            const throughLine = designatedDirector
+            let throughLine = designatedDirector
                 ? `Through: ${designatedDirector.name} (${designatedDirector.unit || 'Designated Head / Director'})`
                 : 'Through: The Director / Head of Unit';
+
+            if (facultyHierarchy?.isFacultyStaff) {
+                if (!facultyHierarchy.isCallerHod && !facultyHierarchy.isCallerDean) {
+                    throughLine = `Through: The Head of Department (HOD) - ${facultyHierarchy.hod?.name || 'Head of Department'}, Department of ${facultyHierarchy.department?.name || 'Department'}\nThrough: The Dean - ${facultyHierarchy.dean?.name || 'Dean'}, Faculty of ${facultyHierarchy.faculty?.name || 'Faculty'}`;
+                } else if (facultyHierarchy.isCallerHod) {
+                    throughLine = `Through: The Dean - ${facultyHierarchy.dean?.name || 'Dean'}, Faculty of ${facultyHierarchy.faculty?.name || 'Faculty'}`;
+                }
+            }
 
             if (!content) {
                 if (routingMode === 'THROUGH_DIRECTOR') {
@@ -220,7 +251,7 @@ ${defaultUnit}`
                 }
             }
         }
-    }, [isOpen, user, routingMode, designatedDirector]);
+    }, [isOpen, user, routingMode, designatedDirector, facultyHierarchy]);
 
     if (!isOpen) return null;
 
@@ -488,8 +519,40 @@ ${defaultUnit}`
                         </div>
                     </div>
 
-                    {/* Auto-Detected Unit Head / Director Card */}
-                    {routingMode === 'THROUGH_DIRECTOR' && designatedDirector && (
+                    {/* Auto-Detected Unit Head / Director Card or Faculty Hierarchy Routing Banner */}
+                    {routingMode === 'THROUGH_DIRECTOR' && facultyHierarchy?.isFacultyStaff ? (
+                        <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 rounded-xl space-y-2.5">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-[#006533]" />
+                                    <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                                        Faculty Statutory Application Pathway
+                                    </span>
+                                </div>
+                                <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                                    STATUTORY ENFORCED
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-900 leading-relaxed">
+                                {facultyHierarchy.isCallerHod ? (
+                                    <>Addressed: <strong>To: The Registrar, Through: The Dean</strong> ({facultyHierarchy.dean?.name || 'Dean'}). Forwarded directly to the Dean for onward recommendation to Registry.</>
+                                ) : (
+                                    <>Addressed: <strong>To: The Registrar, Through: The HOD, Through: The Dean</strong>. Your application is routed first to your HOD ({facultyHierarchy.hod?.name || 'HOD'}) for recommendation, then pushed to the Dean ({facultyHierarchy.dean?.name || 'Dean'}), and then to Registry Admin for stamping and docketing.</>
+                                )}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+                                <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded">1. Staff Submits</span>
+                                <span>&rarr;</span>
+                                <span className="bg-emerald-100 text-[#006533] px-1.5 py-0.5 rounded">2. HOD Recommends</span>
+                                <span>&rarr;</span>
+                                <span className="bg-emerald-100 text-[#006533] px-1.5 py-0.5 rounded">3. Dean Recommends</span>
+                                <span>&rarr;</span>
+                                <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">4. Registry Admin Folio Docket</span>
+                                <span>&rarr;</span>
+                                <span className="bg-emerald-800 text-white px-1.5 py-0.5 rounded">5. Registrar Final Approval</span>
+                            </div>
+                        </div>
+                    ) : routingMode === 'THROUGH_DIRECTOR' && designatedDirector ? (
                         <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5">
                             <Sparkles className="w-5 h-5 text-emerald-700 flex-shrink-0 mt-0.5" />
                             <div className="text-xs">
@@ -504,24 +567,24 @@ ${defaultUnit}`
                                 </p>
                             </div>
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Through Director Target selector (shown when mode is THROUGH_DIRECTOR) */}
                     {routingMode === 'THROUGH_DIRECTOR' && (
                         <div>
                             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                                 <ShieldCheck size={13} className="text-[#006533]" />
-                                Designated Unit Head / Director *
+                                Designated Supervisor / Head of Department *
                             </label>
                             <select
                                 value={directorId}
                                 onChange={(e) => setDirectorId(e.target.value)}
-                                disabled={loadingDirectors}
+                                disabled={loadingDirectors || Boolean(facultyHierarchy?.isFacultyStaff)}
                                 className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#006533]"
                             >
                                 {designatedDirector && (
                                     <option value={designatedDirector.id}>
-                                        ✨ {designatedDirector.name} - {designatedDirector.unit || 'Designated Head'} (Auto-Detected)
+                                        ✨ {designatedDirector.name} - {designatedDirector.unit || 'Designated Head'} (Statutory Auto-Routing)
                                     </option>
                                 )}
                                 {directors
@@ -533,7 +596,9 @@ ${defaultUnit}`
                                     ))}
                             </select>
                             <p className="text-[10px] text-slate-400 mt-1">
-                                Your application will land on the Director&apos;s vetting cockpit for recommendation before forward transit to Registry.
+                                {facultyHierarchy?.isFacultyStaff 
+                                    ? 'Enforced statutory hierarchy: routed to your designated HOD for departmental vetting.'
+                                    : 'Your application will land on the Director&apos;s vetting cockpit for recommendation before forward transit to Registry.'}
                             </p>
                         </div>
                     )}

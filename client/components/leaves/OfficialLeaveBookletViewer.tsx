@@ -293,8 +293,8 @@ export default function OfficialLeaveBookletViewer({
         {/* ── PART C: DEAN, DIRECTOR OR HEAD OF UNIT (ITEMS 20 - 21) ── */}
         <div className="border border-slate-300 rounded-xl overflow-hidden">
           <div className="bg-slate-800 text-white px-4 py-2 font-black text-xs uppercase tracking-wider flex items-center justify-between">
-            <span>Part C: Dean / Director / Head of Unit Endorsement (Items 20 – 21)</span>
-            <span className="text-[10px] font-normal text-slate-300">Principal Officer / Dean / Director</span>
+            <span>Part C: Faculty Dean Final Approval or Directorate Endorsement (Items 20 – 21)</span>
+            <span className="text-[10px] font-normal text-slate-300">Faculty Dean / Principal Officer</span>
           </div>
           <div className="divide-y divide-slate-200 text-xs">
             <div className="p-4">

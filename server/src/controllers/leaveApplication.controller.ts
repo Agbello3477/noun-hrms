@@ -8,6 +8,7 @@ import {
   parseSalaryScaleAndGrade,
   resolveStaffDirector,
 } from '../services/leaveEntitlement.service';
+import { resolveFacultyStaffHierarchy } from '../services/facultyStaffRouting.service';
 import { ProbationConfirmationService } from '../services/ProbationConfirmationService';
 import { TrainingBondGuard } from '../services/TrainingBondGuard';
 import { notifyUser } from './notification.controller';
@@ -272,27 +273,53 @@ export const applyForStatutoryLeave = async (req: Request, res: Response) => {
           );
         }
       } else {
-        // Strict isolated resolution: Notify ONLY this staff's designated Director / Dean / HOD / Center Manager
-        const unitApprovers = await resolveStaffDirector(staffProfile.id);
+        // Resolve Faculty Hierarchy: If applicant is Faculty staff, notify their HOD specifically!
+        const facultyHierarchy = await resolveFacultyStaffHierarchy(staffProfile.id);
+        const isFacultyStaff = Boolean(facultyHierarchy?.isFacultyStaff && !isPrincipalOfficer && !facultyHierarchy.isCallerDean);
 
-        for (const approver of unitApprovers) {
+        if (isFacultyStaff && facultyHierarchy.hod?.id) {
+          const hodUser = facultyHierarchy.hod;
           await notifyUser(
-            approver.id,
-            'New Leave Application',
-            `${staffName} applied for ${resolvedType} (${workingDays} working days). Pending your Level 1 endorsement.`,
+            hodUser.id,
+            '📋 Faculty Leave Application - HOD Recommendation Required',
+            `Staff member ${staffName} has submitted a ${resolvedType} leave application (${workingDays} working days) to Dean ${facultyHierarchy.dean?.name || 'of Faculty'} through you. Pending your HOD review and recommendation.`,
             'INFO',
             '/dashboard/unit/leaves'
           );
 
-          if (approver.email) {
+          if (hodUser.email) {
             sendLeaveNotification(
-              approver.email,
-              approver.name || 'Director',
+              hodUser.email,
+              hodUser.name || 'Head of Department',
               String(resolvedType).replace(/_/g, ' '),
-              'PENDING LEVEL 1 REVIEW',
+              'PENDING HOD RECOMMENDATION',
               workingDays,
-              `Staff member ${staffName} has submitted a ${resolvedType} leave application (${workingDays} working days) for your Directorate review and endorsement.`
+              `Staff member ${staffName} has submitted a ${resolvedType} leave application (${workingDays} working days) to the Faculty Dean through you. Please review and recommend.`
             ).catch(e => console.warn('Email dispatch warning:', e));
+          }
+        } else {
+          // Strict isolated resolution: Notify ONLY this staff's designated Director / Dean / HOD / Center Manager
+          const unitApprovers = await resolveStaffDirector(staffProfile.id);
+
+          for (const approver of unitApprovers) {
+            await notifyUser(
+              approver.id,
+              'New Leave Application',
+              `${staffName} applied for ${resolvedType} (${workingDays} working days). Pending your Level 1 endorsement.`,
+              'INFO',
+              '/dashboard/unit/leaves'
+            );
+
+            if (approver.email) {
+              sendLeaveNotification(
+                approver.email,
+                approver.name || 'Director',
+                String(resolvedType).replace(/_/g, ' '),
+                'PENDING LEVEL 1 REVIEW',
+                workingDays,
+                `Staff member ${staffName} has submitted a ${resolvedType} leave application (${workingDays} working days) for your Directorate review and endorsement.`
+              ).catch(e => console.warn('Email dispatch warning:', e));
+            }
           }
         }
       }
@@ -424,10 +451,21 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
 
     let whereClause: any = {};
 
+    const headProfile = !isExecutiveOrRegistry ? await prisma.staffProfile.findUnique({
+      where: { userId },
+      include: { unit: true, studyCenter: true }
+    }) : null;
+
+    const isDeanOfFaculty = Boolean(
+      !isExecutiveOrRegistry &&
+      headProfile &&
+      (headProfile.unit?.type === 'FACULTY' || (headProfile.unit?.code && headProfile.unit.code.startsWith('FAC-')) || (headProfile.rank && headProfile.rank.toUpperCase().includes('DEAN')))
+    );
+
     if (status) {
       whereClause.status = status as LeaveApplicationStatus;
-    } else if (isExecutiveOrRegistry) {
-      // Registry sees both PENDING_REGISTRY and PENDING_HOD
+    } else if (isExecutiveOrRegistry || isDeanOfFaculty) {
+      // Registry & Deans see both PENDING_REGISTRY and PENDING_HOD
       whereClause.status = {
         in: [LeaveApplicationStatus.PENDING_REGISTRY, LeaveApplicationStatus.PENDING_HOD]
       };
@@ -441,12 +479,6 @@ export const getPendingLeaveApplications = async (req: Request, res: Response) =
     }
 
     if (!isExecutiveOrRegistry) {
-      // Restrict to unit head's unit, faculty departments, or study center
-      const headProfile = await prisma.staffProfile.findUnique({
-        where: { userId },
-        include: { unit: true, studyCenter: true }
-      });
-
       if (!headProfile) {
         return res.status(403).json({ message: 'Approver profile not found.' });
       }
@@ -700,12 +732,20 @@ export const endorseLeaveByHod = async (req: Request, res: Response) => {
       }
     }
 
-    // Update to PENDING_REGISTRY
+    // Check if staff is faculty staff
+    const facultyHierarchy = await resolveFacultyStaffHierarchy(application.staffId);
+    const isFacultyLeave = Boolean(facultyHierarchy?.isFacultyStaff && facultyHierarchy.dean);
+
+    const defaultRemarks = isFacultyLeave
+      ? 'Recommended by Head of Department and forwarded to Faculty Dean for final approval.'
+      : 'Endorsed by HOD/Unit Head for administrative clearance.';
+
+    // Update to PENDING_REGISTRY (represents Pending Final Clearance)
     const updated = await prisma.leaveApplication.update({
       where: { id },
       data: {
         status: LeaveApplicationStatus.PENDING_REGISTRY,
-        hodApprovalRemarks: remarks || 'Endorsed by HOD/Unit Head for administrative clearance.',
+        hodApprovalRemarks: remarks ? (isFacultyLeave ? `Recommended by HOD: ${remarks.trim()}` : remarks.trim()) : defaultRemarks,
         hodApprovedById: approverId,
         hodApprovedAt: new Date()
       },
@@ -715,38 +755,56 @@ export const endorseLeaveByHod = async (req: Request, res: Response) => {
       }
     });
 
-    // Notify Staff & Registry
+    // Notify Staff & Dean or Registry
     try {
+      const approverUser = await prisma.user.findUnique({ where: { id: approverId }, select: { name: true } });
+      const approverName = approverUser?.name || 'HOD';
+
       if (application.staff?.userId) {
         await notifyUser(
           application.staff.userId,
-          'Leave Application Endorsed',
-          `Your ${application.leaveType} application was endorsed by your HOD. Now awaiting Registry clearance.`,
+          isFacultyLeave ? '✅ Leave Application Recommended by HOD' : 'Leave Application Endorsed',
+          isFacultyLeave
+            ? `Your ${application.leaveType} application was recommended by your HOD and forwarded to Dean ${facultyHierarchy.dean?.name || 'of Faculty'} for final approval.`
+            : `Your ${application.leaveType} application was endorsed by your HOD. Now awaiting Registry clearance.`,
           'SUCCESS',
           '/dashboard/leaves'
         );
       }
 
-      // Notify Registry HR Officers
-      const registryOfficers = await prisma.user.findMany({
-        where: { role: { in: [Role.HR_ADMIN, Role.REGISTRY_ADMIN, Role.REGISTRAR] } },
-        select: { id: true }
-      });
-      for (const reg of registryOfficers) {
+      if (isFacultyLeave && facultyHierarchy.dean?.id) {
+        // Direct notification to Faculty Dean for Final Approval
         await notifyUser(
-          reg.id,
-          'Leave Pending Registry Clearance',
-          `Leave for ${application.staff.user?.name || 'Staff'} has been endorsed by HOD and requires Registry clearance.`,
+          facultyHierarchy.dean.id,
+          '🏛️ Leave Application Awaiting Dean Final Approval',
+          `HOD ${approverName} has recommended ${application.leaveType} leave for ${application.staff.user?.name || 'Staff'} (${application.workingDaysCount} working days) and pushed it to you for final approval.`,
           'INFO',
           '/dashboard/unit/leaves'
         );
+      } else {
+        // Notify Registry HR Officers
+        const registryOfficers = await prisma.user.findMany({
+          where: { role: { in: [Role.HR_ADMIN, Role.REGISTRY_ADMIN, Role.REGISTRAR] } },
+          select: { id: true }
+        });
+        for (const reg of registryOfficers) {
+          await notifyUser(
+            reg.id,
+            'Leave Pending Registry Clearance',
+            `Leave for ${application.staff.user?.name || 'Staff'} has been endorsed by HOD and requires Registry clearance.`,
+            'INFO',
+            '/dashboard/unit/leaves'
+          );
+        }
       }
     } catch (e) {
       console.warn('Notification error on endorseLeaveByHod:', e);
     }
 
     res.json({
-      message: 'Leave application endorsed successfully and forwarded to Registry.',
+      message: isFacultyLeave
+        ? 'Leave application recommended successfully by HOD and forwarded to the Dean for final approval.'
+        : 'Leave application endorsed successfully and forwarded to Registry.',
       application: updated
     });
   } catch (error: any) {
@@ -791,6 +849,13 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
     const year = application.startDate.getFullYear();
     const workingDaysCount = application.workingDaysCount;
     const resolvedType = application.leaveType;
+
+    const facultyHierarchy = await resolveFacultyStaffHierarchy(application.staffId);
+    const isDeanApprover = Boolean(facultyHierarchy?.dean?.id === approverId);
+
+    const defaultRemarks = isDeanApprover
+      ? 'Officially approved by Faculty Dean.'
+      : 'Authorized by Registry/HR for statutory leave.';
 
     // Execute atomic balance ledger update and application authorization in a transaction
     const result = await prisma.$transaction(async (tx: any) => {
@@ -843,7 +908,7 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
         where: { id },
         data: {
           status: LeaveApplicationStatus.APPROVED,
-          registryApprovalRemarks: remarks || 'Authorized by Registry/HR for statutory leave.',
+          registryApprovalRemarks: remarks ? (isDeanApprover ? `Approved by Faculty Dean: ${remarks.trim()}` : remarks.trim()) : defaultRemarks,
           registryApprovedById: approverId,
           registryApprovedAt: new Date(),
           payrollSuspensionFlag: !application.isPaidLeave
@@ -875,8 +940,10 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
       if (application.staff?.userId) {
         await notifyUser(
           application.staff.userId,
-          'Leave Application Approved',
-          `Your ${application.leaveType} application for ${workingDaysCount} working days was APPROVED by the Registry.`,
+          isDeanApprover ? '🎉 Leave Application Approved by Dean' : 'Leave Application Approved',
+          isDeanApprover
+            ? `Your ${application.leaveType} application for ${workingDaysCount} working days was officially APPROVED by Dean ${facultyHierarchy?.dean?.name || 'of Faculty'}.`
+            : `Your ${application.leaveType} application for ${workingDaysCount} working days was APPROVED by the Registry.`,
           'SUCCESS',
           '/dashboard/leaves'
         );
@@ -897,7 +964,9 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
     }
 
     res.json({
-      message: 'Leave application authorized successfully. Balances deducted.',
+      message: isDeanApprover
+        ? 'Leave application officially approved by the Dean. Balances deducted.'
+        : 'Leave application authorized successfully. Balances deducted.',
       application: result
     });
   } catch (error: any) {
@@ -905,6 +974,11 @@ export const authorizeLeaveByRegistry = async (req: Request, res: Response) => {
     res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 };
+
+/**
+ * Faculty Dean Final Approval alias
+ */
+export const authorizeLeaveByDean = authorizeLeaveByRegistry;
 
 /**
  * Reject a Leave Application
@@ -926,18 +1000,23 @@ export const rejectLeaveApplication = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Leave application not found.' });
     }
 
+    const facultyHierarchy = await resolveFacultyStaffHierarchy(application.staffId);
+    const isDeanRejecting = Boolean(facultyHierarchy?.dean?.id === approverId);
+    const isHodRejecting = Boolean(facultyHierarchy?.hod?.id === approverId);
+    const rejectRoleLabel = isDeanRejecting ? 'Faculty Dean' : (isHodRejecting ? 'Head of Department' : 'Supervisor / Registry');
+
     const updated = await prisma.leaveApplication.update({
       where: { id },
       data: {
         status: LeaveApplicationStatus.REJECTED,
-        registryApprovalRemarks: remarks || 'Rejected during administrative review.'
+        registryApprovalRemarks: remarks ? `Rejected by ${rejectRoleLabel}: ${remarks.trim()}` : `Rejected by ${rejectRoleLabel}.`
       }
     });
 
     if (application.staff?.userId) {
       await notifyUser(
         application.staff.userId,
-        'Leave Application Rejected',
+        `❌ Leave Application Rejected by ${rejectRoleLabel}`,
         `Your ${application.leaveType} application was rejected: ${remarks || 'Administrative decision.'}`,
         'ERROR',
         '/dashboard/leaves'
@@ -945,9 +1024,28 @@ export const rejectLeaveApplication = async (req: Request, res: Response) => {
     }
 
     res.json({
-      message: 'Leave application rejected.',
+      message: `Leave application rejected by ${rejectRoleLabel}.`,
       application: updated
     });
+  } catch (error: any) {
+    console.error('rejectLeaveApplication error:', error);
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+};
+
+/**
+ * GET /api/v1/leave/faculty-hierarchy
+ */
+export const getMyFacultyHierarchy = async (req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const userId = req.user.id;
+    const hierarchy = await resolveFacultyStaffHierarchy(userId);
+    res.json(hierarchy);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+};
   } catch (error: any) {
     console.error('rejectLeaveApplication error:', error);
     res.status(500).json({ message: error.message || 'Internal Server Error' });

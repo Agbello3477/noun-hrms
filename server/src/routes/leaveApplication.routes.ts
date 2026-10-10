@@ -6,8 +6,10 @@ import {
   getPendingLeaveApplications,
   endorseLeaveByHod,
   authorizeLeaveByRegistry,
+  authorizeLeaveByDean,
   rejectLeaveApplication,
-  previewWorkingDays
+  previewWorkingDays,
+  getMyFacultyHierarchy
 } from '../controllers/leaveApplication.controller';
 import {
   createLeaveSession,
@@ -45,6 +47,7 @@ router.post('/apply', applyForStatutoryLeave);
 router.post('/preview-working-days', previewWorkingDays);
 router.get('/balances', getMyLeaveBalances);
 router.get('/applications/my', getMyLeaveApplications);
+router.get('/faculty-hierarchy', getMyFacultyHierarchy);
 
 // Approver / Registry endpoints
 const approverRoles = [
@@ -63,9 +66,10 @@ const approverRoles = [
 
 router.get('/applications/pending', requireRole(approverRoles), getPendingLeaveApplications);
 router.put('/:id/endorse-hod', requireRole(approverRoles), endorseLeaveByHod);
+router.put('/:id/authorize-dean', requireRole(approverRoles), authorizeLeaveByDean);
 router.put(
   '/:id/authorize-registry',
-  requireRole(registryRoles),
+  requireRole(approverRoles),
   authorizeLeaveByRegistry
 );
 router.put('/:id/reject', requireRole(approverRoles), rejectLeaveApplication);

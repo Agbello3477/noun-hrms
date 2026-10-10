@@ -12,6 +12,7 @@ import { notifyUser } from './notification.controller';
 import { cacheInvalidationService } from '../services/cacheInvalidationService';
 import { StorageService } from '../services/storage.service';
 import { resolveStaffDirector } from '../services/leaveEntitlement.service';
+import { resolveFacultyStaffHierarchy } from '../services/facultyStaffRouting.service';
 import { ApplicationCategory, Role } from '@prisma/client';
 
 export const ELIGIBLE_DIRECTOR_ROLES: Role[] = [
@@ -208,6 +209,16 @@ export async function submitApplication(req: Request, res: Response) {
     let resolvedDirectorId = explicitDirectorId || null;
     let directorUser: any = null;
 
+    // Check if applicant is faculty staff to enforce statutory routing (Through HOD, Through Dean)
+    const facultyHierarchy = await resolveFacultyStaffHierarchy(resolvedApplicantId);
+    if (facultyHierarchy?.isFacultyStaff) {
+      if (!facultyHierarchy.isCallerHod && !facultyHierarchy.isCallerDean && facultyHierarchy.hod) {
+        resolvedDirectorId = facultyHierarchy.hod.id;
+      } else if (facultyHierarchy.isCallerHod && facultyHierarchy.dean) {
+        resolvedDirectorId = facultyHierarchy.dean.id;
+      }
+    }
+
     if (resolvedDirectorId) {
       directorUser = await prisma.user.findUnique({
         where: { id: resolvedDirectorId },
@@ -304,13 +315,22 @@ export async function submitApplication(req: Request, res: Response) {
         },
       });
 
+      let initialComments = 'Initial application submitted through Directorate for vetting';
+      if (facultyHierarchy?.isFacultyStaff) {
+        if (!facultyHierarchy.isCallerHod && !facultyHierarchy.isCallerDean) {
+          initialComments = `Submitted to Registrar through HOD (${facultyHierarchy.hod?.name || 'HOD'}) and through Dean (${facultyHierarchy.dean?.name || 'Dean'})`;
+        } else if (facultyHierarchy.isCallerHod) {
+          initialComments = `Submitted by HOD to Registrar through Dean (${facultyHierarchy.dean?.name || 'Dean'})`;
+        }
+      }
+
       await tx.applicationRevisionHistory.create({
         data: {
           applicationId: app.id,
           actorId: resolvedApplicantId,
           stage: 'TIER_1_SUBMISSION',
           action: 'SUBMITTED',
-          comments: 'Initial application submitted through Directorate for vetting',
+          comments: initialComments,
           snapshotContent: content.trim(),
         },
       });
@@ -695,39 +715,80 @@ export async function directorAction(req: Request, res: Response) {
       });
     }
 
+    // Resolve faculty hierarchy to enforce statutory routing (HOD -> Dean -> Registry)
+    const facultyHierarchy = await resolveFacultyStaffHierarchy(application.applicantId);
+    const isHodRecommendationToDean =
+      decision === 'RECOMMEND' &&
+      facultyHierarchy?.isFacultyStaff &&
+      facultyHierarchy.hod &&
+      facultyHierarchy.dean &&
+      (application.directorId === facultyHierarchy.hod.id || callerId === facultyHierarchy.hod.id) &&
+      facultyHierarchy.hod.id !== facultyHierarchy.dean.id;
+
     const now = new Date();
     let newStatus: any = 'RECOMMENDED_TO_REGISTRY';
     let newHolderRole: any = 'REGISTRY_ADMIN';
     let revisionAction: any = 'RECOMMENDED';
+    let revisionStage: any = facultyHierarchy?.isFacultyStaff ? 'TIER_2_DEAN_RECOMMENDATION' : 'TIER_2_DIRECTOR_VETTING';
+    let nextDirectorId = application.directorId;
 
     if (decision === 'REWRITE') {
       newStatus = 'RETURNED_FOR_REWRITE';
       newHolderRole = 'STAFF';
       revisionAction = 'REWRITE_REQUESTED';
+      revisionStage = 'TIER_2_DIRECTOR_VETTING';
     } else if (decision === 'REJECT') {
       newStatus = 'REJECTED_BY_DIRECTOR';
       newHolderRole = 'STAFF';
       revisionAction = 'DECLINED';
+      revisionStage = 'TIER_2_DIRECTOR_VETTING';
+    } else if (isHodRecommendationToDean) {
+      newStatus = 'SUBMITTED_TO_DIRECTOR';
+      newHolderRole = 'DIRECTOR';
+      revisionAction = 'RECOMMENDED';
+      revisionStage = 'TIER_1B_HOD_RECOMMENDATION';
+      nextDirectorId = facultyHierarchy.dean!.id;
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      let finalRemarks = directorRemarks ? directorRemarks.trim() : null;
+      if (isHodRecommendationToDean) {
+        finalRemarks = directorRemarks ? `[HOD Recommendation] ${directorRemarks.trim()}` : '[HOD Recommended to Dean]';
+      } else if (decision === 'RECOMMEND' && facultyHierarchy?.isFacultyStaff) {
+        finalRemarks = application.directorRemarks
+          ? `${application.directorRemarks}\n[Dean Recommendation] ${directorRemarks ? directorRemarks.trim() : 'Recommended to Registry'}`
+          : (directorRemarks ? `[Dean Recommendation] ${directorRemarks.trim()}` : '[Dean Recommended to Registry]');
+      }
+
       const app = await tx.institutionalApplication.update({
         where: { id },
         data: {
+          directorId: nextDirectorId,
           status: newStatus,
           currentHolderRole: newHolderRole,
-          directorRemarks: directorRemarks ? directorRemarks.trim() : null,
+          directorRemarks: finalRemarks,
           directorRecommendedAt: decision === 'RECOMMEND' ? now : null,
         },
       });
+
+      let revisionComments = directorRemarks ? directorRemarks.trim() : 'Endorsed & recommended by Director';
+      if (isHodRecommendationToDean) {
+        revisionComments = directorRemarks
+          ? `HOD Recommendation forwarded to Dean: ${directorRemarks.trim()}`
+          : `Recommended by HOD (${facultyHierarchy?.hod?.name || 'HOD'}) and forwarded to Dean (${facultyHierarchy?.dean?.name || 'Dean'})`;
+      } else if (decision === 'RECOMMEND' && facultyHierarchy?.isFacultyStaff) {
+        revisionComments = directorRemarks
+          ? `Dean Recommendation to Registry: ${directorRemarks.trim()}`
+          : `Endorsed & recommended by Dean (${facultyHierarchy?.dean?.name || 'Dean'}) to Registry Inward Desk`;
+      }
 
       await tx.applicationRevisionHistory.create({
         data: {
           applicationId: app.id,
           actorId: callerId,
-          stage: 'TIER_2_DIRECTOR_VETTING',
+          stage: revisionStage,
           action: revisionAction,
-          comments: directorRemarks ? directorRemarks.trim() : 'Endorsed & recommended by Director',
+          comments: revisionComments,
           snapshotContent: app.content,
         },
       });
@@ -761,62 +822,103 @@ export async function directorAction(req: Request, res: Response) {
     const directorName = (req as any).user?.name || application.director.name || 'Director';
 
     // Dispatches
-    notifyUser(
-      application.applicantId,
-      decision === 'RECOMMEND'
-        ? '✅ Application Recommended by Director'
-        : decision === 'REWRITE'
-        ? '⚠️ Revision Requested on Application'
-        : '❌ Application Rejected by Director',
-      `Director ${directorName} has ${decision.toLowerCase()}ed your application (${application.referenceNumber}).`,
-      decision === 'RECOMMEND' ? 'SUCCESS' : decision === 'REWRITE' ? 'WARNING' : 'ERROR',
-      '/portal/applications/my-applications'
-    ).catch(() => {});
-
-    if (application.applicant.email) {
-      sendApplicantProgressEmail(
-        application.applicant.email,
-        applicantName,
-        application.referenceNumber,
-        newStatus,
-        directorRemarks
+    if (isHodRecommendationToDean) {
+      // Notify Dean
+      notifyUser(
+        facultyHierarchy.dean!.id,
+        '📄 Faculty Staff Application Forwarded by HOD for Dean Endorsement',
+        `HOD ${directorName} has recommended staff ${applicantName}'s application (${application.referenceNumber}: ${application.subject}) and routed it to your Office for Dean recommendation to Registry.`,
+        'INFO',
+        '/director/applications/pending'
       ).catch(() => {});
-    }
 
-    if (decision === 'RECOMMEND') {
-      try {
-        const registryAndHrUsers = await prisma.user.findMany({
-          where: {
-            role: { in: ['REGISTRY_ADMIN', 'HR_ADMIN', 'ADMIN', 'SUPER_USER'] },
-            isActive: true,
-          },
-          select: { id: true, email: true, name: true },
-        });
+      if (facultyHierarchy.dean!.email) {
+        sendDirectorNotificationEmail(
+          facultyHierarchy.dean!.email,
+          facultyHierarchy.dean!.name || 'Dean',
+          applicantName,
+          application.subject,
+          application.referenceNumber,
+          application.category
+        ).catch(() => {});
+      }
 
-        for (const regUser of registryAndHrUsers) {
-          notifyUser(
-            regUser.id,
-            '📥 New Directorate Endorsement for Inward Docketing',
-            `Director ${directorName} has endorsed application ${application.referenceNumber} (${application.subject}) for staff ${applicantName}. Awaiting Registry Folio docketing.`,
-            'INFO',
-            '/dashboard/registry/inward-docket'
-          ).catch(() => {});
+      // Notify Applicant
+      notifyUser(
+        application.applicantId,
+        '✅ Application Recommended by HOD',
+        `Your Head of Department (${directorName}) has recommended your application (${application.referenceNumber}) and forwarded it to Dean (${facultyHierarchy.dean!.name || 'Dean'}) for onward transmission to Registry.`,
+        'SUCCESS',
+        '/portal/applications/my-applications'
+      ).catch(() => {});
 
-          if (regUser.email) {
-            sendRegistryInwardDeskNotificationEmail(
-              regUser.email,
-              regUser.name || 'Registry / HR Officer',
-              directorName,
-              applicantName,
-              application.subject,
-              application.referenceNumber,
-              application.category,
-              directorRemarks ? directorRemarks.trim() : undefined
+      if (application.applicant.email) {
+        sendApplicantProgressEmail(
+          application.applicant.email,
+          applicantName,
+          application.referenceNumber,
+          'FORWARDED_TO_DEAN',
+          directorRemarks
+        ).catch(() => {});
+      }
+    } else {
+      notifyUser(
+        application.applicantId,
+        decision === 'RECOMMEND'
+          ? (facultyHierarchy?.isFacultyStaff ? '✅ Application Recommended by Dean to Registry' : '✅ Application Recommended by Director')
+          : decision === 'REWRITE'
+          ? '⚠️ Revision Requested on Application'
+          : '❌ Application Rejected by Director',
+        `Director ${directorName} has ${decision.toLowerCase()}ed your application (${application.referenceNumber}).`,
+        decision === 'RECOMMEND' ? 'SUCCESS' : decision === 'REWRITE' ? 'WARNING' : 'ERROR',
+        '/portal/applications/my-applications'
+      ).catch(() => {});
+
+      if (application.applicant.email) {
+        sendApplicantProgressEmail(
+          application.applicant.email,
+          applicantName,
+          application.referenceNumber,
+          newStatus,
+          directorRemarks
+        ).catch(() => {});
+      }
+
+      if (decision === 'RECOMMEND') {
+        try {
+          const registryAndHrUsers = await prisma.user.findMany({
+            where: {
+              role: { in: ['REGISTRY_ADMIN', 'HR_ADMIN', 'ADMIN', 'SUPER_USER'] },
+              isActive: true,
+            },
+            select: { id: true, email: true, name: true },
+          });
+
+          for (const regUser of registryAndHrUsers) {
+            notifyUser(
+              regUser.id,
+              '📥 New Directorate Endorsement for Inward Docketing',
+              `${facultyHierarchy?.isFacultyStaff ? 'Dean' : 'Director'} ${directorName} has endorsed application ${application.referenceNumber} (${application.subject}) for staff ${applicantName}. Awaiting Registry Folio docketing.`,
+              'INFO',
+              '/dashboard/registry/inward-docket'
             ).catch(() => {});
+
+            if (regUser.email) {
+              sendRegistryInwardDeskNotificationEmail(
+                regUser.email,
+                regUser.name || 'Registry / HR Officer',
+                directorName,
+                applicantName,
+                application.subject,
+                application.referenceNumber,
+                application.category,
+                directorRemarks ? directorRemarks.trim() : undefined
+              ).catch(() => {});
+            }
           }
+        } catch (notifErr) {
+          console.warn('[Docket Notification] Error notifying Registry/HR admins:', notifErr);
         }
-      } catch (notifErr) {
-        console.warn('[Docket Notification] Error notifying Registry/HR admins:', notifErr);
       }
     }
 
@@ -832,9 +934,15 @@ export async function directorAction(req: Request, res: Response) {
 
     await cacheInvalidationService.invalidateInstitutionalApplications();
 
+    const successMsg = isHodRecommendationToDean
+      ? `Application successfully recommended by HOD and forwarded to Dean (${facultyHierarchy?.dean?.name || 'Dean'}).`
+      : facultyHierarchy?.isFacultyStaff && decision === 'RECOMMEND'
+      ? `Application successfully recommended by Dean and forwarded to Registry Inward Desk.`
+      : `Application successfully ${decision.toLowerCase()}ed by Director.`;
+
     return res.status(200).json({
       success: true,
-      message: `Application successfully ${decision.toLowerCase()}ed by Director.`,
+      message: successMsg,
       data: updated,
     });
   } catch (error: any) {
@@ -1849,18 +1957,42 @@ export async function getEligibleDirectors(req: Request, res: Response) {
       }
 
       // Resolve designated Director / Dean / HOD using unified strict resolver
-      const resolvedList = await resolveStaffDirector(callerId);
-      if (resolvedList.length > 0) {
-        const primary = resolvedList[0];
+      facultyHierarchy = await resolveFacultyStaffHierarchy(callerId);
+
+      if (facultyHierarchy?.isFacultyStaff && facultyHierarchy.hod && !facultyHierarchy.isCallerHod && !facultyHierarchy.isCallerDean) {
         designatedDirector = {
-          id: primary.id,
-          name: primary.name,
-          email: primary.email,
-          unit: primary.unitName || callerProfile?.unit?.name || callerProfile?.studyCenter?.name || 'Designated Directorate',
-          role: primary.role,
-          title: primary.title,
-          reason: primary.reason || `Designated Supervisor for ${callerProfile?.unit?.name || 'Unit'}`
+          id: facultyHierarchy.hod.id,
+          name: facultyHierarchy.hod.name,
+          email: facultyHierarchy.hod.email,
+          unit: facultyHierarchy.department?.name || 'Department',
+          role: 'UNIT_HEAD',
+          title: facultyHierarchy.hod.title || 'HOD',
+          reason: `Head of Department (HOD) for ${facultyHierarchy.department?.name || 'Department'} (Faculty of ${facultyHierarchy.faculty?.name || 'Faculty'})`
         };
+      } else if (facultyHierarchy?.isFacultyStaff && facultyHierarchy.dean && facultyHierarchy.isCallerHod) {
+        designatedDirector = {
+          id: facultyHierarchy.dean.id,
+          name: facultyHierarchy.dean.name,
+          email: facultyHierarchy.dean.email,
+          unit: facultyHierarchy.faculty?.name || 'Faculty',
+          role: 'UNIT_HEAD',
+          title: facultyHierarchy.dean.title || 'Dean',
+          reason: `Faculty Dean for ${facultyHierarchy.faculty?.name || 'Faculty'}`
+        };
+      } else {
+        const resolvedList = await resolveStaffDirector(callerId);
+        if (resolvedList.length > 0) {
+          const primary = resolvedList[0];
+          designatedDirector = {
+            id: primary.id,
+            name: primary.name,
+            email: primary.email,
+            unit: primary.unitName || callerProfile?.unit?.name || callerProfile?.studyCenter?.name || 'Designated Directorate',
+            role: primary.role,
+            title: primary.title,
+            reason: primary.reason || `Designated Supervisor for ${callerProfile?.unit?.name || 'Unit'}`
+          };
+        }
       }
     }
 
@@ -1887,7 +2019,8 @@ export async function getEligibleDirectors(req: Request, res: Response) {
       success: true, 
       directors, 
       data: directors,
-      designatedDirector 
+      designatedDirector,
+      facultyHierarchy
     });
   } catch (error: any) {
     console.error('Error in getEligibleDirectors:', error);

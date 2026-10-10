@@ -76,7 +76,9 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
         return false;
     }, [type, workingDaysEstimate]);
 
-    // Load draft from IndexedDB when modal opens
+    const [facultyHierarchy, setFacultyHierarchy] = useState<any>(null);
+
+    // Load draft from IndexedDB and fetch faculty hierarchy when modal opens
     useEffect(() => {
         if (isOpen) {
             import('../../lib/indexedDb').then(({ getDraft }) => {
@@ -90,6 +92,12 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                     }
                 });
             });
+
+            api.get('/api/v1/leave/faculty-hierarchy').then((res) => {
+                if (res.data?.success && res.data?.facultyHierarchy) {
+                    setFacultyHierarchy(res.data.facultyHierarchy);
+                }
+            }).catch(() => {});
         }
     }, [isOpen]);
 
@@ -200,6 +208,24 @@ export default function ApplyLeaveModal({ isOpen, onClose, onSuccess }: ApplyLea
                             }`}>
                                 {msg.type === 'success' ? <FileCheck size={16} /> : <AlertCircle size={16} />}
                                 {msg.text}
+                            </div>
+                        )}
+
+                        {facultyHierarchy?.isFacultyStaff && (
+                            <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-blue-950 uppercase tracking-wide flex items-center gap-1.5">
+                                        <Calendar size={14} className="text-blue-700" />
+                                        Faculty Statutory Leave Workflow
+                                    </span>
+                                    <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                                        STATUTORY
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-blue-800 leading-snug">
+                                    Addressed: <strong>To The Dean, Faculty of {facultyHierarchy.faculty?.name || 'Faculty'}, Through: The Head of Department (HOD)</strong>.
+                                    Your HOD ({facultyHierarchy.hod?.name || 'HOD'}) will recommend and push to the Dean ({facultyHierarchy.dean?.name || 'Dean'}) for final approval.
+                                </p>
                             </div>
                         )}
 
