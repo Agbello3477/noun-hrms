@@ -1920,6 +1920,7 @@ export async function getEligibleDirectors(req: Request, res: Response) {
     const directors = Array.from(directorsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
     let designatedDirector: any = null;
+    let facultyHierarchy: any = null;
     if (callerId) {
       let callerProfile = await prisma.staffProfile.findUnique({
         where: { userId: callerId },

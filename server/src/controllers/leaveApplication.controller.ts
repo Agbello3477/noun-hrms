@@ -1046,11 +1046,6 @@ export const getMyFacultyHierarchy = async (req: Request, res: Response) => {
     res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 };
-  } catch (error: any) {
-    console.error('rejectLeaveApplication error:', error);
-    res.status(500).json({ message: error.message || 'Internal Server Error' });
-  }
-};
 
 /**
  * Preview working days for requested date range
