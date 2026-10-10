@@ -4,6 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "prisma generate && tsc",
+    "db:vector": "ts-node --transpile-only scripts/enable_vector.ts",
     "db:push": "prisma db push --accept-data-loss",
     "db:rls": "ts-node --transpile-only scripts/enable_rls.ts",
     "start": "node --max-old-space-size=350 dist/index.js",
