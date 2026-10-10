@@ -3,13 +3,25 @@
 import { useState, useEffect } from 'react';
 import { X, Download, Printer, Loader2, FileText } from 'lucide-react';
 import api from '../../lib/api';
+import { logDossierSecurityAction } from '../../lib/dossierAudit';
 
 interface DocumentViewerModalProps {
     document: { id: string; title: string; url: string; type: string };
+    staffId?: string;
+    staffName?: string;
+    fileNumber?: string;
+    requisitionId?: string;
     onClose: () => void;
 }
 
-export default function DocumentViewerModal({ document, onClose }: DocumentViewerModalProps) {
+export default function DocumentViewerModal({
+    document,
+    staffId,
+    staffName,
+    fileNumber,
+    requisitionId,
+    onClose,
+}: DocumentViewerModalProps) {
     const [blobUrl, setBlobUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -104,6 +116,16 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
         window.document.body.appendChild(link);
         link.click();
         window.document.body.removeChild(link);
+
+        logDossierSecurityAction({
+            action: 'DOCUMENT_DOWNLOADED',
+            documentTitle: document.title,
+            staffProfileId: staffId,
+            staffName: staffName,
+            staffId: staffId,
+            fileNumber: fileNumber,
+            requisitionId: requisitionId,
+        });
     };
 
     const handlePrint = () => {
@@ -114,6 +136,16 @@ export default function DocumentViewerModal({ document, onClose }: DocumentViewe
                 printWindow.print();
             };
         }
+
+        logDossierSecurityAction({
+            action: 'DOCUMENT_PRINTED',
+            documentTitle: document.title,
+            staffProfileId: staffId,
+            staffName: staffName,
+            staffId: staffId,
+            fileNumber: fileNumber,
+            requisitionId: requisitionId,
+        });
     };
 
     return (

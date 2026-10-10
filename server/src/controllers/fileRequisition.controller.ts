@@ -1471,3 +1471,516 @@ export async function getDigitalTranscript(req: Request, res: Response) {
     return res.status(500).json({ success: false, error: 'Failed to retrieve digital dossier.' });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOSSIER DOWNLOAD / PRINT SECURITY AUDIT & REGISTRY INQUIRY SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/registry/file-requests/dossier-action
+ * Log a download or print action of a confidential dossier or document
+ */
+export async function logDossierAccessAction(req: Request, res: Response) {
+  try {
+    const actorId = (req as any).user?.id;
+    const {
+      action,
+      documentTitle,
+      staffProfileId,
+      staffName,
+      staffId,
+      fileNumber,
+      requisitionId,
+    } = req.body;
+
+    if (!actorId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      include: {
+        staffProfile: {
+          select: {
+            staffId: true,
+            rank: true,
+            unit: { select: { name: true } },
+            studyCenter: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!actor) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const actorName = actor.name || 'System User';
+    const actorStaffId = actor.staffProfile?.staffId || 'N/A';
+    const actorRole = actor.role;
+    const actorDepartment = actor.staffProfile?.unit?.name || actor.staffProfile?.studyCenter?.name || 'Central Directorate';
+    const { ipAddress, userAgent } = getClientMeta(req);
+
+    const actionType = action || 'DOSSIER_DOWNLOADED';
+    const actionVerb = actionType.includes('PRINT') ? 'printed' : 'downloaded';
+
+    const detailsObj = {
+      actorId,
+      actorName,
+      actorStaffId,
+      actorRole,
+      actorEmail: actor.email,
+      actorDepartment,
+      targetStaffProfileId: staffProfileId || null,
+      targetStaffName: staffName || 'Personnel',
+      targetStaffId: staffId || fileNumber || 'N/A',
+      targetFileNumber: fileNumber || staffId || 'N/A',
+      documentTitle: documentTitle || 'Confidential Personnel Dossier',
+      actionType,
+      requisitionId: requisitionId || null,
+      inquiryStatus: 'NONE', // 'NONE', 'INQUIRY_SENT', 'JUSTIFICATION_PROVIDED', 'RESOLVED'
+      inquiryMessage: null,
+      inquirySentAt: null,
+      inquirySentBy: null,
+      justificationText: null,
+      justificationSubmittedAt: null,
+      userAgent,
+      timestamp: new Date().toISOString(),
+    };
+
+    // 1. Create main system audit log entry
+    const auditLog = await prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: actionType,
+        resource: 'DOSSIER',
+        details: JSON.stringify(detailsObj),
+        ipAddress,
+      },
+    });
+
+    // 2. If tied to a requisition, also create FileCustodyAuditTrail
+    if (requisitionId) {
+      try {
+        await prisma.fileCustodyAuditTrail.create({
+          data: {
+            requisitionId,
+            action: FileCustodyAction.FILE_DISPATCHED,
+            actorId,
+            details: `[SECURITY AUDIT] Officer ${actorName} (Staff ID: ${actorStaffId}, Role: ${actorRole}) ${actionVerb} document "${detailsObj.documentTitle}" for subject ${detailsObj.targetStaffName}.`,
+            ipAddress,
+            userAgent,
+            metadata: detailsObj as any,
+          },
+        });
+      } catch (e) {
+        console.error('Failed to append to custody audit trail', e);
+      }
+    }
+
+    // 3. Alert Central Registry Administrators and Registrar
+    await notifyRoleUsers(
+      [
+        Role.REGISTRY_ADMIN,
+        Role.HR_ADMIN,
+        Role.REGISTRAR,
+        Role.DEPUTY_REGISTRAR,
+        Role.SUPER_USER,
+      ],
+      '🚨 Dossier Security Alert: Download/Print Logged',
+      `Officer ${actorName} (${actorStaffId}) ${actionVerb} dossier "${detailsObj.documentTitle}" for ${detailsObj.targetStaffName} (${detailsObj.targetStaffId}). Registry inquiry may be dispatched if justification is required.`,
+      '/dashboard/registry/file-requests?tab=AUDIT'
+    );
+
+    return res.status(200).json({
+      success: true,
+      logId: auditLog.id,
+      message: 'Dossier access event logged and Central Registry alerted.',
+    });
+  } catch (error: any) {
+    console.error('Error logging dossier access action:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to log dossier action.',
+    });
+  }
+}
+
+/**
+ * GET /api/v1/registry/file-requests/dossier-audit-ledger
+ * Fetch all dossier download/print audit logs for Registry
+ */
+export async function getDossierAuditLedger(req: Request, res: Response) {
+  try {
+    const { action, inquiryStatus, search } = req.query;
+
+    const where: any = {
+      resource: 'DOSSIER',
+    };
+
+    if (action) {
+      where.action = action;
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 150,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            staffProfile: {
+              select: {
+                staffId: true,
+                rank: true,
+                unit: { select: { name: true } },
+                studyCenter: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Parse details JSON
+    const parsedLogs = logs.map((log) => {
+      let details: any = {};
+      try {
+        if (log.details) {
+          details = JSON.parse(log.details);
+        }
+      } catch (e) {
+        details = { raw: log.details };
+      }
+
+      return {
+        id: log.id,
+        timestamp: log.createdAt,
+        action: log.action,
+        ipAddress: log.ipAddress,
+        user: log.user,
+        actorName: details.actorName || log.user?.name || 'System User',
+        actorStaffId: details.actorStaffId || log.user?.staffProfile?.staffId || 'N/A',
+        actorRole: details.actorRole || log.user?.role || 'STAFF',
+        actorEmail: details.actorEmail || log.user?.email || '',
+        actorDepartment: details.actorDepartment || log.user?.staffProfile?.unit?.name || '',
+        targetStaffName: details.targetStaffName || 'Staff Member',
+        targetStaffId: details.targetStaffId || 'N/A',
+        targetFileNumber: details.targetFileNumber || 'N/A',
+        documentTitle: details.documentTitle || 'Personnel Dossier',
+        requisitionId: details.requisitionId || null,
+        inquiryStatus: details.inquiryStatus || 'NONE',
+        inquiryMessage: details.inquiryMessage || null,
+        inquirySentAt: details.inquirySentAt || null,
+        inquirySentBy: details.inquirySentBy || null,
+        justificationText: details.justificationText || null,
+        justificationSubmittedAt: details.justificationSubmittedAt || null,
+      };
+    });
+
+    let filtered = parsedLogs;
+    if (inquiryStatus) {
+      filtered = filtered.filter((l) => l.inquiryStatus === inquiryStatus);
+    }
+    if (search) {
+      const q = String(search).toLowerCase();
+      filtered = filtered.filter(
+        (l) =>
+          l.actorName.toLowerCase().includes(q) ||
+          l.actorStaffId.toLowerCase().includes(q) ||
+          l.targetStaffName.toLowerCase().includes(q) ||
+          l.targetStaffId.toLowerCase().includes(q) ||
+          l.documentTitle.toLowerCase().includes(q)
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: filtered,
+      count: filtered.length,
+    });
+  } catch (error: any) {
+    console.error('Error fetching dossier audit ledger:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch dossier audit ledger.',
+    });
+  }
+}
+
+/**
+ * POST /api/v1/registry/file-requests/dossier-inquiry
+ * Registry requests reason/justification from the officer who downloaded/printed the document
+ */
+export async function sendDossierInquiry(req: Request, res: Response) {
+  try {
+    const actorId = (req as any).user?.id;
+    const actorRole = (req as any).user?.role;
+    const { auditLogId, message } = req.body;
+
+    if (!auditLogId) {
+      return res.status(400).json({ success: false, error: 'Audit log ID is required.' });
+    }
+
+    const auditLog = await prisma.auditLog.findUnique({
+      where: { id: auditLogId },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (!auditLog || auditLog.resource !== 'DOSSIER') {
+      return res.status(404).json({ success: false, error: 'Dossier audit log not found.' });
+    }
+
+    let details: any = {};
+    try {
+      if (auditLog.details) details = JSON.parse(auditLog.details);
+    } catch (e) {
+      details = {};
+    }
+
+    const registryUser = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { name: true, role: true },
+    });
+
+    const inquiryMessage =
+      message?.trim() ||
+      `Central Registry requires official justification for downloading/printing the personnel dossier of ${
+        details.targetStaffName || 'the staff member'
+      } on ${new Date(auditLog.createdAt).toLocaleDateString()}. Please state your official purpose.`;
+
+    details.inquiryStatus = 'INQUIRY_SENT';
+    details.inquiryMessage = inquiryMessage;
+    details.inquirySentAt = new Date().toISOString();
+    details.inquirySentBy = {
+      id: actorId,
+      name: registryUser?.name || 'Central Registry Officer',
+      role: actorRole,
+    };
+
+    await prisma.auditLog.update({
+      where: { id: auditLogId },
+      data: { details: JSON.stringify(details) },
+    });
+
+    // Send high-priority notification to the target officer
+    await notifyUser(
+      auditLog.userId,
+      '⚠️ Registry Formal Inquiry: Dossier Access Justification Required',
+      `Central Registry has requested your official justification for accessing/downloading the dossier of ${
+        details.targetStaffName
+      }. Message: "${inquiryMessage}". Please click to provide your reason.`,
+      'WARNING',
+      `/dashboard/received-files?inquiryId=${auditLog.id}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Official justification inquiry dispatched to officer successfully.',
+    });
+  } catch (error: any) {
+    console.error('Error sending dossier inquiry:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to dispatch dossier inquiry.',
+    });
+  }
+}
+
+/**
+ * GET /api/v1/registry/file-requests/my-dossier-inquiries
+ * Returns any pending/responded justification inquiries for the logged-in user
+ */
+export async function getMyDossierInquiries(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        userId,
+        resource: 'DOSSIER',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    const inquiries = logs
+      .map((log) => {
+        let details: any = {};
+        try {
+          if (log.details) details = JSON.parse(log.details);
+        } catch (e) {
+          details = {};
+        }
+
+        if (
+          details.inquiryStatus === 'INQUIRY_SENT' ||
+          details.inquiryStatus === 'JUSTIFICATION_PROVIDED' ||
+          details.inquiryStatus === 'RESOLVED'
+        ) {
+          return {
+            id: log.id,
+            timestamp: log.createdAt,
+            action: log.action,
+            targetStaffName: details.targetStaffName || 'Staff Member',
+            targetStaffId: details.targetStaffId || 'N/A',
+            documentTitle: details.documentTitle || 'Confidential Dossier',
+            inquiryStatus: details.inquiryStatus,
+            inquiryMessage: details.inquiryMessage,
+            inquirySentAt: details.inquirySentAt,
+            inquirySentBy: details.inquirySentBy,
+            justificationText: details.justificationText,
+            justificationSubmittedAt: details.justificationSubmittedAt,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({
+      success: true,
+      data: inquiries,
+      pendingCount: inquiries.filter((i: any) => i.inquiryStatus === 'INQUIRY_SENT').length,
+    });
+  } catch (error: any) {
+    console.error('Error fetching my dossier inquiries:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch your dossier inquiries.',
+    });
+  }
+}
+
+/**
+ * POST /api/v1/registry/file-requests/submit-justification
+ * Officer submits their official justification for downloading/printing the dossier
+ */
+export async function submitDossierJustification(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.id;
+    const { auditLogId, justificationText } = req.body;
+
+    if (!auditLogId || !justificationText?.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Audit log ID and justification explanation text are required.',
+      });
+    }
+
+    const auditLog = await prisma.auditLog.findUnique({
+      where: { id: auditLogId },
+      include: { user: { select: { name: true, role: true } } },
+    });
+
+    if (!auditLog || auditLog.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized to submit justification for this audit record.',
+      });
+    }
+
+    let details: any = {};
+    try {
+      if (auditLog.details) details = JSON.parse(auditLog.details);
+    } catch (e) {
+      details = {};
+    }
+
+    details.inquiryStatus = 'JUSTIFICATION_PROVIDED';
+    details.justificationText = justificationText.trim();
+    details.justificationSubmittedAt = new Date().toISOString();
+
+    await prisma.auditLog.update({
+      where: { id: auditLogId },
+      data: { details: JSON.stringify(details) },
+    });
+
+    // Notify Central Registry Officers
+    await notifyRoleUsers(
+      [Role.REGISTRY_ADMIN, Role.HR_ADMIN, Role.REGISTRAR],
+      '✅ Dossier Justification Submitted',
+      `Officer ${auditLog.user?.name} has provided official justification for accessing dossier of ${
+        details.targetStaffName
+      }: "${justificationText.trim().slice(0, 80)}..."`,
+      '/dashboard/registry/file-requests?tab=AUDIT'
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Justification submitted to Central Registry successfully.',
+    });
+  } catch (error: any) {
+    console.error('Error submitting dossier justification:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to submit justification.',
+    });
+  }
+}
+
+/**
+ * POST /api/v1/registry/file-requests/resolve-inquiry
+ * Registry acknowledges and closes the dossier justification inquiry
+ */
+export async function resolveDossierInquiry(req: Request, res: Response) {
+  try {
+    const actorId = (req as any).user?.id;
+    const { auditLogId, resolutionNotes } = req.body;
+
+    if (!auditLogId) {
+      return res.status(400).json({ success: false, error: 'Audit log ID is required.' });
+    }
+
+    const auditLog = await prisma.auditLog.findUnique({
+      where: { id: auditLogId },
+    });
+
+    if (!auditLog || auditLog.resource !== 'DOSSIER') {
+      return res.status(404).json({ success: false, error: 'Dossier audit log not found.' });
+    }
+
+    let details: any = {};
+    try {
+      if (auditLog.details) details = JSON.parse(auditLog.details);
+    } catch (e) {
+      details = {};
+    }
+
+    const registryUser = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { name: true, role: true },
+    });
+
+    details.inquiryStatus = 'RESOLVED';
+    details.resolutionNotes = resolutionNotes || 'Justification vetted and accepted by Registry.';
+    details.resolvedAt = new Date().toISOString();
+    details.resolvedBy = {
+      id: actorId,
+      name: registryUser?.name || 'Registry Officer',
+    };
+
+    await prisma.auditLog.update({
+      where: { id: auditLogId },
+      data: { details: JSON.stringify(details) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Dossier inquiry marked as acknowledged and resolved.',
+    });
+  } catch (error: any) {
+    console.error('Error resolving dossier inquiry:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to resolve inquiry.',
+    });
+  }
+}
+

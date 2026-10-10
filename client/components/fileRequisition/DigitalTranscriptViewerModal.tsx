@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { logDossierSecurityAction } from '@/lib/dossierAudit';
 import {
   X,
   Shield,
@@ -15,6 +16,8 @@ import {
   Lock,
   Loader2,
   FileText,
+  Printer,
+  Download,
 } from 'lucide-react';
 
 interface DigitalTranscriptViewerModalProps {
@@ -84,6 +87,59 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
   if (!isOpen) return null;
 
   const profile = data?.profile;
+
+  const handlePrintTranscript = () => {
+    window.print();
+    logDossierSecurityAction({
+      action: 'DOSSIER_PRINTED',
+      documentTitle: 'Official Digital Personnel Dossier Transcript',
+      staffName: profile?.name,
+      staffId: profile?.staffId,
+      requisitionId,
+      fileNumber: data?.requisitionNumber,
+    });
+  };
+
+  const handleDownloadTranscript = () => {
+    if (!profile) return;
+    const textData = `NATIONAL OPEN UNIVERSITY OF NIGERIA
+CONFIDENTIAL DIGITAL PERSONNEL DOSSIER TRANSCRIPT
+Requisition Docket: ${data?.requisitionNumber || 'N/A'}
+Dispatch Receipt: ${data?.dispatchReceiptNumber || 'N/A'}
+Date of Retrieval: ${new Date().toLocaleString()}
+
+SUBJECT STAFF PROFILE:
+Name: ${profile.name}
+Staff ID: ${profile.staffId}
+Rank: ${profile.rank}
+Department: ${profile.department || 'N/A'}
+Unit: ${profile.unit || 'N/A'}
+Cadre: ${profile.cadre || 'N/A'}
+Category: ${profile.employmentCategory || 'PERMANENT'}
+Highest Qualification: ${profile.highestQualification || 'N/A'}
+Date of 1st Appointment: ${profile.dateOfFirstAppointment ? new Date(profile.dateOfFirstAppointment).toLocaleDateString('en-GB') : 'N/A'}
+Last Promotion Milestone: ${profile.lastPromotionDate ? new Date(profile.lastPromotionDate).toLocaleDateString('en-GB') : 'N/A'}
+Statutory Retirement Due: ${profile.statutoryRetirementDate ? new Date(profile.statutoryRetirementDate).toLocaleDateString('en-GB') : 'N/A'}
+`;
+    const blob = new Blob([textData], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(profile.name || 'Staff').replace(/[^a-z0-9]/gi, '_')}_Digital_Transcript.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    logDossierSecurityAction({
+      action: 'DOSSIER_DOWNLOADED',
+      documentTitle: 'Digital Personnel Dossier Transcript Export',
+      staffName: profile?.name,
+      staffId: profile?.staffId,
+      requisitionId,
+      fileNumber: data?.requisitionNumber,
+    });
+  };
 
   return (
     <div
@@ -253,9 +309,22 @@ export const DigitalTranscriptViewerModal: React.FC<DigitalTranscriptViewerModal
         </div>
 
         {/* Footer Action Bar */}
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="text-xs text-slate-500">
-            Secure Digital Dossier Stream
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrintTranscript}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" /> Print Dossier
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadTranscript}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" /> Export Transcript
+            </button>
           </div>
           <button
             type="button"

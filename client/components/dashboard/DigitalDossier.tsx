@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, Eye, Lock, Trash2, Download, FolderUp } from 'lucide-react';
 import api from '../../lib/api';
+import { logDossierSecurityAction } from '../../lib/dossierAudit';
 import UploadDocumentModal from './UploadDocumentModal';
 import BatchDossierUploadModal from './BatchDossierUploadModal';
 import DocumentViewerModal from './DocumentViewerModal';
@@ -102,6 +103,15 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
             window.document.body.removeChild(link);
             
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+            // Dispatch Registry Security Audit Telemetry
+            logDossierSecurityAction({
+                action: 'DOSSIER_DOWNLOADED',
+                documentTitle: 'Full Digital Dossier Archive (.zip)',
+                staffProfileId: staffId,
+                staffName: staffName,
+                staffId: staffId,
+            });
         } catch (err) {
             console.error('Failed to generate ZIP archive', err);
             alert('Failed to generate ZIP archive. Please try again.');
@@ -239,6 +249,8 @@ export default function DigitalDossier({ staffId, staffName = 'Staff', readOnly 
             {viewingDoc && (
                 <DocumentViewerModal
                     document={viewingDoc}
+                    staffId={staffId}
+                    staffName={staffName}
                     onClose={() => setViewingDoc(null)}
                 />
             )}

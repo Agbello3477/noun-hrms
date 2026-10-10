@@ -14,6 +14,12 @@ import {
   getRequisitionById,
   getCustodyAuditLedger,
   getDigitalTranscript,
+  logDossierAccessAction,
+  getDossierAuditLedger,
+  sendDossierInquiry,
+  getMyDossierInquiries,
+  submitDossierJustification,
+  resolveDossierInquiry,
 } from '../../controllers/fileRequisition.controller';
 
 const router = Router();
@@ -105,6 +111,37 @@ router.post(
   returnRequisition
 );
 
+// ─── DOSSIER DOWNLOAD / PRINT SECURITY AUDIT & REGISTRY INQUIRY ─────────────
+// Log any download or print action (authenticated users)
+router.post('/dossier-action', logDossierAccessAction);
+
+// Registry view of all dossier download / print audit logs
+router.get(
+  '/dossier-audit-ledger',
+  requireRole(REGISTRY_ALLOWED_ROLES),
+  getDossierAuditLedger
+);
+
+// Registry dispatches inquiry requesting reason for download/print
+router.post(
+  '/dossier-inquiry',
+  requireRole(REGISTRY_ALLOWED_ROLES),
+  sendDossierInquiry
+);
+
+// Target officer gets their pending inquiries
+router.get('/my-dossier-inquiries', getMyDossierInquiries);
+
+// Target officer submits their official reason/justification
+router.post('/submit-justification', submitDossierJustification);
+
+// Registry resolves/acknowledges the justification
+router.post(
+  '/resolve-inquiry',
+  requireRole(REGISTRY_ALLOWED_ROLES),
+  resolveDossierInquiry
+);
+
 // ─── AUDIT LEDGER & DIGITAL TRANSCRIPT VIEW ─────────────────────────────────
 router.get(
   '/audit-ledger',
@@ -116,3 +153,4 @@ router.get('/:id/digital-view', getDigitalTranscript);
 router.get('/:id', getRequisitionById);
 
 export default router;
+

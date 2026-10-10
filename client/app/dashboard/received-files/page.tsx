@@ -62,12 +62,52 @@ export default function ReceivedFilesPage() {
   const [isDigitalViewerOpen, setIsDigitalViewerOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Return Modal State
+  // Return Action Form State
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnReq, setReturnReq] = useState<any | null>(null);
   const [returnNotes, setReturnNotes] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [returnError, setReturnError] = useState('');
+
+  // Dossier Access Inquiries State (Registry reason queries)
+  const [myInquiries, setMyInquiries] = useState<any[]>([]);
+  const [isJustifyModalOpen, setIsJustifyModalOpen] = useState(false);
+  const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
+  const [justificationText, setJustificationText] = useState('');
+  const [isSubmittingJustification, setIsSubmittingJustification] = useState(false);
+  const [justifyError, setJustifyError] = useState('');
+
+  const handleOpenJustify = (inq: any) => {
+    setSelectedInquiry(inq);
+    setJustificationText(inq.justificationText || '');
+    setJustifyError('');
+    setIsJustifyModalOpen(true);
+  };
+
+  const handleSubmitJustification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInquiry || !justificationText.trim()) return;
+    setIsSubmittingJustification(true);
+    setJustifyError('');
+    try {
+      const res = await api.post('/api/v1/registry/file-requests/submit-justification', {
+        auditLogId: selectedInquiry.id,
+        justificationText: justificationText.trim(),
+      });
+      if (res.data?.success) {
+        setIsJustifyModalOpen(false);
+        setSelectedInquiry(null);
+        await fetchAllReceivedFiles();
+        alert('Your official justification has been submitted to Central Registry.');
+      } else {
+        setJustifyError(res.data?.error || 'Failed to submit justification.');
+      }
+    } catch (err: any) {
+      setJustifyError(err.response?.data?.error || 'Failed to submit justification.');
+    } finally {
+      setIsSubmittingJustification(false);
+    }
+  };
 
   const handleOpenReturn = (req: any) => {
     setReturnReq(req);
@@ -103,10 +143,11 @@ export default function ReceivedFilesPage() {
   const fetchAllReceivedFiles = async () => {
     try {
       setLoading(true);
-      // 1. Fetch modern Registry Vault requisitions
-      const [registryRes, legacyRes] = await Promise.allSettled([
+      // 1. Fetch modern Registry Vault requisitions, legacy requests, and dossier compliance inquiries
+      const [registryRes, legacyRes, inquiriesRes] = await Promise.allSettled([
         api.get('/api/v1/registry/file-requests/my'),
         api.get('/api/file-requests?type=received'),
+        api.get('/api/v1/registry/file-requests/my-dossier-inquiries'),
       ]);
 
       if (registryRes.status === 'fulfilled' && registryRes.value.data?.success) {
@@ -127,6 +168,12 @@ export default function ReceivedFilesPage() {
         setLegacyFiles(legacyRes.value.data);
       } else {
         setLegacyFiles([]);
+      }
+
+      if (inquiriesRes.status === 'fulfilled' && inquiriesRes.value.data?.success) {
+        setMyInquiries(inquiriesRes.value.data.data || []);
+      } else {
+        setMyInquiries([]);
       }
     } catch (error) {
       console.error('Failed to fetch received files', error);
@@ -186,6 +233,75 @@ export default function ReceivedFilesPage() {
           <span>Lodge / Track All File Requisitions</span>
         </button>
       </div>
+
+      {/* Registry Dossier Access Inquiries Banner */}
+      {myInquiries.length > 0 && (
+        <div className="space-y-3">
+          {myInquiries.map((inq) => {
+            const isPending = inq.inquiryStatus === 'INQUIRY_SENT';
+            return (
+              <div
+                key={inq.id}
+                className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition shadow-xs ${
+                  isPending
+                    ? 'bg-rose-50/90 border-rose-200 text-rose-950'
+                    : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                }`}
+              >
+                <div className="flex items-start gap-3.5">
+                  <div
+                    className={`p-2.5 rounded-xl shrink-0 ${
+                      isPending ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    <AlertCircle size={22} />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm">
+                        {isPending
+                          ? 'Formal Registry Inquiry: Dossier Access Reason Required'
+                          : 'Dossier Access Justification Logged'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          isPending ? 'bg-rose-200 text-rose-900' : 'bg-emerald-200 text-emerald-900'
+                        }`}
+                      >
+                        {isPending ? 'Response Mandated' : 'Justification Submitted'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed max-w-2xl">
+                      Registry has flagged your recent {inq.action?.includes('PRINT') ? 'printing' : 'downloading'} of{' '}
+                      <strong>{inq.documentTitle}</strong> for <strong>{inq.targetStaffName}</strong> ({inq.targetStaffId}).{' '}
+                      {inq.inquiryMessage && <span className="italic">&ldquo;{inq.inquiryMessage}&rdquo;</span>}
+                    </p>
+                    {inq.justificationText && (
+                      <p className="text-xs text-emerald-800 font-semibold pt-1">
+                        Your stated reason: &ldquo;{inq.justificationText}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenJustify(inq)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5 ${
+                      isPending
+                        ? 'bg-rose-700 hover:bg-rose-800 text-white'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {isPending ? 'State Reason Now' : 'Edit Stated Reason'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* List of Files */}
       {loading ? (
@@ -540,6 +656,109 @@ export default function ReceivedFilesPage() {
                     <>
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Confirm Return</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Justification Modal */}
+      {isJustifyModalOpen && selectedInquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-50 rounded-xl text-rose-700">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Official Registry Security Inquiry
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Statutory justification for personnel dossier access</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsJustifyModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitJustification} className="space-y-4 text-xs">
+              {justifyError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800">
+                  {justifyError}
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1 leading-relaxed">
+                <div>
+                  <span className="text-slate-500">Document Accessed:</span>{' '}
+                  <strong className="text-slate-900">{selectedInquiry.documentTitle}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500">Subject Personnel File:</span>{' '}
+                  <strong className="text-slate-900">{selectedInquiry.targetStaffName}</strong> ({selectedInquiry.targetStaffId})
+                </div>
+                <div>
+                  <span className="text-slate-500">Action:</span>{' '}
+                  <span className="font-bold text-rose-700">{selectedInquiry.action}</span> on{' '}
+                  <span className="font-mono">{new Date(selectedInquiry.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {selectedInquiry.inquiryMessage && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+                  <span className="font-bold text-[10px] uppercase text-amber-800">Registry Directive:</span>
+                  <p className="text-xs">{selectedInquiry.inquiryMessage}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  State Your Official Reason / Purpose <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={justificationText}
+                  onChange={(e) => setJustificationText(e.target.value)}
+                  placeholder="e.g. Required for preparation of statutory Faculty Appraisal Board meeting on 12th Oct 2026 pursuant to Senate instructions..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:ring-2 focus:ring-rose-600 outline-hidden"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Your response is submitted directly into the permanent file audit ledger for Central Registry review.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsJustifyModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingJustification}
+                  className="px-4 py-2 rounded-xl bg-rose-700 font-bold text-white shadow-xs hover:bg-rose-800 transition flex items-center gap-1.5"
+                >
+                  {isSubmittingJustification ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Submit Official Reason
                     </>
                   )}
                 </button>
