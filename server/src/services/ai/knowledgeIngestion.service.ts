@@ -56,8 +56,13 @@ export class KnowledgeIngestionService {
         this.isInitialized = true;
         return { totalIndexed: count };
       }
+      if (count === null) {
+        // Database is offline/unreachable: use in-memory statutory knowledge index
+        this.isInitialized = true;
+        return { totalIndexed: STATUTORY_KNOWLEDGE_CHUNKS.length };
+      }
 
-      // Ingest canonical knowledge chunks into DB
+      // Ingest canonical knowledge chunks into DB (when DB is reachable but empty)
       let inserted = 0;
       for (const item of STATUTORY_KNOWLEDGE_CHUNKS) {
         try {

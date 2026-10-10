@@ -115,3 +115,5 @@ export const requireRole = (roles: (Role | string)[]) => {
         return res.status(403).json({ message: 'Insufficient permissions' });
     };
 };
+
+export const verifyJwtAuth = verifyToken;

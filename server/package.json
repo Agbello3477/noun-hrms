@@ -14,10 +14,12 @@
     "seed:promotions": "ts-node --transpile-only scripts/seed-initial-promotions.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test": "ts-node --transpile-only -r dotenv/config src/tests/statutoryHardening.test.ts && ts-node --transpile-only -r dotenv/config src/tests/academicWorkloadEngine.test.ts && ts-node --transpile-only -r dotenv/config src/tests/payroll.test.ts && ts-node --transpile-only -r dotenv/config src/tests/retirement.test.ts && ts-node --transpile-only -r dotenv/config src/tests/promotion.test.ts && ts-node --transpile-only -r dotenv/config src/tests/fcm.test.ts && ts-node --transpile-only -r dotenv/config src/tests/bursary.test.ts && ts-node --transpile-only -r dotenv/config src/tests/inventory.test.ts && ts-node --transpile-only -r dotenv/config src/tests/compliance.test.ts && ts-node --transpile-only -r dotenv/config src/tests/export.test.ts && ts-node --transpile-only -r dotenv/config src/tests/aper.test.ts && ts-node --transpile-only -r dotenv/config src/tests/leaveResumption.test.ts && ts-node --transpile-only -r dotenv/config src/tests/voip.test.ts && ts-node --transpile-only -r dotenv/config src/tests/academicPromotion.test.ts && ts-node --transpile-only -r dotenv/config src/tests/rbacMakerChecker.test.ts && ts-node --transpile-only -r dotenv/config src/tests/leaveManagementTaxonomy.test.ts && ts-node --transpile-only -r dotenv/config src/tests/roleAuthorizationAndVc.test.ts && ts-node --transpile-only -r dotenv/config src/tests/threeTierZeroTrustCache.test.ts && ts-node --transpile-only -r dotenv/config src/tests/sentinelAiCopilot.test.ts",
-    "test:ai": "ts-node --transpile-only -r dotenv/config src/tests/sentinelAiCopilot.test.ts"
+    "test:ai": "ts-node --transpile-only -r dotenv/config src/tests/sentinelAiCopilot.test.ts",
+    "test:copilot": "ts-node --transpile-only -r dotenv/config src/tests/ai-copilot/sentinelCopilot.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
+    "@google/genai": "^2.28.0",
     "@prisma/client": "^5.10.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",

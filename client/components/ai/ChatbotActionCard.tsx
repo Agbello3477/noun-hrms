@@ -7,11 +7,11 @@ import Button from '../ui/Button';
 
 export interface ActionCardProps {
   card: {
-    type: 'APPLICATION_TRACKER' | 'LEAVE_SUMMARY' | 'PROMOTION_ELIGIBILITY' | 'WORKLOAD_BREAKDOWN' | 'MANUAL_GUIDE';
+    type: string;
     title: string;
     statusBadge?: {
       label: string;
-      color: 'yellow' | 'blue' | 'green' | 'red' | 'purple';
+      color: string;
     };
     stepperStage?: {
       current: number;
@@ -23,6 +23,8 @@ export interface ActionCardProps {
       value: string | number;
       subtext?: string;
     }[];
+    deepLink?: string;
+    ctaText?: string;
     actionButtons?: {
       label: string;
       actionUrl: string;
@@ -127,10 +129,10 @@ export default function ChatbotActionCard({ card }: ActionCardProps) {
         </div>
       )}
 
-      {/* Action Buttons */}
-      {card.actionButtons && card.actionButtons.length > 0 && (
+      {/* Action Buttons & Deep Links */}
+      {((card.actionButtons && card.actionButtons.length > 0) || card.deepLink) && (
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-white p-3">
-          {card.actionButtons.map((btn, index) => (
+          {card.actionButtons?.map((btn, index) => (
             <Button
               key={index}
               size="sm"
@@ -143,6 +145,18 @@ export default function ChatbotActionCard({ card }: ActionCardProps) {
               {btn.label}
             </Button>
           ))}
+          {card.deepLink && (!card.actionButtons || !card.actionButtons.some(b => b.actionUrl === card.deepLink)) && (
+            <Button
+              size="sm"
+              variant="primary"
+              isLoading={loadingBtnUrl === card.deepLink}
+              onClick={() => handleActionClick(card.deepLink!)}
+              className="text-xs font-semibold bg-[#002D62] text-[#DAA520] hover:bg-[#001f44]"
+              icon={<ExternalLink className="h-3.5 w-3.5" />}
+            >
+              {card.ctaText || 'Open in HRMS'}
+            </Button>
+          )}
         </div>
       )}
     </div>

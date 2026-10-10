@@ -291,8 +291,11 @@ app.use('/api/v1/academic/programmes', (req, res, next) => {
 });
 
 // Enterprise Multi-Tenant AI Copilot & Knowledge Assistant ("NOUN-Sentinel AI")
+import copilotRoutes from './routes/ai/copilot.routes';
 import aiCopilotRoutes from './routes/aiCopilot.routes';
 import { KnowledgeIngestionService } from './services/ai/knowledgeIngestion.service';
+app.use('/api/v1/ai', copilotRoutes);
+app.use('/api/ai', copilotRoutes);
 app.use('/api/v1/ai', aiCopilotRoutes);
 app.use('/api/ai', aiCopilotRoutes);
 

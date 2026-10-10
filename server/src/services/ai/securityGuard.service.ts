@@ -34,12 +34,32 @@ export class SecurityGuardService {
 
   private static sensitiveProbeKeywords: string[] = [
     'salary docket of',
+    'salary of',
     'bank account numbers of',
+    'bank account of',
     'confidential disciplinary file of',
+    'disciplinary file of',
     'unreleased salary voucher',
     'ssdc private report for',
     'extract all passwords',
-    'bypass maker checker'
+    'bypass maker checker',
+    'another user',
+    'other user',
+    'another colleague',
+    'colleague\'s file',
+    'colleague\'s records',
+    'colleague records',
+    'someone else\'s',
+    'another staff member\'s',
+    'another staff member',
+    'personnel file',
+    'salary breakdown for',
+    'salary breakdown of',
+    'salary for',
+    'dossier of',
+    'dossier for',
+    'records of',
+    'records for'
   ];
 
   /**
@@ -58,6 +78,14 @@ export class SecurityGuardService {
       }
     }
 
+    // Check for cross-tenant / colleague dossier, salary, or file probing
+    if (
+      /(personnel file|dossier|salary|payroll|bank account|disciplinary file|record)\s+.*(of|for)\s+/i.test(cleanPrompt) ||
+      /show me .* (file|dossier|salary|records) (for|of)/i.test(cleanPrompt)
+    ) {
+      flags.push('CRITICAL_SECURITY_PROBE');
+    }
+
     // Check for unauthorized sensitive probes
     const lower = cleanPrompt.toLowerCase();
     for (const kw of this.sensitiveProbeKeywords) {
@@ -68,7 +96,7 @@ export class SecurityGuardService {
 
     return {
       sanitizedPrompt: cleanPrompt,
-      isSafe: !flags.includes('PROMPT_INJECTION_ATTEMPT'),
+      isSafe: !flags.includes('PROMPT_INJECTION_ATTEMPT') && !flags.includes('CRITICAL_SECURITY_PROBE'),
       securityFlags: flags
     };
   }

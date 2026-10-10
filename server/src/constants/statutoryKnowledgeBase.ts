@@ -198,17 +198,18 @@ Annual Leave is granted to staff per calendar year calculated strictly on workin
     id: 'sch-acad-lecturer2',
     cadre: 'ACADEMIC',
     section: 'PROMOTIONS',
-    sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
+    sourceDocument: 'NOUN Approved Scheme of Service (May 2024)',
     pageNumber: 12,
-    citationRef: 'Scheme of Service Section 1.1 - Assistant Lecturer to Lecturer II',
-    title: 'Scheme of Service: Assistant Lecturer to Lecturer II Promotion Criteria',
-    content: `As stipulated under Scheme of Service Section 1.1 for Academic Cadre (May 2024):
-- Rank: Lecturer II / Research Fellow II (CONUASS 03)
-- Waiting Period: Minimum three (3) years on CONUASS 02 (Assistant Lecturer).
-- Qualification: Master's Degree in relevant discipline OR Bachelor's Degree with verifiable proof of ongoing Ph.D. registration.
-- Publication Benchmark: Minimum 10 points (journals, refereed conference proceedings, and course materials).
-- Output Constraints: Maximum 2 course materials allowed towards point evaluation.
-- Governance: Recommended by Departmental A&PC and approved by Faculty Board / Central Academic A&PC.`
+    citationRef: 'Approved Scheme of Service (May 2024) Schedule Two, Table 3 - Criteria for Promotion to Lecturer II',
+    title: 'Promotion Criteria for Lecturer II (CONUASS 03, Schedule Two, Table 3)',
+    content: `As stipulated under the Approved Scheme of Service (May 2024), Schedule Two, Table 3:
+- Cadre / Rank: Lecturer II / Research Fellow II (CONUASS 03)
+- Statutory Waiting Period: Minimum three (3) years on existing rank as Assistant Lecturer (CONUASS 02).
+- Confirmation Prerequisite: Staff member must be confirmed before eligibility.
+- Publication Benchmark: Exact 10 points requirement (peer-reviewed journals, refereed conference proceedings, and validated course materials).
+- Output Constraints & Cap: Maximum 2 course materials cap allowed towards cumulative evaluation points.
+- Qualification: Master's Degree in relevant discipline or Bachelor's Degree with verifiable Ph.D. registration progress.
+- Governance: Recommended by Departmental A&PC, reviewed by Faculty Board, and approved by Central Academic A&PC.`
   },
   {
     id: 'sch-acad-lecturer1',
@@ -216,8 +217,8 @@ Annual Leave is granted to staff per calendar year calculated strictly on workin
     section: 'PROMOTIONS',
     sourceDocument: 'NOUN Updated Scheme of Service (May 2024)',
     pageNumber: 14,
-    citationRef: 'Scheme of Service Section 1.2 - Lecturer II to Lecturer I',
-    title: 'Scheme of Service: Lecturer II to Lecturer I Promotion Criteria',
+    citationRef: 'Scheme of Service Section 1.2 - Promotion to Lecturer I',
+    title: 'Promotion Criteria for Lecturer I (CONUASS 04)',
     content: `As stipulated under Scheme of Service Section 1.2 for Academic Cadre (May 2024):
 - Rank: Lecturer I / Research Fellow I (CONUASS 04)
 - Waiting Period: Minimum three (3) years on CONUASS 03 (Lecturer II).

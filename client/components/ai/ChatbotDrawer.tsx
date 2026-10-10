@@ -118,6 +118,17 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
     }
   }, [messages, isLoading, isOpen]);
 
+  // Keyboard accessibility: Close drawer on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Voice Recognition Setup
   useEffect(() => {
     if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
@@ -314,7 +325,13 @@ export default function ChatbotDrawer({ isOpen, onClose }: ChatbotDrawerProps) {
         </div>
 
         {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+        <div
+          role="region"
+          aria-label="NOUN-Sentinel AI Chat Messages"
+          aria-live="polite"
+          aria-busy={isLoading}
+          className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50"
+        >
           {messages.map((msg) => (
             <div
               key={msg.id}

@@ -2338,20 +2338,24 @@ model FileCustodyAuditTrail {
 }
 
 model HrmsKnowledgeChunk {
-  id             String   @id @default(uuid())
-  cadre          String   // 'ACADEMIC', 'SENIOR_ADMIN', 'JUNIOR_STAFF', 'GENERAL'
-  section        String   // 'LEAVE', 'DISCIPLINE', 'PROMOTIONS', 'EXIT', 'SALARIES', 'WORKLOAD', 'MANUAL', 'GENERAL'
-  sourceDocument String   // e.g. "NOUN Rules and Regulations Senior Staff (June 2024)"
-  pageNumber     Int?     // e.g. 14
-  citationRef    String?  // e.g. "Section 5.1.1", "Scheme of Service Section 3.1"
-  content        String   @db.Text
-  tokenCount     Int?     @default(0)
+  id             String                      @id @default(uuid())
+  sourceDoc      String?                     // e.g., "Senior_Staff_Conditions_June_2024.pdf"
+  sectionTitle   String?                     // e.g., "Section 5.1: Annual Leave"
+  cadre          String                      // 'ACADEMIC', 'SENIOR_ADMIN', 'JUNIOR_STAFF', 'GENERAL'
+  section        String?                     // 'LEAVE', 'DISCIPLINE', 'PROMOTIONS', 'EXIT', 'SALARIES', 'WORKLOAD', 'MANUAL', 'GENERAL'
+  sourceDocument String?                     // legacy alias: "NOUN Rules and Regulations Senior Staff (June 2024)"
+  pageNumber     Int?                        // e.g. 14
+  citationRef    String?                     // e.g. "Section 5.1.1", "Scheme of Service Section 3.1"
+  content        String                      @db.Text
+  embedding      Unsupported("vector(768)")? // 768 dimensions for text-embedding-004
+  tokenCount     Int?                        @default(0)
   metadata       Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
 
   @@index([cadre])
   @@index([section])
+  @@index([sourceDoc])
   @@index([sourceDocument])
   @@map("hrms_knowledge_chunks")
 }
